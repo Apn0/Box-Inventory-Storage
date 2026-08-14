@@ -26,6 +26,9 @@ OUT_HTML = ROOT / "index.html"
 
 # Quantities in the sheet that never meant a literal count.
 BULK_SENTINEL = 99
+# Marker identify.py writes into the Note of rows it appends. Must match
+# COUNTED_MARK in identify.py.
+COUNTED_MARK = "photo-counted"
 # Boxes are stored in containers holding this many numbered boxes.
 CONTAINER_SIZE = 30
 
@@ -167,7 +170,11 @@ def main() -> int:
         qty_values = [r["qty_txt"] for r in history]
         distinct = {q for q in qty_values}
         restated = len(history) > 1 and len(distinct) == 1
-        conflict = len(history) > 1 and len(distinct) > 1
+        # Differing quantities normally mean the sheet contradicts itself. A row
+        # identify.py wrote is a deliberate recount, not an ambiguity — it says
+        # so in its Note, so it must not raise a false flag on every photo filed.
+        deliberate = COUNTED_MARK in (latest["note"] or "").lower()
+        conflict = len(history) > 1 and len(distinct) > 1 and not deliberate
 
         qty_txt = latest["qty_txt"]
         if qty_txt == "":

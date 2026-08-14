@@ -139,11 +139,16 @@ rebuilds. `--dry-run` identifies without writing; `--yes` skips the prompts.
 The API key is read from `Desktop\.env` at run time and is **never** written into
 `index.html` — the app stays offline and key-free.
 
-> ⚠️ **Not yet proven to work.** As of 2026-08-14 both vision keys in `Desktop\.env`
-> are out of credit — Anthropic returns *"credit balance is too low"*, Google returns
-> *"prepayment credits are depleted"*. The provider selection and fallback were
-> exercised against both live APIs and behave correctly, but no image has actually
-> been identified. Top up either account and re-run to confirm.
+It tries the vision keys in `Desktop\.env` in order and skips any account that is
+out of credit: **Claude → Gemini → OpenAI**. As of 2026-08-15 the first two are
+unfunded (*"credit balance is too low"* / *"prepayment credits are depleted"*), so
+it lands on `gpt-4o`. Force one with `--provider`.
+
+**A part you already own increments, it does not overwrite.** Rows resolve
+newest-wins per box+item, so appending the delta would have replaced a count of 5
+with 1. When the photo matches an existing part, the appended row carries the new
+total and its Note is marked `(photo-counted)` — which also tells `build.py` the
+change was deliberate, so it is not flagged as an ambiguous quantity.
 
 ## Files
 
