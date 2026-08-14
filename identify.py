@@ -74,6 +74,13 @@ COUNTED_MARK = "photo-counted"
 
 OPENAI_MODEL = "gpt-4o"
 GEMINI_MODEL = "gemini-2.5-flash"
+
+# Vertex AI on the separate Google account that holds the credits. Auth comes
+# from gcloud, so no key for it lives in .env.
+VERTEX_ACCOUNT = "peterfrissen123@gmail.com"
+VERTEX_PROJECT = "deft-melody-503207-k8"
+VERTEX_LOCATION = "us-central1"
+VERTEX_MODEL = "gemini-2.5-flash"
 GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
               f"{GEMINI_MODEL}:generateContent")
 
@@ -182,6 +189,55 @@ def _gemini(b64: str, media: str, prompt: str, key: str) -> dict:
     return json.loads(text)
 
 
+def vertex_token() -> str | None:
+    """Access token for the credit-holding account, straight from gcloud."""
+    try:
+        out = subprocess.run(
+            ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
+            capture_output=True, text=True, timeout=60, shell=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    token = out.stdout.strip()
+    return token or None
+
+
+def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
+    """Preferred backend: bills the Vertex credits, not a personal API key."""
+    import urllib.error
+    import urllib.request
+
+    url = (f"https://{VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/"
+           f"{VERTEX_PROJECT}/locations/{VERTEX_LOCATION}/publishers/google/"
+           f"models/{VERTEX_MODEL}:generateContent")
+
+    body = json.dumps({
+        "systemInstruction": {"parts": [{"text": SYSTEM}]},
+        "contents": [{"role": "user", "parts": [
+            {"inlineData": {"mimeType": media, "data": b64}},
+            {"text": prompt},
+        ]}],
+        "generationConfig": {"responseMimeType": "application/json",
+                             "responseSchema": GEMINI_SCHEMA},
+    }).encode("utf-8")
+
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            payload = json.loads(r.read())
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"vertex {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
+
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        raise RuntimeError(f"vertex returned no candidate: {json.dumps(payload)[:300]}")
+    parts = candidates[0].get("content", {}).get("parts") or []
+    text = next((p["text"] for p in parts if "text" in p), None)
+    if not text:
+        raise RuntimeError(f"vertex returned no text: {json.dumps(candidates[0])[:300]}")
+    return json.loads(text)
+
+
 def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
     """Second fallback. Same job, same JSON shape."""
     import urllib.error
@@ -231,11 +287,16 @@ def identify(client, path: pathlib.Path, context: str, provider: str,
         return _gemini(data, media, prompt, gemini_key)
     if provider == "openai":
         return _openai(data, media, prompt, openai_key)
+    if provider == "vertex":
+        return _vertex(data, media, prompt, vertex_token())
 
-    # provider == "auto": walk the keys until one is actually funded. An unpaid
-    # account should not stop the run when another vision key sits in the same
-    # .env — being present and being usable are different things.
-    chain = [("claude", lambda: _claude(client, data, media, prompt), client)]
+    # provider == "auto": Vertex first — it spends the credits on the separate
+    # Google account rather than a personal API key. Then walk the rest, skipping
+    # any account that turns out to be unfunded: a key being present in .env and
+    # a key being usable are different things.
+    chain = [(f"vertex/{VERTEX_MODEL}",
+              lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
+    chain.append(("claude", lambda: _claude(client, data, media, prompt), client))
     chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, gemini_key), gemini_key))
     chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, openai_key), openai_key))
 
@@ -327,10 +388,13 @@ def main() -> int:
     ap.add_argument("images", nargs="+", help="image files or globs")
     ap.add_argument("--yes", action="store_true", help="accept every proposal without asking")
     ap.add_argument("--dry-run", action="store_true", help="identify only, write nothing")
-    ap.add_argument("--provider", choices=["auto", "anthropic", "gemini", "openai"],
+    ap.add_argument("--provider",
+                    choices=["auto", "vertex", "anthropic", "gemini", "openai"],
                     default="auto",
-                    help="auto (default) tries Claude, then Gemini, then OpenAI, "
-                         "skipping any account that is out of credit")
+                    help="auto (default) tries Vertex first — it spends the credits "
+                         "on the separate Google account instead of a personal API "
+                         "key — then Claude, Gemini, OpenAI, skipping any that is "
+                         "out of credit")
     args = ap.parse_args()
 
     paths = [pathlib.Path(p) for pattern in args.images for p in glob.glob(pattern)]

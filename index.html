@@ -199,6 +199,27 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
   background:var(--warn); color:#fff; border-radius:11px; font-size:12px; font-weight:700;
   display:flex; align-items:center; justify-content:center; font-family:var(--sans);
 }
+/* ranked to-do cards */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:13px 14px;margin-top:9px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ink-3)}
+.card.now::before{background:var(--bad)}
+.card.soon::before{background:var(--warn)}
+.card.later::before{background:var(--ok)}
+.card h3{margin:0 0 3px;font-size:15px;letter-spacing:-.01em}
+.card .why{margin:0 0 9px;color:var(--ink-2);font-size:13.5px;line-height:1.45}
+.cardtop{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.cardtop .when{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.card.now .cardtop .when{color:var(--bad)}
+.card.soon .cardtop .when{color:var(--warn)}
+.card.later .cardtop .when{color:var(--ok)}
+.cardtop .effort{margin-left:auto;font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+.card ul.targets{margin:0 0 10px;padding:0;list-style:none}
+.card ul.targets li{padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}
+.card ul.targets li:first-child{border-top:0}
+.card ul.targets a{text-decoration:none}
+.card .more{background:none;border:0;color:var(--ink-3);font-size:12.5px;padding:2px 0}
+.donebar{text-align:center;color:var(--ink-3);font-size:13px;padding:20px 12px 4px}
 .empty{text-align:center;color:var(--ink-3);padding:38px 12px;font-size:14px}
 .toast{
   position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
@@ -261,7 +282,7 @@ const STALE_DAYS = 150;
 let overlay = load();
 let items = [];            // live merged list
 let ui = { tab:"find", q:"", cats:new Set(), zone:"all", flag:null, open:null, box:null,
-           bom:"", level:2, cap:6 };
+           bom:"", level:2, cap:6, openCard:null };
 
 function load(){
   try{
@@ -515,8 +536,10 @@ function render(){
   wire();
 }
 function renderTabs(){
-  const n = issues().total;
-  const tabs = [["find","Find"],["boxes","Boxes"],["issues","Issues"],["build","Build check"],
+  // The badge counts jobs worth doing now, not every finding. It used to show
+  // 22 — a number that only made the tab look like a chore.
+  const n = todoCards().filter(c => c.tone === "now").length;
+  const tabs = [["find","Find"],["boxes","Boxes"],["issues","To do"],["build","Build check"],
                 ["reorg","Reorganise"],["labels","Labels"],["data","Data"]];
   document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
     `<button data-tab="${k}" aria-selected="${ui.tab===k}">${label}${
@@ -668,33 +691,97 @@ function viewBoxes(){
   return html;
 }
 
-function viewIssues(){
+/* Ranked jobs rather than a flat dump of every finding. Order is impact first:
+   data that is wrong, then time wasted at the bench, then opportunities, then
+   hygiene. Each card names one action and shows only a handful of targets. */
+function todoCards(){
   const s = issues();
-  const P = (title, sub, body, n) =>
-    `<div class="panel"><h2>${title} <span class="count">${n}</span></h2><p class="sub">${sub}</p>${body}</div>`;
-  return `
-  ${P("Ambiguous quantities",
-      "The sheet logged this box+item more than once with different numbers, so the true count is unknown. The app shows the newest row — confirm each by counting.",
-      s.conflicts.length ? `<div class="list">${s.conflicts.map(itemHTML).join("")}</div>`
-                         : `<p class="sub">None left.</p>`, s.conflicts.length)}
-  ${P("Same part in two boxes",
-      "You would open the wrong box. Merge them, or note why they are split.",
-      s.splits.length ? `<ul>${s.splits.map(x =>
-        `<li>${esc(x.name)} → ${x.boxes.map(b=>`<a href="#" data-box="${b}">box ${b}</a>`).join(", ")}</li>`).join("")}</ul>`
-      : `<p class="sub">None.</p>`, s.splits.length)}
-  ${P("Free box numbers",
-      `Empty or never used — reuse these before buying more boxes.`,
-      s.free.length ? `<p>${s.free.map(f =>
-        `<a href="#" data-box="${f.box}" title="${f.reason}"><b>${f.box}</b></a>`).join(" · ")}</p>`
-      : `<p class="sub">None.</p>`, s.free.length)}
-  ${P("Uncounted piles",
-      `Recorded as “many” rather than a real number (the old sheet wrote 99). Fine for screws, worth counting for anything you might run out of.`,
-      `<p class="sub">${s.bulk.slice(0,60).map(i =>
-        `<a href="#" data-box="${i.box}">${esc(i.name)}</a>`).join(" · ")}</p>`, s.bulk.length)}
-  ${P("Not seen in a while",
-      `No update in over ${STALE_DAYS} days — spot-check these when you next open the container.`,
-      `<p class="sub">${s.stale.slice(0,60).map(i =>
-        `<a href="#" data-box="${i.box}">box ${i.box} · ${esc(i.name)}</a>`).join(" · ")}</p>`, s.stale.length)}`;
+  const cards = [];
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  if(s.conflicts.length) cards.push({
+    tone:"now", when:"Do first",
+    title:`Count ${plural(s.conflicts.length, "part", "parts")} the sheet contradicts itself on`,
+    why:"These were written down twice with different numbers, so the count you see is the newest guess, not a fact. One count each settles it permanently.",
+    effort:`~${s.conflicts.length} min`,
+    targets: s.conflicts.map(i => ({box:i.box, label:`${esc(i.name)} — showing ${
+      i.countType === "exact" ? i.qty : "many"}`})),
+  });
+
+  if(s.splits.length) cards.push({
+    tone:"now", when:"Do first",
+    title:`Merge ${plural(s.splits.length, "part", "parts")} living in two boxes`,
+    why:"Every time you look one of these up you can open the wrong box. The Reorganise tab does all of them in one pass.",
+    effort:`${s.splits.length} moves`,
+    targets: s.splits.map(x => ({box:x.boxes[0],
+      label:`${esc(x.name)} — boxes ${x.boxes.join(" and ")}`})),
+    go:{tab:"reorg", level:1, label:"Plan the merge"},
+  });
+
+  const risky = s.bulk.filter(i => ["mcu","sensor","driver","power","motor","interface","comms"]
+    .includes(i.category));
+  if(risky.length) cards.push({
+    tone:"soon", when:"Worth doing",
+    title:`Put a real number on ${plural(risky.length, "pile", "piles")} you could run out of`,
+    why:"“Many” is fine for screws — it is not fine for parts a build depends on, because Build check cannot warn you that four are left. These are the electronics ones.",
+    effort:"a few minutes each",
+    targets: risky.map(i => ({box:i.box, label:esc(i.name)})),
+  });
+
+  if(s.free.length) cards.push({
+    tone:"later", when:"When you feel like it",
+    title:`Reuse ${plural(s.free.length, "free box number", "free box numbers")}`,
+    why:"Empty or never used. Fill these before buying more boxes — and the Reorganise tab can free a lot more.",
+    effort:"no work, just useful",
+    targets: s.free.slice(0, 6).map(f => ({box:f.box, label:`box ${f.box} — ${f.reason}`})),
+    extra: s.free.length - 6,
+    go:{tab:"reorg", level:2, label:"See what else frees up"},
+  });
+
+  const bulkRest = s.bulk.length - risky.length;
+  if(bulkRest > 0 || s.stale.length) cards.push({
+    tone:"later", when:"No hurry",
+    title:"Spot-check the rest when a container is open anyway",
+    why:`${bulkRest} more uncounted piles (screws, scrap, consumables) and ${s.stale.length} parts not touched in over ${STALE_DAYS} days. Nothing here is wrong — it is just old. Do not make a job of it.`,
+    effort:"opportunistic",
+    targets: s.stale.slice(0, 4).map(i => ({box:i.box, label:`box ${i.box} · ${esc(i.name)}`})),
+    extra: Math.max(0, s.stale.length - 4),
+  });
+
+  return cards;
+}
+
+function viewIssues(){
+  const cards = todoCards();
+  if(!cards.length)
+    return `<div class="empty">Nothing needs attention.<br>Every count is unambiguous and no part is in two places.</div>`;
+
+  const urgent = cards.filter(c => c.tone === "now").length;
+  const html = cards.map((c, idx) => `
+    <div class="card ${c.tone}">
+      <div class="cardtop">
+        <span class="when">${c.when}</span>
+        <span class="effort">${esc(c.effort)}</span>
+      </div>
+      <h3>${c.title}</h3>
+      <p class="why">${c.why}</p>
+      ${c.targets.length ? `<ul class="targets">${c.targets.slice(0, ui.openCard === idx ? 99 : 3)
+        .map(t => `<li><a href="#" data-box="${t.box}">${t.label}</a></li>`).join("")}</ul>` : ""}
+      ${(c.targets.length > 3 || c.extra)
+        ? `<button class="more" data-card="${idx}">${
+            ui.openCard === idx
+              ? "show less"
+              : `show all ${c.targets.length + (c.extra || 0)}`}</button>`
+        : ""}
+      ${c.go ? `<div class="ebtns"><button class="btn" data-go='${
+        JSON.stringify(c.go)}'>${esc(c.go.label)}</button></div>` : ""}
+    </div>`).join("");
+
+  return `<div class="hint">${urgent
+      ? `${urgent} thing${urgent===1?"":"s"} worth doing now, ${cards.length-urgent} that can wait.`
+      : `Nothing urgent — ${cards.length} thing${cards.length===1?"":"s"} for when you have time.`}
+    </div>${html}
+    <div class="donebar">That is the whole list — the rest of the inventory is fine.</div>`;
 }
 
 function viewBuild(){
@@ -961,6 +1048,18 @@ function wire(){
       }
     };
   }
+
+  v.querySelectorAll("[data-card]").forEach(b => b.onclick = () => {
+    const i = Number(b.dataset.card);
+    ui.openCard = ui.openCard === i ? null : i;
+    render();
+  });
+  v.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+    const go = JSON.parse(b.dataset.go);
+    ui.tab = go.tab;
+    if(go.level != null) ui.level = go.level;
+    render();
+  });
 
   const on2 = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
   v.querySelectorAll("[data-level]").forEach(b => b.onclick = () => {
