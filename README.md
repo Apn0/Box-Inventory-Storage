@@ -65,6 +65,33 @@ Level 3 converges in two applications (111 → 5 → 0 moves, 154 → 87 boxes) 
 parts are preserved. Bulk piles are never merged into a shared box. Boxes 10, 11 and
 12 already hold more than the cap; the plan does not empty them, it just won't add.
 
+## The Android app
+
+Built by GitHub Actions — nothing Android has to be installed on the PC. Every
+push to `android/**` rebuilds it, and the APK is published to the rolling
+[**latest**](https://github.com/Apn0/Box-Inventory-Storage/releases/tag/latest)
+release. Open that link on the phone (signed into GitHub, the repo is private),
+download, install — Android will ask you to allow installing from that browser.
+
+The shell is a WebView pointing at `server.py`. On first run, menu → **Server
+address**:
+
+- **at home** → `http://192.168.1.140:8781`
+- **away** → the PC's NordVPN **Meshnet** address, same port
+
+The one thing this shell adds over a browser tab is the file chooser: a WebView
+ignores `<input type="file">` entirely unless the host app implements
+`onShowFileChooser`, so the camera button would silently do nothing without it.
+It honours the page's `capture` attribute — tap goes straight to the camera,
+long-press opens the gallery.
+
+No CAMERA permission is requested: photos are taken by the phone's own camera app
+into a MediaStore URI, which also avoids a FileProvider and keeps full resolution.
+`minSdk` is 29 for the same reason — below that, MediaStore would need
+`WRITE_EXTERNAL_STORAGE`.
+
+Rebuild manually with `gh workflow run android.yml`.
+
 ## On the phone — `server.py`
 
 ```powershell
