@@ -139,16 +139,29 @@ rebuilds. `--dry-run` identifies without writing; `--yes` skips the prompts.
 The API key is read from `Desktop\.env` at run time and is **never** written into
 `index.html` — the app stays offline and key-free.
 
-It tries the vision keys in `Desktop\.env` in order and skips any account that is
-out of credit: **Claude → Gemini → OpenAI**. As of 2026-08-15 the first two are
-unfunded (*"credit balance is too low"* / *"prepayment credits are depleted"*), so
-it lands on `gpt-4o`. Force one with `--provider`.
+Providers are tried in order, skipping any account that is out of credit:
+**Vertex → Claude → Gemini → OpenAI**. Force one with `--provider`.
+
+Vertex is first on purpose: it bills the Free Trial credits on the separate
+Google account (`peterfrissen123@gmail.com`, project `deft-melody-503207-k8`,
+billing `01EC6B-1704CE-DFD319` — €259 left as of 2026-08-15) instead of a personal
+API key, and it authenticates through `gcloud`, so no key for it sits in `.env`.
+If the token expires: `gcloud auth login peterfrissen123@gmail.com`.
+
+The Anthropic and Google API keys in `.env` are both out of credit.
 
 **A part you already own increments, it does not overwrite.** Rows resolve
 newest-wins per box+item, so appending the delta would have replaced a count of 5
 with 1. When the photo matches an existing part, the appended row carries the new
 total and its Note is marked `(photo-counted)` — which also tells `build.py` the
 change was deliberate, so it is not flagged as an ambiguous quantity.
+
+Matching does not rely on the model naming a part the same way twice — it does
+not. The same board came back as "TMC2209 stepper driver" from one provider and
+"TMC2209-LA stepper driver module" from another. So an exact name match is tried
+first, then the **part number** (`tmc2209`, `mt3608`, `18650`): distinctive enough
+to identify a board, where "module" or "sensor" is not. If the part number appears
+in more than one box the match is refused rather than guessed.
 
 ## Files
 

@@ -126,14 +126,41 @@ def context_for_prompt(data: dict) -> str:
     )
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+# A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
+# or a bare run of digits (18650). Distinctive enough to identify a part on its
+# own, which plain words like "module" or "sensor" are not.
+PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
+
+
+def _part_numbers(name: str) -> set[str]:
+    return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
+
+
 def find_existing(data: dict, name: str) -> dict | None:
-    """The active record for this exact part name, if the inventory already has one."""
-    key = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
-    for item in data["items"]:
-        if item["status"] != "active":
-            continue
-        if re.sub(r"[^a-z0-9]+", " ", item["name"].lower()).strip() == key:
+    """The active record for this part, tolerating how the model words it.
+
+    Vision models do not name a part identically twice — the same board came
+    back as "TMC2209 stepper driver" and "TMC2209-LA stepper driver module".
+    Exact matching alone therefore files a second row for a part already on
+    record, and the inventory drifts apart one photo at a time.
+    """
+    active = [i for i in data["items"] if i["status"] == "active"]
+    key = _norm(name)
+
+    for item in active:                                   # exact wins
+        if _norm(item["name"]) == key:
             return item
+
+    wanted = _part_numbers(name)                          # then the part number
+    if wanted:
+        hits = [i for i in active if _part_numbers(i["name"]) & wanted]
+        if len(hits) == 1:
+            return hits[0]
+        # Several boxes carry this part number — too ambiguous to pick one.
     return None
 
 
@@ -405,15 +432,21 @@ def main() -> int:
     gemini_key = read_key("GOOGLE_API_KEY")
     openai_key = read_key("OPENAI_API_KEY")
 
+    # Vertex is deliberately absent here: it authenticates through gcloud, so it
+    # needs no key in .env at all.
     required = {"anthropic": ("ANTHROPIC_API_KEY", anthropic_key),
                 "gemini": ("GOOGLE_API_KEY", gemini_key),
                 "openai": ("OPENAI_API_KEY", openai_key)}
-    if args.provider != "auto":
+    if args.provider == "vertex":
+        if not vertex_token():
+            sys.exit(f"gcloud has no usable token for {VERTEX_ACCOUNT} — "
+                     f"run: gcloud auth login {VERTEX_ACCOUNT}")
+    elif args.provider != "auto":
         name, value = required[args.provider]
         if not value:
             sys.exit(f"no {name} in {ENV}")
-    elif not any((anthropic_key, gemini_key, openai_key)):
-        sys.exit(f"no vision API key at all in {ENV}")
+    elif not any((anthropic_key, gemini_key, openai_key, vertex_token())):
+        sys.exit(f"no vision credentials at all (no gcloud token, no key in {ENV})")
 
     client = None
     if args.provider in {"auto", "anthropic"} and anthropic_key:
