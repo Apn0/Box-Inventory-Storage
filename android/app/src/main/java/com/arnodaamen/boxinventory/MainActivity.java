@@ -206,22 +206,31 @@ public class MainActivity extends Activity {
             }
         }
 
-        Intent chooser;
+        // When the page asked for the camera, open the camera — do not wrap it in
+        // a chooser. A chooser puts a dialog in front of every single photo and
+        // offers the gallery as an equal option, which is what made the camera
+        // button feel like a gallery button.
+        Intent launch;
         if (camera != null) {
-            chooser = new Intent(Intent.ACTION_CHOOSER);
-            chooser.putExtra(Intent.EXTRA_INTENT, camera);
-            chooser.putExtra(Intent.EXTRA_TITLE, "Photograph the part");
-            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{gallery});
+            launch = camera;
+        } else if (wantsCamera) {
+            // Asked for the camera but there is none available.
+            finishChooser(null);
+            Toast.makeText(this, "No camera app found", Toast.LENGTH_LONG).show();
+            return false;
         } else {
-            chooser = Intent.createChooser(gallery, "Pick photos");
+            launch = Intent.createChooser(gallery, "Pick photos");
         }
 
         try {
-            startActivityForResult(chooser, REQ_FILE);
+            startActivityForResult(launch, REQ_FILE);
             return true;
         } catch (Exception e) {
+            if (pendingCameraUri != null) {
+                getContentResolver().delete(pendingCameraUri, null, null);
+            }
             finishChooser(null);
-            Toast.makeText(this, "No camera or gallery app found", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Could not open the camera", Toast.LENGTH_LONG).show();
             return false;
         }
     }

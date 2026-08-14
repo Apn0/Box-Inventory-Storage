@@ -9,6 +9,19 @@
          make ACTION_IMAGE_CAPTURE require a runtime grant. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Package visibility (API 30+): without this, resolveActivity() for the
+         camera returns null even when a camera app is installed, and the app
+         would wrongly report that there is no camera. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

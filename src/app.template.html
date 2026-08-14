@@ -173,12 +173,18 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
 /* camera — only rendered when served over http (i.e. from the phone) */
 #cam{
   position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom));
-  z-index:40; width:60px; height:60px; border-radius:50%;
-  background:var(--accent); color:var(--accent-ink); border:0; font-size:25px;
+  z-index:40; width:64px; height:64px; border-radius:50%;
+  background:var(--accent); color:var(--accent-ink); border:0; font-size:26px;
   box-shadow:0 4px 16px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
 }
-#cam:active{transform:scale(.94)}
-#cam[data-busy="1"]{opacity:.6}
+#gal{
+  position:fixed; right:22px; bottom:calc(88px + env(safe-area-inset-bottom));
+  z-index:40; width:46px; height:46px; border-radius:50%;
+  background:var(--panel); color:var(--ink-2); border:1px solid var(--line); font-size:19px;
+  box-shadow:0 2px 10px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center;
+}
+#cam:active,#gal:active{transform:scale(.94)}
+#cam[data-busy="1"],#gal[data-busy="1"]{opacity:.55}
 #cam .n{
   position:absolute; top:-3px; right:-3px; min-width:21px; height:21px; padding:0 5px;
   background:var(--warn); color:#fff; border-radius:11px; font-size:12px; font-weight:700;
@@ -1028,18 +1034,30 @@ function setupCamera(){
   link.rel = "manifest"; link.href = "/manifest.webmanifest";
   document.head.appendChild(link);
 
-  const input = document.createElement("input");
-  input.type = "file"; input.accept = "image/*"; input.multiple = true;
-  // `capture` opens the camera straight away; removing it shows the gallery.
-  // Set as an attribute, not a property — the property does not reflect reliably.
-  input.setAttribute("capture", "environment");
-  input.style.display = "none";
-  document.body.appendChild(input);
+  // Two inputs, two buttons. An earlier version used one button where a tap
+  // meant camera and a long-press meant gallery — undiscoverable, and the host
+  // app cannot tell the two apart reliably. Separate controls, no hidden gesture.
+  const mkInput = (capture) => {
+    const i = document.createElement("input");
+    i.type = "file"; i.accept = "image/*"; i.multiple = true;
+    // Must be an attribute, not a property — the property does not reflect.
+    if(capture) i.setAttribute("capture", "environment");
+    i.style.display = "none";
+    document.body.appendChild(i);
+    return i;
+  };
+  const camInput = mkInput(true);
+  const galInput = mkInput(false);
 
   const btn = document.createElement("button");
-  btn.id = "cam"; btn.title = "Photograph a part (long-press for gallery)";
+  btn.id = "cam"; btn.title = "Take a photo of a part";
   btn.innerHTML = `<span>📷</span>`;
   document.body.appendChild(btn);
+
+  const gal = document.createElement("button");
+  gal.id = "gal"; gal.title = "Pick photos you already took";
+  gal.innerHTML = `<span>🖼️</span>`;
+  document.body.appendChild(gal);
 
   const paint = () => {
     btn.querySelector(".n")?.remove();
@@ -1050,28 +1068,15 @@ function setupCamera(){
     }
   };
 
-  // Tap = camera. Long-press = pick existing shots from the gallery.
-  let timer = null, fromGallery = false;
-  const arm = () => { fromGallery = false; timer = setTimeout(() => {
-    fromGallery = true;
-    if(navigator.vibrate) navigator.vibrate(20);
-  }, 500); };
-  const fire = () => {
-    clearTimeout(timer);
-    if(fromGallery) input.removeAttribute("capture");
-    else input.setAttribute("capture", "environment");
-    input.value = "";
-    input.click();
-  };
-  btn.addEventListener("touchstart", arm, {passive:true});
-  btn.addEventListener("touchend", fire);
-  btn.addEventListener("mousedown", arm);
-  btn.addEventListener("mouseup", fire);
+  // A plain click handler: on Android a tap also synthesises mousedown/mouseup,
+  // so listening to touch *and* mouse events fired the picker twice.
+  btn.onclick = () => { camInput.value = ""; camInput.click(); };
+  gal.onclick = () => { galInput.value = ""; galInput.click(); };
 
-  input.onchange = async () => {
+  const upload = async (input) => {
     const files = [...input.files];
     if(!files.length) return;
-    btn.dataset.busy = "1";
+    btn.dataset.busy = gal.dataset.busy = "1";
     let sent = 0;
     for(const f of files){
       try{
@@ -1090,10 +1095,13 @@ function setupCamera(){
         break;
       }
     }
-    delete btn.dataset.busy;
+    delete btn.dataset.busy; delete gal.dataset.busy;
     paint();
     if(sent) toast(`${sent} photo${sent===1?"":"s"} sent · ${pending} waiting`);
   };
+
+  camInput.onchange = () => upload(camInput);
+  galInput.onchange = () => upload(galInput);
 
   fetch("/inbox").then(r => r.json())
     .then(d => { pending = (d.pending || []).length; paint(); })
