@@ -1,0 +1,17 @@
+# build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+
+# photos and queue — your parts, not the project's
+data/inbox/
+data/photos/
+
+# rolling backups made by sync.py
+data/*.bak
+data/inventory_raw.csv.*.bak
+
+__pycache__/
+*.pyc

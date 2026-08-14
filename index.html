@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Box Inventory</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --panel-2:#eef1f5; --line:#d8dee7;
+  --ink:#141821; --ink-2:#5b6675; --ink-3:#8a93a2;
+  --accent:#1d5cff; --accent-ink:#ffffff;
+  --ok:#0f8a4d; --warn:#b06f00; --bad:#c0392b; --bulk:#6b4fc9;
+  --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 6px 18px rgba(16,24,40,.06);
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1117; --panel:#161b24; --panel-2:#1e2530; --line:#2b3442;
+    --ink:#e8ecf3; --ink-2:#a4b0c0; --ink-3:#71809a;
+    --accent:#5b8cff; --accent-ink:#0b0f16;
+    --ok:#3fbf7f; --warn:#e0a33a; --bad:#ff6b5e; --bulk:#a48bff;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --panel:#161b24; --panel-2:#1e2530; --line:#2b3442;
+  --ink:#e8ecf3; --ink-2:#a4b0c0; --ink-3:#71809a;
+  --accent:#5b8cff; --accent-ink:#0b0f16;
+  --ok:#3fbf7f; --warn:#e0a33a; --bad:#ff6b5e; --bulk:#a48bff;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:15px; line-height:1.45; -webkit-text-size-adjust:100%;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+
+/* ---------------------------------------------------------------- layout */
+.wrap{max-width:1080px;margin:0 auto;padding:0 12px 72px}
+header.top{
+  position:sticky; top:0; z-index:20; background:var(--bg);
+  padding:10px 0 8px; border-bottom:1px solid var(--line);
+}
+.titlerow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.titlerow h1{font-size:17px;margin:0;letter-spacing:-.01em;white-space:nowrap}
+.titlerow .spacer{flex:1}
+.iconbtn{
+  background:var(--panel); border:1px solid var(--line); border-radius:9px;
+  padding:6px 10px; font-size:13px; color:var(--ink-2);
+}
+.iconbtn:hover{border-color:var(--accent);color:var(--ink)}
+
+.searchrow{display:flex;gap:8px}
+#q{
+  flex:1; padding:11px 13px; border-radius:10px; border:1px solid var(--line);
+  background:var(--panel); font-size:16px; box-shadow:var(--shadow);
+}
+#q:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.clearq{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+
+nav.tabs{display:flex;gap:4px;overflow-x:auto;margin-top:8px;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{
+  background:transparent;border:1px solid transparent;border-radius:8px;
+  padding:6px 11px;font-size:13.5px;color:var(--ink-2);white-space:nowrap;
+}
+nav.tabs button[aria-selected="true"]{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:600}
+nav.tabs .badge{
+  display:inline-block;min-width:17px;margin-left:5px;padding:0 5px;
+  background:var(--bad);color:#fff;border-radius:9px;font-size:11px;font-weight:700;text-align:center
+}
+
+/* ---------------------------------------------------------------- chips */
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 4px}
+.chip{
+  background:var(--panel);border:1px solid var(--line);border-radius:999px;
+  padding:4px 10px;font-size:12.5px;color:var(--ink-2);
+}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chip .n{opacity:.6;margin-left:5px;font-variant-numeric:tabular-nums}
+
+.hint{color:var(--ink-3);font-size:12.5px;margin:8px 2px}
+
+/* ---------------------------------------------------------------- items */
+.list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.item{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.item>.row{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;width:100%;
+  background:none;border:0;text-align:left}
+.boxno{
+  flex:none;min-width:46px;height:40px;border-radius:9px;background:var(--panel-2);
+  border:1px solid var(--line); display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:var(--mono); line-height:1;
+}
+.boxno b{font-size:16px;font-weight:700;letter-spacing:-.02em}
+.boxno span{font-size:8.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.itemmain{flex:1;min-width:0}
+.itemname{font-weight:600;font-size:14.5px;overflow-wrap:anywhere}
+.itemmeta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:3px;font-size:12px;color:var(--ink-2)}
+.tag{background:var(--panel-2);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--ink-2);white-space:nowrap}
+.tag.flag{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);font-weight:600}
+.tag.err{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad);font-weight:600}
+.note{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+.qty{
+  flex:none;min-width:52px;text-align:right;font-family:var(--mono);
+  font-size:17px;font-weight:700;letter-spacing:-.02em;
+}
+.qty small{display:block;font-size:9.5px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3);font-family:var(--sans)}
+.qty.bulk{color:var(--bulk)} .qty.unknown{color:var(--ink-3)} .qty.zero{color:var(--bad)}
+
+/* editor */
+.editor{border-top:1px dashed var(--line);padding:11px 12px;background:var(--panel-2)}
+.eline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.eline label{font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;min-width:62px}
+.editor input,.editor select,.editor textarea{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:14px
+}
+.editor input[type=number]{width:78px;font-family:var(--mono)}
+.editor .grow{flex:1;min-width:150px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:8px;width:34px;height:34px;font-size:17px;font-weight:700;line-height:1}
+.ebtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:9px;padding:8px 14px;font-weight:600;font-size:13.5px}
+.btn.ghost{background:var(--panel);color:var(--ink-2);border:1px solid var(--line)}
+.btn.danger{background:var(--panel);color:var(--bad);border:1px solid var(--bad)}
+.hist{margin-top:9px;font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+.hist div{padding:1px 0}
+
+/* ---------------------------------------------------------------- boxes */
+.container-h{margin:18px 0 7px;font-size:12.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+.boxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px}
+.boxcell{
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 4px;
+  text-align:center;font-family:var(--mono);position:relative
+}
+.boxcell b{display:block;font-size:15px;font-weight:700}
+.boxcell span{display:block;font-size:10px;color:var(--ink-3);font-family:var(--sans);margin-top:2px}
+.boxcell.free{border-style:dashed;border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent)}
+.boxcell.free span{color:var(--ok);font-weight:700}
+.boxcell.hit{outline:2px solid var(--accent)}
+.boxcell:hover{border-color:var(--accent)}
+
+/* ---------------------------------------------------------------- panels */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:14px;margin-top:10px}
+.panel h2{margin:0 0 4px;font-size:14.5px}
+.panel h2 .count{color:var(--ink-3);font-weight:500;font-size:13px}
+.panel p.sub{margin:0 0 10px;color:var(--ink-2);font-size:13px}
+.panel ul{margin:0;padding-left:18px}
+.panel li{margin:3px 0;font-size:13.5px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13.5px}
+.kv b{font-family:var(--mono);font-weight:700;text-align:right}
+textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:9px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical}
+.bomrow{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.bomrow:first-child{border-top:0}
+.bomq{flex:none;font-family:var(--mono);font-weight:700;min-width:34px}
+.bomhit{flex:1;min-width:0;font-size:13.5px}
+.bomhit .alt{color:var(--ink-3);font-size:12px}
+.pill{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:700;font-family:var(--sans)}
+.pill.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.pill.no{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.pill.maybe{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+
+/* camera — only rendered when served over http (i.e. from the phone) */
+#cam{
+  position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom));
+  z-index:40; width:60px; height:60px; border-radius:50%;
+  background:var(--accent); color:var(--accent-ink); border:0; font-size:25px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
+}
+#cam:active{transform:scale(.94)}
+#cam[data-busy="1"]{opacity:.6}
+#cam .n{
+  position:absolute; top:-3px; right:-3px; min-width:21px; height:21px; padding:0 5px;
+  background:var(--warn); color:#fff; border-radius:11px; font-size:12px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; font-family:var(--sans);
+}
+.empty{text-align:center;color:var(--ink-3);padding:38px 12px;font-size:14px}
+.toast{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;
+  font-size:13.5px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;
+  transition:opacity .18s
+}
+.toast.show{opacity:1}
+
+/* ---------------------------------------------------------------- labels */
+.labelsheet{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}
+.label{border:1px solid var(--line);border-radius:7px;padding:7px 8px;background:var(--panel);
+  min-height:74px;font-size:10.5px;line-height:1.3}
+.label b{display:block;font-family:var(--mono);font-size:17px;line-height:1}
+.label .c{color:var(--ink-3);font-size:9px;text-transform:uppercase;letter-spacing:.07em}
+.label ul{margin:4px 0 0;padding-left:13px}
+.label li{margin:0;font-size:10px}
+@media print{
+  header.top,nav.tabs,.chips,.hint,.noprint{display:none!important}
+  body{background:#fff;color:#000}
+  .wrap{max-width:none;padding:0}
+  .labelsheet{grid-template-columns:repeat(4,1fr);gap:3px}
+  .label{border:1px solid #999;break-inside:avoid;background:#fff}
+}
+@media (max-width:520px){
+  .titlerow h1{font-size:15px}
+  .qty{min-width:44px;font-size:15px}
+  .boxno{min-width:42px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="titlerow">
+      <h1>Box Inventory</h1>
+      <span class="tag" id="stat-line"></span>
+      <span class="spacer"></span>
+      <button class="iconbtn" id="theme-btn" title="Light / dark">◐</button>
+    </div>
+    <div class="searchrow">
+      <input id="q" type="search" placeholder="Search parts, boxes, notes…  (press /)" autocomplete="off" spellcheck="false">
+      <button class="clearq" id="clearq" title="Clear">✕</button>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const SEED = {"meta":{"source":"Google Sheet export (Box, Item, Qty, Note, UpdatedAt)","generated":"2026-08-14","rawRows":263,"containerSize":30,"bulkSentinel":99,"categoryLabels":{"mcu":"MCU / boards","sensor":"Sensors","power":"Power","driver":"Drivers / switching","motor":"Motors","display":"LED / display","comms":"Comms / RF / optical","interface":"ADC / interface","switch":"Switches / controls","connector":"Connectors / cable","fastener":"Fasteners","mechanical":"Mechanical","tool":"Tools","material":"Raw material","misc":"Misc"}},"items":[{"id":"1-countersink bit hss 6 hex shank","box":1,"container":"1","name":"Countersink bit (HSS 6, hex shank)","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-03-26","conflict":false,"restated":false,"history":[]},{"id":"1-tap bits 6 piece set","box":1,"container":"1","name":"Tap bits (6-piece set)","qty":5,"countType":"exact","status":"active","note":"assorted sizes","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"1-tap bits m2 m2 5","box":1,"container":"1","name":"Tap bits (M2 + M2.5)","qty":2,"countType":"exact","status":"active","note":"Extra tap sizes not in 6-piece M3/M4/M5/M6/M8/M10 set","category":"fastener","updated":"2026-02-25","conflict":true,"restated":false,"history":[{"qty":"3","date":"2026-02-17","note":"Extra tap sizes not in 6-piece M3/M4/M5/M6/M8/M10 set"},{"qty":"2","date":"2026-02-25","note":""}]},{"id":"2-drill bit stoppers flanges","box":2,"container":"1","name":"Drill-bit stoppers + flanges","qty":null,"countType":"bulk","status":"active","note":"3mm & 5mm bore","category":"fastener","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"3-pillow block bearing units 8mm bore","box":3,"container":"1","name":"Pillow-block bearing units (8mm bore)","qty":2,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"4-alligator clips","box":4,"container":"1","name":"Alligator clips","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"5-ina219 current voltage sensor","box":5,"container":"1","name":"INA219 current/voltage sensor","qty":2,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-19","conflict":false,"restated":false,"history":[]},{"id":"5-vibration motor module","box":5,"container":"1","name":"Vibration motor module","qty":4,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-03-19","conflict":false,"restated":false,"history":[]},{"id":"6-mq gas sensors mq 7 mq 3 mq 135","box":6,"container":"1","name":"MQ gas sensors (MQ-7/MQ-3/MQ-135)","qty":null,"countType":"bulk","status":"active","note":"","category":"sensor","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"7-18650 li ion charger module","box":7,"container":"1","name":"18650 Li-ion charger module","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"7-guva s12sd uv sensor module","box":7,"container":"1","name":"GUVA-S12SD UV sensor module","qty":2,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"7-heart rate bo sensor module","box":7,"container":"1","name":"Heart-rate/BO sensor module","qty":null,"countType":"bulk","status":"active","note":"","category":"sensor","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"7-ir transmitter module","box":7,"container":"1","name":"IR transmitter module","qty":null,"countType":"bulk","status":"active","note":"","category":"comms","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"7-u blox neo 6m gps module patch antenna","box":7,"container":"1","name":"u-blox NEO-6M GPS module + patch antenna","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"7-uart wi fi module","box":7,"container":"1","name":"UART Wi-Fi module","qty":null,"countType":"bulk","status":"active","note":"","category":"comms","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"8-two wire voltage sensor modules 7 seg display","box":8,"container":"1","name":"Two-wire voltage sensor modules + 7-seg display","qty":null,"countType":"bulk","status":"active","note":"","category":"sensor","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"8-v meter with 7 seg display","box":8,"container":"1","name":"V meter with 7-seg display","qty":8,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"9-step down converter","box":9,"container":"1","name":"Step-down converter","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-03-19","conflict":false,"restated":false,"history":[]},{"id":"9-step up converter","box":9,"container":"1","name":"Step-up converter","qty":5,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-03-19","conflict":false,"restated":false,"history":[]},{"id":"10-18650 charger module","box":10,"container":"1","name":"18650 charger module","qty":4,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-header pins straight 90","box":10,"container":"1","name":"Header pins (straight + 90°)","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-micro usb c pd trigger module","box":10,"container":"1","name":"Micro USB-C PD trigger module","qty":1,"countType":"exact","status":"active","note":"Requires soldering connections","category":"power","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-usb a power module screw terminal dip","box":10,"container":"1","name":"USB-A power module (screw terminal + DIP)","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-usb c breakout boards","box":10,"container":"1","name":"USB-C breakout boards","qty":8,"countType":"exact","status":"active","note":"","category":"interface","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-usb c power meter module oled purple","box":10,"container":"1","name":"USB-C power meter module (OLED, purple)","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-usb c solder coupling","box":10,"container":"1","name":"USB-C solder coupling","qty":2,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"10-usb c usb to ttl serial adapter module","box":10,"container":"1","name":"USB-C USB-to-TTL serial adapter module","qty":1,"countType":"exact","status":"active","note":"","category":"interface","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"11-5 way navigation tactile switch breakout up down left right center","box":11,"container":"1","name":"5-way navigation tactile switch breakout (UP/DOWN/LEFT/RIGHT/center)","qty":1,"countType":"exact","status":"active","note":"","category":"interface","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-audio wave sensor","box":11,"container":"1","name":"audio-wave sensor","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-capacitive touch sensor module","box":11,"container":"1","name":"Capacitive touch sensor module","qty":1,"countType":"exact","status":"active","note":"OPEN-SMART version","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-ens160 aht2x air quality sensor module","box":11,"container":"1","name":"ENS160 + AHT2x air-quality sensor module","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-gyro accelerometer unknown","box":11,"container":"1","name":"gyro+accelerometer (unknown)","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-hc sr04","box":11,"container":"1","name":"HC-SR04","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-i2c rotary encoder module white breakout","box":11,"container":"1","name":"I2C rotary encoder module (white breakout)","qty":2,"countType":"exact","status":"active","note":"White breakout; pins VCC/OUT/GND and DIR/SCL/SDA/GPO","category":"interface","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-lm393 comparator module ao do trimpot","box":11,"container":"1","name":"LM393 comparator module (AO/DO, trimpot)","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-mpu6050","box":11,"container":"1","name":"MPU6050","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-tilt sensor","box":11,"container":"1","name":"tilt sensor","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-tof200c vl53l0x","box":11,"container":"1","name":"TOF200C-VL53L0X","qty":2,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"11-veml7700","box":11,"container":"1","name":"VEML7700","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"12-ads1115 16 bit i2c adc module bi sided purple breakout","box":12,"container":"1","name":"ADS1115 16-bit I2C ADC module (bi-sided, purple breakout)","qty":1,"countType":"exact","status":"active","note":"Purple breakout, female holes on two opposite edges","category":"interface","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-ads1115 16 bit i2c adc module linear red breakout","box":12,"container":"1","name":"ADS1115 16-bit I2C ADC module (linear, red breakout)","qty":2,"countType":"exact","status":"active","note":"Red breakout, female holes on one edge","category":"interface","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-hx711 load cell amplifier module","box":12,"container":"1","name":"HX711 load-cell amplifier module","qty":5,"countType":"exact","status":"active","note":"Includes pin headers","category":"interface","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-pressure sensitive strip","box":12,"container":"1","name":"Pressure-sensitive strip","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-rd 03d","box":12,"container":"1","name":"RD-03D","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-sku7810","box":12,"container":"1","name":"SKU7810","qty":1,"countType":"exact","status":"active","note":"","category":"interface","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"12-uln2003","box":12,"container":"1","name":"ULN2003","qty":1,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"13-tmc2209 stepper driver","box":13,"container":"1","name":"TMC2209 stepper driver","qty":5,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"14-esp32 c3 oled module","box":14,"container":"1","name":"ESP32-C3 OLED module","qty":4,"countType":"exact","status":"active","note":"","category":"mcu","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"14-esp8266mod","box":14,"container":"1","name":"ESP8266MOD","qty":1,"countType":"exact","status":"active","note":"","category":"mcu","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"14-xiao esp32 c6 microcontroller board","box":14,"container":"1","name":"XIAO ESP32-C6 microcontroller board","qty":1,"countType":"exact","status":"active","note":"","category":"mcu","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"15-bits from bytes stepper driver","box":15,"container":"1","name":"Bits from Bytes stepper driver","qty":2,"countType":"exact","status":"active","note":"","category":"driver","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"16-18650 modular holder","box":16,"container":"1","name":"18650 modular holder","qty":5,"countType":"exact","status":"active","note":"","category":"power","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"16-4 pin led strip connector","box":16,"container":"1","name":"4-pin LED strip connector","qty":5,"countType":"exact","status":"active","note":"","category":"display","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"17-d2 push in wire connectors set 1","box":17,"container":"1","name":"D2 push-in wire connectors set 1","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"18-d2 push in wire connectors set 2","box":18,"container":"1","name":"D2 push-in wire connectors set 2","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"19-rectangular leds r g y b","box":19,"container":"1","name":"Rectangular LEDs (R/G/Y/B)","qty":null,"countType":"bulk","status":"active","note":"","category":"display","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"20-small tools bit set","box":20,"container":"1","name":"Small tools bit set","qty":null,"countType":"bulk","status":"active","note":"","category":"tool","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"21-limit switch siwig microswitch no lever","box":21,"container":"1","name":"Limit switch (SIWIG microswitch, no lever)","qty":1,"countType":"exact","status":"active","note":"No-lever microswitch; COM/NO/NC terminals with heatshrink leads","category":"switch","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"21-limit switches roller lever microswitches","box":21,"container":"1","name":"Limit switches (roller-lever microswitches)","qty":null,"countType":"bulk","status":"active","note":"","category":"switch","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"22-xy mos mosfet module","box":22,"container":"1","name":"XY-MOS MOSFET module","qty":6,"countType":"exact","status":"active","note":"","category":"driver","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"23-lr7843 mosfet power switch module","box":23,"container":"1","name":"LR7843 MOSFET power switch module","qty":6,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"23-solar charge module outdoor lights","box":23,"container":"1","name":"Solar charge module (outdoor lights)","qty":null,"countType":"bulk","status":"active","note":"","category":"power","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"23-solid state relay ssr module","box":23,"container":"1","name":"Solid state relay (SSR) module","qty":3,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"23-xy mos mosfet module","box":23,"container":"1","name":"XY-MOS MOSFET module","qty":7,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"24-xt60 connector male female mixed","box":24,"container":"1","name":"XT60 connector (male/female mixed)","qty":3,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"25-terminal blocks kroonsteentjes","box":25,"container":"1","name":"Terminal blocks (kroonsteentjes)","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"26-loose bolts unidentified","box":26,"container":"1","name":"Loose bolts (unidentified)","qty":4,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"26-small bolts m5 few m6","box":26,"container":"1","name":"Small bolts (<=M5) + few M6","qty":null,"countType":"bulk","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"27-screws 20 mm length","box":27,"container":"1","name":"Screws <20 mm length","qty":null,"countType":"bulk","status":"active","note":"","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"28-m6 bolts m6 nuts","box":28,"container":"1","name":"M6 bolts + M6 nuts","qty":null,"countType":"bulk","status":"active","note":"12mm & 20mm","category":"fastener","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"29-hw 070 pwm controller black","box":29,"container":"1","name":"HW-070 PWM controller (black)","qty":null,"countType":"bulk","status":"active","note":"","category":"driver","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"29-red dc motor speed controller","box":29,"container":"1","name":"Red DC motor speed controller","qty":null,"countType":"bulk","status":"active","note":"","category":"driver","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"30-assorted mechanical parts mixed uncounted includes brackets rails misc hardware","box":30,"container":"1","name":"Assorted mechanical parts (mixed, uncounted; includes brackets, rails, misc hardware)","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"31-6 pin on off on toggle switch","box":31,"container":"2","name":"6-pin ON-OFF-ON toggle switch","qty":2,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-01","conflict":false,"restated":false,"history":[]},{"id":"31-dpdt latching pushbutton switch push on push off 6 pin pcb mount","box":31,"container":"2","name":"DPDT latching pushbutton switch (push-on/push-off), 6-pin PCB mount","qty":4,"countType":"exact","status":"active","note":"Blue actuator","category":"switch","updated":"2026-03-01","conflict":false,"restated":false,"history":[]},{"id":"31-linear slide switch large","box":31,"container":"2","name":"Linear slide switch (large)","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"31-linear slide switch small","box":31,"container":"2","name":"Linear slide switch (small)","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"32-usb c pd trigger module switchable","box":32,"container":"2","name":"USB-C PD trigger module (switchable)","qty":4,"countType":"exact","status":"active","note":"With switch","category":"power","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"33-2 pin key lock toggle switch","box":33,"container":"2","name":"2-pin key lock toggle switch","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"33-key for key lock toggle","box":33,"container":"2","name":"Key for key lock toggle","qty":2,"countType":"exact","status":"active","note":"","category":"switch","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"34-panel mount rotary potentiometer unknown value","box":34,"container":"2","name":"Panel-mount rotary potentiometer (unknown value)","qty":4,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"34-potentiometer module w knob screw terminals","box":34,"container":"2","name":"Potentiometer module w/ knob + screw terminals","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"35-12v 40mm 2 wire fan 0 10a","box":35,"container":"2","name":"12V 40mm 2-wire fan 0.10A","qty":1,"countType":"exact","status":"active","note":"","category":"motor","updated":"2025-12-18","conflict":false,"restated":false,"history":[]},{"id":"36-1 cell lithium ion charger modules usb c 600ma","box":36,"container":"2","name":"1-cell lithium-ion charger modules (USB-C, 600mA)","qty":10,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"36-2s lithium ion charger module","box":36,"container":"2","name":"2S lithium-ion charger module","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"36-3s lithium ion charger module","box":36,"container":"2","name":"3S lithium-ion charger module","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"37-dc barrel connector male","box":37,"container":"2","name":"DC barrel connector (male)","qty":10,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"38-dc barrel connector female","box":38,"container":"2","name":"DC barrel connector (female)","qty":10,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"38-large flat washers unidentified","box":38,"container":"2","name":"Large flat washers (unidentified)","qty":3,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"38-m5 washers","box":38,"container":"2","name":"M5 washers","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"38-nut","box":38,"container":"2","name":"Nut","qty":10,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"38-small flat washers","box":38,"container":"2","name":"Small flat washers","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"38-washer","box":38,"container":"2","name":"Washer","qty":10,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"39-555 timer led flasher module","box":39,"container":"2","name":"555 timer LED flasher module","qty":1,"countType":"exact","status":"active","note":"","category":"display","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"39-hall sensor module","box":39,"container":"2","name":"Hall sensor module","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"39-hw 477 modules","box":39,"container":"2","name":"HW-477 modules","qty":5,"countType":"exact","status":"active","note":"","category":"interface","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"39-rgb smd led board","box":39,"container":"2","name":"RGB SMD LED board","qty":1,"countType":"exact","status":"active","note":"","category":"display","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"39-vibration switch module","box":39,"container":"2","name":"Vibration switch module","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"40-micro stepper motor","box":40,"container":"2","name":"Micro stepper motor","qty":9,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"40-mini stepper motor 4 wire 4 pole 0 75 mm shaft 1 85 mm gear","box":40,"container":"2","name":"Mini stepper motor (4-wire / 4-pole), 0.75 mm shaft, ~1.85 mm gear","qty":6,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"41-rotary encoder module ky 040 push button","box":41,"container":"2","name":"Rotary encoder module (KY-040, push-button)","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-01-03","conflict":false,"restated":false,"history":[]},{"id":"42-micro dc gear motor","box":42,"container":"2","name":"Micro DC gear motor","qty":2,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"42-micro dc gear motor w gearbox encoder board","box":42,"container":"2","name":"Micro DC gear motor w/ gearbox + encoder board","qty":1,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"42-sg90 9g micro servo kit","box":42,"container":"2","name":"SG90 9g micro servo kit","qty":3,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-18","conflict":false,"restated":false,"history":[]},{"id":"42-small brushed dc motor","box":42,"container":"2","name":"Small brushed DC motor","qty":2,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"42-small brushed dc motor with pinion gear","box":42,"container":"2","name":"Small brushed DC motor with pinion gear","qty":1,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"43-dc dc buck converter module cc cv max 35v","box":43,"container":"2","name":"DC-DC buck converter module (CC/CV, max 35V)","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"43-ir receiver module","box":43,"container":"2","name":"IR receiver module","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"43-magnetic switch","box":43,"container":"2","name":"Magnetic switch","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"43-mt3608 dc dc step up boost converter module","box":43,"container":"2","name":"MT3608 DC-DC step-up (boost) converter module","qty":1,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-03-01","conflict":true,"restated":false,"history":[{"qty":"1","date":"2026-02-16","note":""},{"qty":"4","date":"2026-02-25","note":""},{"qty":"1","date":"2026-03-01","note":""}]},{"id":"43-reed sensor","box":43,"container":"2","name":"Reed sensor","qty":1,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"44-cr6030l dc dc buck converter module 1a max","box":44,"container":"2","name":"CR6030L DC-DC buck converter module (1A max)","qty":2,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"45-tc1508a dual dc motor driver module 2 channel h bridge","box":45,"container":"2","name":"TC1508A dual DC motor driver module (2-channel H-bridge)","qty":6,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"46-ac current transformer current sensor module zmct103c type","box":46,"container":"2","name":"AC current transformer current sensor module (ZMCT103C-type)","qty":0,"countType":"exact","status":"gone","note":"Remove both from Box 46","category":"sensor","updated":"2026-02-16","conflict":false,"restated":true,"history":[{"qty":"0","date":"2026-01-25","note":"Remove both from Box 46"},{"qty":"0","date":"2026-02-16","note":""}]},{"id":"46-traffic light led module red yellow green gnd 4 pin","box":46,"container":"2","name":"Traffic-light LED module (Red/Yellow/Green + GND, 4-pin)","qty":1,"countType":"exact","status":"active","note":"Add 1x traffic-light LED module (as photo)","category":"display","updated":"2026-02-16","conflict":false,"restated":true,"history":[{"qty":"1","date":"2026-01-25","note":"Add 1x traffic-light LED module (as photo)"},{"qty":"1","date":"2026-02-16","note":""}]},{"id":"47-cob led filament 3v 6500k white","box":47,"container":"2","name":"COB LED filament (3V, 6500K, white)","qty":10,"countType":"exact","status":"active","note":"","category":"display","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"47-cob led light bar","box":47,"container":"2","name":"COB LED light bar","qty":2,"countType":"exact","status":"active","note":"Aluminum strip module","category":"display","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"48-gt2 timing belt pulley aluminum flanged","box":48,"container":"2","name":"GT2 timing-belt pulley (aluminum, flanged)","qty":4,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"48-gt2 timing belt pulley nylon flanged","box":48,"container":"2","name":"GT2 timing-belt pulley (nylon, flanged)","qty":2,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"49-gt2 timing belt idler pulley plastic flanged","box":49,"container":"2","name":"GT2 timing-belt idler pulley (plastic, flanged)","qty":6,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"50-conical gear funnel shaped plastic","box":50,"container":"2","name":"Conical gear (funnel-shaped, plastic)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"51-spur gear black plastic","box":51,"container":"2","name":"Spur gear (black, plastic)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"51-spur gear translucent plastic","box":51,"container":"2","name":"Spur gear (translucent, plastic)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"51-spur gear white plastic","box":51,"container":"2","name":"Spur gear (white, plastic)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"53-assorted mounting hardware nylon washers spacers hex standoffs female female m3 5 26mm total 20mm body assorted bolts","box":53,"container":"2","name":"Assorted mounting hardware (nylon washers/spacers, hex standoffs female-female M3.5×26mm total / 20mm body, assorted bolts)","qty":null,"countType":"bulk","status":"active","note":"","category":"fastener","updated":"2026-01-15","conflict":false,"restated":false,"history":[]},{"id":"54-aaa batteries brand new","box":54,"container":"2","name":"AAA batteries (brand new)","qty":5,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-04-13","conflict":false,"restated":false,"history":[]},{"id":"56-alligator clip jumper wires red green","box":56,"container":"2","name":"Alligator clip jumper wires (red, green)","qty":2,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-01-16","conflict":false,"restated":false,"history":[]},{"id":"57-alligator clip jumper wire red","box":57,"container":"2","name":"Alligator clip jumper wire (red)","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-01-16","conflict":false,"restated":false,"history":[]},{"id":"58-aluminum disk 43 43 mm rounded square","box":58,"container":"2","name":"Aluminum disk (~43×43 mm rounded square)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-16","conflict":false,"restated":false,"history":[]},{"id":"59-brass scraps small pieces","box":59,"container":"2","name":"Brass scraps (small pieces)","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"60-aluminum scraps small pieces","box":60,"container":"2","name":"Aluminum scraps (small pieces)","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"61-copper wire scraps fine multi strand","box":61,"container":"3","name":"Copper wire scraps (fine multi-strand)","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"61-scrap metal parts broken snapped drill bits and taps","box":61,"container":"3","name":"Scrap metal parts (broken/snapped drill bits and taps)","qty":null,"countType":"bulk","status":"active","note":"","category":"fastener","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"62-m3 bolts","box":62,"container":"3","name":"M3 bolts","qty":6,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"63-m4 bolt","box":63,"container":"3","name":"M4 bolt","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"64-m5 bolts","box":64,"container":"3","name":"M5 bolts","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"65-m6 bolts","box":65,"container":"3","name":"M6 bolts","qty":0,"countType":"exact","status":"gone","note":"Replace generic entry with “mixed head styles” entry","category":"fastener","updated":"2026-02-16","conflict":false,"restated":true,"history":[{"qty":"0","date":"2026-01-25","note":"Replace generic entry with “mixed head styles” entry"},{"qty":"0","date":"2026-02-16","note":""}]},{"id":"65-m6 bolts mixed head styles","box":65,"container":"3","name":"M6 bolts (mixed head styles)","qty":4,"countType":"exact","status":"active","note":"Moved/attributed from old Box 88 entry; actual mixed heads found in Box 65","category":"fastener","updated":"2026-02-16","conflict":false,"restated":true,"history":[{"qty":"4","date":"2026-01-25","note":"Moved/attributed from old Box 88 entry; actual mixed heads found in Box 65"},{"qty":"4","date":"2026-02-16","note":""}]},{"id":"66-m8 bolts","box":66,"container":"3","name":"M8 bolts","qty":3,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"67-m2 nuts 52 m1 nuts 2","box":67,"container":"3","name":"M2 nuts (52) + M1 nuts (2)","qty":54,"countType":"exact","status":"active","note":"Mixed M2 and M1 nuts","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"68-assorted small tool accessories hex driver bits retractable hook","box":68,"container":"3","name":"Assorted small tool accessories (hex/driver bits + retractable hook)","qty":null,"countType":"bulk","status":"active","note":"","category":"tool","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"69-dc dc step down buck converter modules mini 360 hw 187","box":69,"container":"3","name":"DC-DC step-down (buck) converter modules (Mini-360 / HW-187)","qty":5,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"70-dc dc step down buck converter modules mp1584","box":70,"container":"3","name":"DC-DC step-down (buck) converter modules (MP1584)","qty":5,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"71-12v relay module","box":71,"container":"3","name":"12V relay module","qty":1,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"71-5v relay module","box":71,"container":"3","name":"5V relay module","qty":1,"countType":"exact","status":"active","note":"","category":"driver","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"71-coil type vibration sensors spring vibration switch modules","box":71,"container":"3","name":"Coil-type vibration sensors (spring vibration switch modules)","qty":null,"countType":"bulk","status":"active","note":"","category":"sensor","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"72-small white plastic gears assorted includes 2 worm gears","box":72,"container":"3","name":"Small white plastic gears (assorted; includes 2 worm gears)","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"73-medium white plastic gears assorted","box":73,"container":"3","name":"Medium white plastic gears (assorted)","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"74-large white plastic gears assorted","box":74,"container":"3","name":"Large white plastic gears (assorted)","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"75-m6 bolts","box":75,"container":"3","name":"M6 bolts","qty":0,"countType":"exact","status":"gone","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"77-timing belt pulleys black plastic 6 mm belt width","box":77,"container":"3","name":"Timing belt pulleys, black plastic (6 mm belt width)","qty":2,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"78-timing belt loop 150 mm 6 mm width","box":78,"container":"3","name":"Timing belt loop (~150 mm), 6 mm width","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"78-timing belt loop 250 mm 6 mm width","box":78,"container":"3","name":"Timing belt loop (~250 mm), 6 mm width","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"79-stainless steel 304 tube od 12 mm id 10 mm l 32 mm","box":79,"container":"3","name":"Stainless steel 304 tube (OD 12 mm, ID 10 mm, L 32 mm)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"80-heatsink 17 25 16 86 mm","box":80,"container":"3","name":"Heatsink (17.25 × 16.86 mm)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"82-m3 hex standoffs female female incl 2 m3 bolts","box":82,"container":"3","name":"M3 hex standoffs (female-female), incl. 2× M3 bolts","qty":2,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"83-brass 3d printer nozzle tips assorted","box":83,"container":"3","name":"Brass 3D-printer nozzle tips (assorted)","qty":4,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"84-barrel nut cross dowel threaded connector with spring ball detent","box":84,"container":"3","name":"Barrel nut / cross-dowel threaded connector (with spring ball detent)","qty":null,"countType":"bulk","status":"active","note":"","category":"connector","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"84-laser diode module","box":84,"container":"3","name":"Laser diode module","qty":9,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-04-07","conflict":true,"restated":false,"history":[{"qty":"1","date":"2026-03-21","note":""},{"qty":"9","date":"2026-04-07","note":""}]},{"id":"84-laser sensor receiver module","box":84,"container":"3","name":"Laser sensor receiver module","qty":1,"countType":"exact","status":"active","note":"With 3-pin receiver board","category":"sensor","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"85-m8 countersunk flat head bolts acer all in one","box":85,"container":"3","name":"M8 countersunk (flat-head) bolts (Acer All-in-One)","qty":3,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"86-m10 countersunk flat head bolts","box":86,"container":"3","name":"M10 countersunk (flat-head) bolts","qty":2,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"87-m10 countersunk flat head bolts","box":87,"container":"3","name":"M10 countersunk (flat-head) bolts","qty":5,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"88-m2 hex standoffs metal male female","box":88,"container":"3","name":"M2 hex standoffs (metal, male-female)","qty":20,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"89-m2 20 socket head cap screws hex grade 12 9 black full thread","box":89,"container":"3","name":"M2×20 socket head cap screws (hex), grade 12.9, black, full thread","qty":100,"countType":"exact","status":"active","note":"M2×20, full thread (Chinese label: 全牙)","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"90-m2 lock washers stainless","box":90,"container":"3","name":"M2 lock washers (stainless)","qty":100,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-02-16","conflict":false,"restated":false,"history":[]},{"id":"91-m2 lock nuts stainless","box":91,"container":"4","name":"M2 lock nuts (stainless)","qty":0,"countType":"exact","status":"gone","note":"","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"93-adhesive foam mounting strip for sensors","box":93,"container":"4","name":"Adhesive foam mounting strip for sensors","qty":1,"countType":"exact","status":"active","note":"Gray double-sided adhesive strip for PIR/door/TH sensors","category":"material","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"93-iron on hemming tape fabric","box":93,"container":"4","name":"Iron-on hemming tape (fabric)","qty":null,"countType":"bulk","status":"active","note":"White fabric iron-on tape strips for hems","category":"tool","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"94-screws 20 mm length","box":94,"container":"4","name":"Screws ≥20 mm length","qty":null,"countType":"bulk","status":"active","note":"Mixed-length screws, each ≥20 mm","category":"fastener","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"95-cd dvd drive optical head carriage with 4 wire stepper motor","box":95,"container":"4","name":"CD/DVD drive optical head carriage with 4-wire stepper motor","qty":1,"countType":"exact","status":"active","note":"Linear sled assembly from optical drive; includes rail, bracket, and mounting hardware","category":"motor","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"96-small clear elastic bands","box":96,"container":"4","name":"Small clear elastic bands","qty":8,"countType":"exact","status":"active","note":"Transparent elastic loops, hair-tie style","category":"mechanical","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"97-flexible tubing 1 5 m 0 8 mm id 1 6 mm od","box":97,"container":"4","name":"Flexible tubing (1.5 m, 0.8 mm ID, 1.6 mm OD)","qty":1,"countType":"exact","status":"active","note":"Clear flexible tube wound in small plastic box","category":"mechanical","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"98-foam earplugs","box":98,"container":"4","name":"Foam earplugs","qty":8,"countType":"exact","status":"active","note":"Orange cylindrical foam earplugs","category":"material","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"99-potentiometer knob loose","box":99,"container":"4","name":"Potentiometer knob (loose)","qty":1,"countType":"exact","status":"active","note":"Black round knob with silver top and indicator line","category":"switch","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"100-xt60 connector female loose","box":100,"container":"4","name":"XT60 connector (female, loose)","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-02-17","conflict":false,"restated":false,"history":[]},{"id":"102-micro servo kit sg90 9g horns","box":102,"container":"4","name":"Micro servo kit (SG90 9g + horns)","qty":1,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-18","conflict":false,"restated":false,"history":[]},{"id":"103-micro servo kit sg90 9g horns","box":103,"container":"4","name":"Micro servo kit (SG90 9g + horns)","qty":1,"countType":"exact","status":"active","note":"","category":"motor","updated":"2026-02-18","conflict":false,"restated":false,"history":[]},{"id":"104-cob led module","box":104,"container":"4","name":"COB LED module","qty":6,"countType":"exact","status":"active","note":"JC-3333-30P1S","category":"display","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"105-linear slide potentiometer pcb mount","box":105,"container":"4","name":"Linear slide potentiometer (PCB-mount)","qty":1,"countType":"exact","status":"active","note":"Slide (fader-style)","category":"switch","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"105-panel mount rotary potentiometer small body","box":105,"container":"4","name":"Panel-mount rotary potentiometer (small body)","qty":1,"countType":"exact","status":"active","note":"Small body","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"106-dc barrel plug adapters same input 8 assorted output sizes","box":106,"container":"4","name":"DC barrel plug adapters (same input, 8 assorted output sizes)","qty":8,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"107-hdmi male only dongle 4k uhd branded","box":107,"container":"4","name":"HDMI male-only dongle (4K UHD branded)","qty":1,"countType":"exact","status":"active","note":"Rose-gold housing","category":"connector","updated":"2026-03-26","conflict":false,"restated":false,"history":[]},{"id":"107-micro hdmi male to hdmi female adapter","box":107,"container":"4","name":"Micro HDMI male to HDMI female adapter","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-03-26","conflict":false,"restated":true,"history":[{"qty":"1","date":"2026-03-24","note":""},{"qty":"1","date":"2026-03-26","note":""}]},{"id":"107-mini hdmi male to hdmi female adapter","box":107,"container":"4","name":"Mini HDMI male to HDMI female adapter","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"107-usb a to usb c adapter","box":107,"container":"4","name":"USB-A to USB-C adapter","qty":1,"countType":"exact","status":"active","note":"USB-A male to USB-C female","category":"connector","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"108-retractable rj 45 cable reel","box":108,"container":"4","name":"Retractable RJ-45 cable reel","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"108-rj 45 connector single","box":108,"container":"4","name":"RJ-45 connector (single)","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"109-panel mount rotary potentiometer","box":109,"container":"4","name":"Panel-mount rotary potentiometer","qty":0,"countType":"exact","status":"gone","note":"Small body","category":"switch","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"110-electronic candle light module","box":110,"container":"4","name":"Electronic candle light module","qty":1,"countType":"exact","status":"active","note":"IR receiver board","category":"sensor","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"111-walkie talkie earpiece in ear bud","box":111,"container":"4","name":"Walkie-talkie earpiece (in-ear bud)","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"112-3 5 mm audio plug adapter male to male","box":112,"container":"4","name":"3.5 mm audio plug adapter (male-to-male)","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"113-radiator valve square key tool","box":113,"container":"4","name":"Radiator valve square key tool","qty":0,"countType":"exact","status":"gone","note":"","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"114-bar load cell 0 5 kg","box":114,"container":"4","name":"Bar load cell (0.5 kg)","qty":1,"countType":"exact","status":"active","note":"Small variant","category":"sensor","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"114-bar load cell 100 g","box":114,"container":"4","name":"Bar load cell (100 g)","qty":1,"countType":"exact","status":"active","note":"Small variant","category":"sensor","updated":"2026-03-20","conflict":false,"restated":false,"history":[]},{"id":"115-illuminated panel mount metal pushbutton switch","box":115,"container":"4","name":"Illuminated panel-mount metal pushbutton switch","qty":2,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"115-laser diode module","box":115,"container":"4","name":"Laser diode module","qty":0,"countType":"exact","status":"gone","note":"","category":"comms","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"115-laser sensor receiver module","box":115,"container":"4","name":"Laser sensor receiver module","qty":0,"countType":"exact","status":"gone","note":"With 3-pin receiver board","category":"sensor","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"116-mps20n0040d pressure sensor module","box":116,"container":"4","name":"MPS20N0040D pressure sensor module","qty":3,"countType":"exact","status":"active","note":"","category":"sensor","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"117-pd65w step down fast charge module usb c dc5521","box":117,"container":"4","name":"PD65W step-down fast-charge module (USB-C + DC5521)","qty":1,"countType":"exact","status":"active","note":"USB-C female + DC5521 5.5×2.1 mm","category":"power","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"117-test screw m67","box":117,"container":"4","name":"Test screw M67","qty":0,"countType":"exact","status":"gone","note":"","category":"fastener","updated":"2026-03-21","conflict":false,"restated":false,"history":[]},{"id":"119-ac dc converter module 5v 3 5w","box":119,"container":"4","name":"AC/DC converter module (5V, 3.5W)","qty":1,"countType":"exact","status":"active","note":"18×23.5 mm","category":"power","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"120-i2c oled display module 0 96 128 64 white","box":120,"container":"4","name":"I2C OLED display module (0.96\", 128×64, white)","qty":1,"countType":"exact","status":"active","note":"Blue PCB version","category":"display","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"122-pcm1808 i2s stereo adc module","box":122,"container":"5","name":"PCM1808 I2S stereo ADC module","qty":1,"countType":"exact","status":"active","note":"Purple PCB version","category":"interface","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"123-iec panel mount ac power inlet 3 pin","box":123,"container":"5","name":"IEC panel-mount AC power inlet (3-pin)","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"124-iec panel mount ac power inlet 3 pin","box":124,"container":"5","name":"IEC panel-mount AC power inlet (3-pin)","qty":1,"countType":"exact","status":"active","note":"","category":"connector","updated":"2026-04-12","conflict":false,"restated":false,"history":[]},{"id":"125-xt60 panel mount connector","box":125,"container":"5","name":"XT60 panel-mount connector","qty":4,"countType":"exact","status":"active","note":"Yellow flange version","category":"connector","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"126-xt60 panel mount connector","box":126,"container":"5","name":"XT60 panel-mount connector","qty":1,"countType":"exact","status":"active","note":"Yellow flange version","category":"connector","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"127-li ion battery level indicator module 4 led","box":127,"container":"5","name":"Li-ion battery level indicator module (4-LED)","qty":4,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"128-pva flakes granules","box":128,"container":"5","name":"PVA flakes / granules","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-04-21","conflict":false,"restated":false,"history":[]},{"id":"401-bath salts pink crystals","box":401,"container":"H1","name":"Bath salts (pink crystals)","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"402-3m 9448a double coated tissue tape pieces","box":402,"container":"H1","name":"3M 9448A double coated tissue tape (pieces)","qty":null,"countType":"bulk","status":"active","note":"","category":"tool","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"403-phone clamp fisheye lens kit 2 lenses clamp","box":403,"container":"H1","name":"Phone clamp fisheye lens kit (2 lenses + clamp)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"404-smoking pipe salvia style","box":404,"container":"H1","name":"Smoking pipe (salvia-style)","qty":1,"countType":"exact","status":"active","note":"","category":"misc","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"405-assorted keychains keyrings","box":405,"container":"H1","name":"Assorted keychains/keyrings","qty":4,"countType":"exact","status":"active","note":"","category":"misc","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"405-key name tag red","box":405,"container":"H1","name":"Key name tag (red)","qty":2,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"406-shoelace pairs white","box":406,"container":"H1","name":"Shoelace pairs white","qty":2,"countType":"exact","status":"active","note":"","category":"material","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"407-cxt wireless mouse usb receiver","box":407,"container":"H1","name":"CXT wireless mouse USB receiver","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"407-steam controller usb wireless receiver dongle extension dock","box":407,"container":"H1","name":"Steam Controller USB wireless receiver (dongle) + extension dock","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"408-vape replacement coils","box":408,"container":"H1","name":"Vape replacement coils","qty":4,"countType":"exact","status":"active","note":"","category":"material","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"409-assorted 3d printed gears cogs keycap remover tool","box":409,"container":"H1","name":"Assorted 3D printed gears/cogs + keycap remover tool","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"410-measuring tape","box":410,"container":"H1","name":"Measuring tape","qty":1,"countType":"exact","status":"active","note":"","category":"tool","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"411-clear keycaps top","box":411,"container":"H1","name":"Clear keycaps (top)","qty":10,"countType":"exact","status":"active","note":"","category":"misc","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"412-black keycaps bottom","box":412,"container":"H1","name":"Black keycaps (bottom)","qty":0,"countType":"exact","status":"gone","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"412-clear keycaps top","box":412,"container":"H1","name":"Clear keycaps (top)","qty":10,"countType":"exact","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"413-black keycaps bottom","box":413,"container":"H1","name":"Black keycaps (bottom)","qty":20,"countType":"exact","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"414-assorted keys","box":414,"container":"H1","name":"Assorted keys","qty":null,"countType":"bulk","status":"active","note":"","category":"switch","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"415-curtain hanging clips peripherals white plastic","box":415,"container":"H1","name":"Curtain hanging clips/peripherals (white plastic)","qty":null,"countType":"bulk","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"416-brass knurled ring retaining nut","box":416,"container":"H1","name":"Brass knurled ring / retaining nut","qty":1,"countType":"exact","status":"active","note":"","category":"fastener","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"417-lr44 button cell batteries","box":417,"container":"H1","name":"LR44 button cell batteries","qty":3,"countType":"exact","status":"active","note":"","category":"power","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"418-ketamine tube w attached scoop blue","box":418,"container":"H1","name":"Ketamine tube w/ attached scoop (blue)","qty":1,"countType":"exact","status":"active","note":"","category":"mechanical","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"419-android find my device tracker tag airtag style","box":419,"container":"H1","name":"Android Find My Device tracker tag (AirTag-style)","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"420-jumbo self scan promo discount stickers labels","box":420,"container":"H1","name":"Jumbo self-scan + promo/discount stickers/labels","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-01-18","conflict":false,"restated":false,"history":[]},{"id":"420-nfc sticker tag","box":420,"container":"H1","name":"NFC sticker/tag","qty":2,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-24","conflict":false,"restated":false,"history":[]},{"id":"421-assorted paper money bills","box":421,"container":"H1","name":"Assorted paper money bills","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"422-assorted world coins","box":422,"container":"H1","name":"Assorted world coins","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"423-aruba coins","box":423,"container":"H1","name":"Aruba coins","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"424-novelty and obsolete coins tokens old currency","box":424,"container":"H1","name":"Novelty and obsolete coins (tokens, old currency)","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"425-greek meat seasoning mix dried herb blend","box":425,"container":"H1","name":"Greek meat seasoning mix (dried herb blend)","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"426-greek meat seasoning mix dried herb blend","box":426,"container":"H1","name":"Greek meat seasoning mix (dried herb blend)","qty":null,"countType":"bulk","status":"active","note":"","category":"misc","updated":"2026-02-19","conflict":false,"restated":false,"history":[]},{"id":"427-copper wire scraps fine multi strand","box":427,"container":"H1","name":"Copper wire scraps (fine multi-strand)","qty":0,"countType":"exact","status":"gone","note":"","category":"material","updated":"2026-03-03","conflict":false,"restated":false,"history":[]},{"id":"427-rose quartz gemstone","box":427,"container":"H1","name":"Rose quartz gemstone","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-05","conflict":false,"restated":false,"history":[]},{"id":"428-sim card","box":428,"container":"H1","name":"SIM card","qty":1,"countType":"exact","status":"active","note":"","category":"comms","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"429-radiator valve square key tool","box":429,"container":"H1","name":"Radiator valve square key tool","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-19","conflict":false,"restated":false,"history":[]},{"id":"430-piezoelectric spark generator lighter igniter","box":430,"container":"H1","name":"Piezoelectric spark generator (lighter igniter)","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-06","conflict":false,"restated":false,"history":[]},{"id":"431-brass padlock with keys","box":431,"container":"H2","name":"Brass padlock with keys","qty":1,"countType":"exact","status":"active","note":"","category":"switch","updated":"2026-03-27","conflict":false,"restated":false,"history":[]},{"id":"432-sawdust wood shavings","box":432,"container":"H2","name":"Sawdust / wood shavings","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-03-27","conflict":false,"restated":false,"history":[]},{"id":"433-popsicle stick rounded end cutoffs","box":433,"container":"H2","name":"Popsicle-stick rounded-end cutoffs","qty":null,"countType":"bulk","status":"active","note":"","category":"sensor","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"434-red bell pepper seeds","box":434,"container":"H2","name":"Red bell pepper seeds","qty":null,"countType":"bulk","status":"active","note":"From 4 red bell peppers","category":"material","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"435-green bell pepper seeds","box":435,"container":"H2","name":"Green bell pepper seeds","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"436-lemon seeds","box":436,"container":"H2","name":"Lemon seeds","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"437-hot glue scraps and support material waste","box":437,"container":"H2","name":"Hot-glue scraps and support-material waste","qty":null,"countType":"bulk","status":"active","note":"","category":"material","updated":"2026-05-12","conflict":false,"restated":false,"history":[]},{"id":"438-lan party goodies wristband","box":438,"container":"H2","name":"LAN-party goodies / wristband","qty":1,"countType":"exact","status":"active","note":"Episode 13","category":"misc","updated":"2026-05-12","conflict":false,"restated":false,"history":[]}],"freeBoxes":[{"box":52,"container":"2","reason":"never used"},{"box":55,"container":"2","reason":"never used"},{"box":75,"container":"3","reason":"emptied"},{"box":76,"container":"3","reason":"never used"},{"box":81,"container":"3","reason":"never used"},{"box":91,"container":"4","reason":"emptied"},{"box":92,"container":"4","reason":"never used"},{"box":101,"container":"4","reason":"never used"},{"box":109,"container":"4","reason":"emptied"},{"box":113,"container":"4","reason":"emptied"},{"box":118,"container":"4","reason":"never used"},{"box":121,"container":"5","reason":"never used"},{"box":400,"container":"H0","reason":"never used"}],"splitItems":[{"name":"Clear keycaps (top)","boxes":[411,412]},{"name":"Greek meat seasoning mix (dried herb blend)","boxes":[425,426]},{"name":"IEC panel-mount AC power inlet (3-pin)","boxes":[123,124]},{"name":"M10 countersunk (flat-head) bolts","boxes":[86,87]},{"name":"Micro servo kit (SG90 9g + horns)","boxes":[102,103]},{"name":"Screws <20 mm length","boxes":[27,94]},{"name":"XT60 panel-mount connector","boxes":[125,126]},{"name":"XY-MOS MOSFET module","boxes":[22,23]}]};
+const STORE_KEY = "boxinv.v1";
+const CAT = SEED.meta.categoryLabels;
+const CONTAINER_SIZE = SEED.meta.containerSize;
+const STALE_DAYS = 150;
+
+/* ------------------------------------------------------------------ state */
+let overlay = load();
+let items = [];            // live merged list
+let ui = { tab:"find", q:"", cats:new Set(), zone:"all", flag:null, open:null, box:null,
+           bom:"", level:2, cap:6 };
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw) return Object.assign({edits:{},added:[],journal:[]}, JSON.parse(raw));
+  }catch(e){ console.warn("overlay unreadable, starting clean", e); }
+  return {edits:{},added:[],journal:[]};
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(overlay)); }
+  catch(e){ toast("Could not save locally"); }
+}
+/* Boxes 1..399 and 400+ are two physically separate sets of containers,
+   so each set is numbered from its own start. */
+function containerOf(box){
+  const base = box >= 400 ? 400 : 0;
+  const n = Math.floor((box - base - 1) / CONTAINER_SIZE) + 1;
+  return (base ? "H" : "") + n;
+}
+function containerRange(box){
+  const base = box >= 400 ? 400 : 0;
+  const c = Math.floor((box - base - 1) / CONTAINER_SIZE);
+  return [base + c * CONTAINER_SIZE + 1, base + (c + 1) * CONTAINER_SIZE];
+}
+function rebuild(){
+  const out = [];
+  for(const it of SEED.items){
+    const e = overlay.edits[it.id];
+    if(e && e.deleted) continue;
+    out.push(e ? Object.assign({}, it, e, {edited:true}) : it);
+  }
+  for(const it of overlay.added){
+    if(!(overlay.edits[it.id] && overlay.edits[it.id].deleted))
+      out.push(Object.assign({}, it, overlay.edits[it.id]||{}, {added:true}));
+  }
+  for(const it of out){
+    it.container = containerOf(it.box);
+    it.status = (it.countType === "exact" && Number(it.qty) === 0) ? "gone" : "active";
+    it._hay = (it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category) + " box " + it.box).toLowerCase();
+    it._tokName = tokens(it.name);
+    it._tokAll  = tokens(it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category));
+  }
+  out.sort((a,b)=> a.box - b.box || a.name.localeCompare(b.name));
+  items = out;
+}
+function journal(entry){
+  overlay.journal.push(Object.assign({at:new Date().toISOString()}, entry));
+  if(overlay.journal.length > 800) overlay.journal.splice(0, overlay.journal.length - 800);
+}
+function edit(id, patch, label){
+  overlay.edits[id] = Object.assign({}, overlay.edits[id], patch);
+  journal({id, patch, label});
+  save(); rebuild(); render();
+}
+
+/* ------------------------------------------------------------------ utils */
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const active = () => items.filter(i => i.status === "active");
+function daysAgo(iso){
+  if(!iso) return null;
+  return Math.round((Date.now() - new Date(iso+"T12:00:00").getTime()) / 864e5);
+}
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1900);
+}
+function qtyHTML(it){
+  if(it.countType === "bulk")    return `<div class="qty bulk">many<small>bulk</small></div>`;
+  if(it.countType === "unknown") return `<div class="qty unknown">?<small>uncounted</small></div>`;
+  const n = Number(it.qty)||0;
+  return `<div class="qty${n===0?" zero":""}">${n}<small>${n===1?"pc":"pcs"}</small></div>`;
+}
+/* Split on everything except digits, letters, "." and "+" so that "m3.5" and
+   "5v+" survive whole but "timing-belt" becomes two matchable words. */
+function tokens(s){
+  return String(s).toLowerCase().split(/[^a-z0-9.+]+/).filter(t => t.length > 1);
+}
+/* A needle word matches an item word only on a whole-word or prefix basis.
+   Substring matching is wrong here: it made "TOF" match "cu-tof-fs". */
+function wordHit(needle, list){
+  for(const w of list){
+    if(w === needle) return 1;
+    if(needle.length >= 3 && w.startsWith(needle)) return 0.9;
+    if(w.length >= 3 && needle.startsWith(w)) return 0.8;
+  }
+  return 0;
+}
+/* 0..1.25 — name matches outrank matches that only hit the note. */
+function matchScore(needle, it){
+  const words = tokens(needle);
+  if(!words.length) return 0;
+  let name = 0, all = 0;
+  for(const w of words){ name += wordHit(w, it._tokName); all += wordHit(w, it._tokAll); }
+  return (name / words.length) + 0.25 * (all / words.length);
+}
+
+/* The two box ranges actually in use, derived from the data (not hard-coded),
+   so adding box 129 or 439 keeps the Boxes view and free-slot list correct. */
+function boxRanges(){
+  const elec = items.filter(i => i.box < 400).map(i => i.box);
+  const house = items.filter(i => i.box >= 400).map(i => i.box);
+  const out = [];
+  if(elec.length)  out.push([1,   Math.max(...elec),  "Electronics"]);
+  if(house.length) out.push([401, Math.max(...house), "Household"]);
+  return out;
+}
+
+/* ------------------------------------------------------------------ issues */
+function issues(){
+  const list = active();
+  const conflicts = items.filter(i => i.conflict && !i.edited);
+  const bulk = list.filter(i => i.countType === "bulk" || i.countType === "unknown");
+  const stale = list.filter(i => (daysAgo(i.updated)||0) > STALE_DAYS);
+  const byName = new Map();
+  for(const i of list){
+    const k = i.name.toLowerCase().trim();
+    if(!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(i.box);
+  }
+  const splits = [...byName.entries()]
+    .filter(([,b]) => new Set(b).size > 1)
+    .map(([n,b]) => ({name:n, boxes:[...new Set(b)].sort((x,y)=>x-y)}))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  const used = new Set(list.map(i => i.box));
+  const known = new Set(items.map(i => i.box));
+  const free = [];
+  for(const [lo,hi] of boxRanges())
+    for(let b=lo; b<=hi; b++)
+      if(!used.has(b)) free.push({box:b, reason: known.has(b) ? "emptied" : "never used"});
+  return {conflicts, bulk, stale, splits, free,
+          total: conflicts.length + splits.length + free.length};
+}
+
+/* --------------------------------------------------------------- reorganise
+   Three effort levels. Each returns concrete part-moves you can apply.
+   Bulk piles are never merged into a shared box — a pile of 99 screws fills
+   its own box physically, whatever the data says. */
+function planMoves(level, cap){
+  const list = active().map(i => ({it:i, box:i.box}));
+  const moves = [];
+  const mergeable = r => r.it.countType === "exact";
+  const move = (r, to, why) => { if(r.box !== to){ moves.push({id:r.it.id, name:r.it.name,
+      from:r.box, to, why}); r.box = to; } };
+  const load = () => {                       // current box -> rows, using planned boxes
+    const m = new Map();
+    for(const r of list){ if(!m.has(r.box)) m.set(r.box, []); m.get(r.box).push(r); }
+    return m;
+  };
+
+  // level 1 — the same part sitting in two boxes
+  const byName = new Map();
+  for(const r of list){
+    const k = r.it.name.toLowerCase().trim();
+    if(!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(r);
+  }
+  for(const [,rows] of byName){
+    if(new Set(rows.map(r => r.box)).size < 2) continue;
+    // keep it where the larger amount already is; ties go to the lower box number
+    const home = rows.slice().sort((a,b) =>
+      (Number(b.it.qty)||0) - (Number(a.it.qty)||0) || a.box - b.box)[0].box;
+    for(const r of rows) move(r, home, "same part was in two boxes");
+  }
+
+  // level 2 — merge one-item boxes of the same category inside one container.
+  // Repeat until stable: each pass empties boxes, which can leave new singles.
+  const consolidate = () => {
+    for(let pass = 0; pass < 8; pass++){
+      const before = moves.length;
+      const byCC = new Map();
+      for(const r of list){
+        const k = containerOf(r.box) + "|" + r.it.category;
+        if(!byCC.has(k)) byCC.set(k, []);
+        byCC.get(k).push(r);
+      }
+      for(const [,rows] of byCC){
+        const l = load();                       // recomputed per group, per pass
+        const singles = rows.filter(r => mergeable(r) && (l.get(r.box)||[]).length === 1);
+        if(singles.length < 2) continue;
+        const home = Math.min(...singles.map(r => r.box));
+        let n = (l.get(home)||[]).length;
+        for(const r of singles.sort((a,b)=>a.box-b.box)){
+          if(r.box === home || n >= cap) continue;
+          move(r, home, "one-item boxes of the same type, same container"); n++;
+        }
+      }
+      if(moves.length === before) break;
+    }
+  };
+  if(level >= 2) consolidate();
+
+  // level 3 — give each category one home container and pack it there
+  if(level >= 3){
+    const cats = new Map();
+    for(const r of list){
+      if(!cats.has(r.it.category)) cats.set(r.it.category, []);
+      cats.get(r.it.category).push(r);
+    }
+    for(const [cat, rows] of cats){
+      const elec = rows.filter(r => r.box < 400);
+      if(elec.length < 3) continue;                 // not worth moving crates for
+      const tally = {};
+      for(const r of elec) tally[containerOf(r.box)] = (tally[containerOf(r.box)]||0) + 1;
+      const home = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
+      const inHome = elec.filter(r => containerOf(r.box) === home).map(r => r.box);
+      if(!inHome.length) continue;
+      const targets = [...new Set(inHome)].sort((a,b)=>a-b);
+      const l = load();
+      let ti = 0;
+      for(const r of elec.sort((a,b)=>a.box-b.box)){
+        if(containerOf(r.box) === home) continue;
+        if(!mergeable(r)) continue;                 // piles stay where they are
+        while(ti < targets.length &&
+              (l.get(targets[ti])||[]).length + moves.filter(m=>m.to===targets[ti]).length >= cap) ti++;
+        if(ti >= targets.length) break;
+        move(r, targets[ti], `${esc(CAT[cat]||cat)} belongs in container ${home}`);
+      }
+    }
+    consolidate();   // regrouping leaves new one-item boxes behind; sweep them up
+  }
+
+  const boxesBefore = new Set(active().map(i => i.box));
+  const boxesAfter  = new Set(list.map(r => r.box));
+  const spread = rows => {
+    const m = {};
+    for(const r of rows){
+      const c = r.it.category;
+      (m[c] = m[c] || new Set()).add(containerOf(r.box));
+    }
+    return Object.values(m).reduce((a,s)=>a+s.size, 0) / Math.max(1, Object.keys(m).length);
+  };
+  return {
+    moves,
+    freed: [...boxesBefore].filter(b => !boxesAfter.has(b)).sort((a,b)=>a-b),
+    spreadBefore: spread(active().map(i => ({it:i, box:i.box}))),
+    spreadAfter: spread(list),
+    pinned: list.filter(r => !mergeable(r)).length
+  };
+}
+
+/* ------------------------------------------------------------------ views */
+function render(){
+  document.getElementById("stat-line").textContent =
+    `${active().length} parts · ${new Set(active().map(i=>i.box)).size} boxes`;
+  renderTabs();
+  const v = document.getElementById("view");
+  v.innerHTML = ({find:viewFind, boxes:viewBoxes, issues:viewIssues, build:viewBuild,
+                  reorg:viewReorg, labels:viewLabels, data:viewData})[ui.tab]();
+  wire();
+}
+function renderTabs(){
+  const n = issues().total;
+  const tabs = [["find","Find"],["boxes","Boxes"],["issues","Issues"],["build","Build check"],
+                ["reorg","Reorganise"],["labels","Labels"],["data","Data"]];
+  document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
+    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${label}${
+      k==="issues" && n ? `<span class="badge">${n}</span>` : ""}</button>`).join("");
+}
+
+function filtered(){
+  let list = items.filter(i => i.status === "active" || ui.flag === "gone");
+  if(ui.zone === "elec")  list = list.filter(i => i.box < 400);
+  if(ui.zone === "house") list = list.filter(i => i.box >= 400);
+  if(ui.cats.size)        list = list.filter(i => ui.cats.has(i.category));
+  if(ui.box != null)      list = list.filter(i => i.box === ui.box);
+  if(ui.flag === "gone")  list = list.filter(i => i.status === "gone");
+  if(ui.flag === "bulk")  list = list.filter(i => i.countType !== "exact");
+  if(ui.flag === "conflict") list = list.filter(i => i.conflict);
+  if(ui.flag === "stale") list = list.filter(i => (daysAgo(i.updated)||0) > STALE_DAYS);
+  const q = ui.q.trim().toLowerCase();
+  if(q){
+    const ts = tokens(q);
+    list = list.filter(i => ts.every(t => i._hay.includes(t)))
+               .map(i => [i, matchScore(q, i) + (i.name.toLowerCase().startsWith(q) ? .5 : 0)])
+               .sort((a,b) => b[1]-a[1] || a[0].box-b[0].box)
+               .map(p => p[0]);
+  }
+  return list;
+}
+
+function viewFind(){
+  const counts = {};
+  for(const i of active()) counts[i.category] = (counts[i.category]||0) + 1;
+  const cats = Object.keys(CAT).filter(c => counts[c])
+    .sort((a,b) => counts[b]-counts[a]);
+  const rng = Object.fromEntries(boxRanges().map(([lo,hi,n]) => [n, `${lo}–${hi}`]));
+  const zoneLabel = {all:"All", elec:`Electronics (${rng.Electronics||"—"})`,
+                     house:`Household (${rng.Household||"—"})`};
+  const chips =
+    `<div class="chips">
+      ${["all","elec","house"].map(z =>
+        `<button class="chip" data-zone="${z}" aria-pressed="${ui.zone===z}">${zoneLabel[z]}</button>`).join("")}
+      <span style="width:10px"></span>
+      ${[["bulk","Uncounted"],["conflict","Ambiguous"],["stale","Stale"],["gone","Removed"]].map(([k,l]) =>
+        `<button class="chip" data-flag="${k}" aria-pressed="${ui.flag===k}">${l}</button>`).join("")}
+    </div>
+    <div class="chips">
+      ${cats.map(c => `<button class="chip" data-cat="${c}" aria-pressed="${ui.cats.has(c)}">${
+        esc(CAT[c])}<span class="n">${counts[c]}</span></button>`).join("")}
+    </div>`;
+  const list = filtered();
+  const boxNote = ui.box != null
+    ? `<div class="hint">Showing box ${ui.box} only · <button class="iconbtn" data-clearbox="1">show all</button></div>` : "";
+  if(!list.length)
+    return chips + boxNote + `<div class="empty">Nothing matches.<br><br>
+      <button class="btn" data-add="1">+ Add a part</button></div>`;
+  return chips + boxNote +
+    `<div class="hint">${list.length} result${list.length===1?"":"s"}
+       · <button class="iconbtn" data-add="1">+ add part</button></div>
+     <div class="list">${list.map(itemHTML).join("")}</div>`;
+}
+
+function itemHTML(it){
+  const flags = [];
+  if(it.conflict) flags.push(`<span class="tag err" title="The sheet recorded different quantities for this same box+item">ambiguous</span>`);
+  if(it.status === "gone") flags.push(`<span class="tag err">removed</span>`);
+  if(it.edited) flags.push(`<span class="tag flag">edited</span>`);
+  if(it.added)  flags.push(`<span class="tag flag">new</span>`);
+  const d = daysAgo(it.updated);
+  const open = ui.open === it.id;
+  return `<div class="item" data-id="${esc(it.id)}">
+    <button class="row" data-toggle="${esc(it.id)}">
+      <span class="boxno"><b>${it.box}</b><span>box</span></span>
+      <span class="itemmain">
+        <span class="itemname">${esc(it.name)}</span>
+        <span class="itemmeta">
+          <span class="tag">${esc(CAT[it.category]||it.category)}</span>
+          <span class="tag">cont. ${it.container}</span>
+          ${d!=null?`<span class="tag"${d>STALE_DAYS?' style="opacity:.85"':''}>${d}d ago</span>`:""}
+          ${flags.join("")}
+        </span>
+        ${it.note?`<span class="note">${esc(it.note)}</span>`:""}
+      </span>
+      ${qtyHTML(it)}
+    </button>
+    ${open ? editorHTML(it) : ""}
+  </div>`;
+}
+
+function editorHTML(it){
+  const optCats = Object.keys(CAT).map(c =>
+    `<option value="${c}"${c===it.category?" selected":""}>${esc(CAT[c])}</option>`).join("");
+  const optCount = [["exact","exact count"],["bulk","bulk / many"],["unknown","uncounted"]]
+    .map(([v,l]) => `<option value="${v}"${v===it.countType?" selected":""}>${l}</option>`).join("");
+  const hist = (it.history&&it.history.length)
+    ? `<div class="hist"><b>sheet history</b>${it.history.map(h =>
+        `<div>${h.date||"?"} · qty ${h.qty===""?"—":h.qty}${h.note?" · "+esc(h.note):""}</div>`).join("")}</div>`
+    : "";
+  return `<div class="editor">
+    <div class="eline">
+      <label>Qty</label>
+      <button class="step" data-step="-1">−</button>
+      <input type="number" data-f="qty" value="${it.countType==="exact"?(Number(it.qty)||0):""}"
+             ${it.countType!=="exact"?"disabled placeholder=\"—\"":""}>
+      <button class="step" data-step="1">+</button>
+      <select data-f="countType">${optCount}</select>
+    </div>
+    <div class="eline"><label>Box</label>
+      <input type="number" data-f="box" value="${it.box}" min="1">
+      <label>Type</label><select data-f="category" class="grow">${optCats}</select>
+    </div>
+    <div class="eline"><label>Name</label>
+      <input type="text" data-f="name" class="grow" value="${esc(it.name)}"></div>
+    <div class="eline"><label>Note</label>
+      <input type="text" data-f="note" class="grow" value="${esc(it.note||"")}"
+             placeholder="spec, where it came from, what it fits…"></div>
+    <div class="ebtns">
+      <button class="btn" data-savechanges="1">Save</button>
+      <button class="btn ghost" data-onlybox="${it.box}">Show box ${it.box}</button>
+      <button class="btn danger" data-del="1">Delete</button>
+    </div>
+    ${hist}
+  </div>`;
+}
+
+function viewBoxes(){
+  const byBox = new Map();
+  for(const i of active()){
+    if(!byBox.has(i.box)) byBox.set(i.box, []);
+    byBox.get(i.box).push(i);
+  }
+  const q = ui.q.trim().toLowerCase();
+  const hitBoxes = new Set(q ? filtered().map(i => i.box) : []);
+  let html = `<div class="hint">Tap a box to list its contents. Dashed green = free slot you can reuse.</div>`;
+  for(const [lo,hi,name] of boxRanges()){
+    let last = null;
+    for(let b=lo; b<=hi; b++){
+      const c = containerOf(b);
+      if(c !== last){
+        if(last!==null) html += `</div>`;
+        const [rlo,rhi] = containerRange(b);
+        html += `<div class="container-h">${name} · container ${c} (boxes ${rlo}–${rhi})</div><div class="boxgrid">`;
+        last = c;
+      }
+      const contents = byBox.get(b);
+      const free = !contents;
+      html += `<button class="boxcell${free?" free":""}${hitBoxes.has(b)?" hit":""}" data-box="${b}">
+        <b>${b}</b><span>${free?"free":contents.length+(contents.length===1?" item":" items")}</span></button>`;
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+function viewIssues(){
+  const s = issues();
+  const P = (title, sub, body, n) =>
+    `<div class="panel"><h2>${title} <span class="count">${n}</span></h2><p class="sub">${sub}</p>${body}</div>`;
+  return `
+  ${P("Ambiguous quantities",
+      "The sheet logged this box+item more than once with different numbers, so the true count is unknown. The app shows the newest row — confirm each by counting.",
+      s.conflicts.length ? `<div class="list">${s.conflicts.map(itemHTML).join("")}</div>`
+                         : `<p class="sub">None left.</p>`, s.conflicts.length)}
+  ${P("Same part in two boxes",
+      "You would open the wrong box. Merge them, or note why they are split.",
+      s.splits.length ? `<ul>${s.splits.map(x =>
+        `<li>${esc(x.name)} → ${x.boxes.map(b=>`<a href="#" data-box="${b}">box ${b}</a>`).join(", ")}</li>`).join("")}</ul>`
+      : `<p class="sub">None.</p>`, s.splits.length)}
+  ${P("Free box numbers",
+      `Empty or never used — reuse these before buying more boxes.`,
+      s.free.length ? `<p>${s.free.map(f =>
+        `<a href="#" data-box="${f.box}" title="${f.reason}"><b>${f.box}</b></a>`).join(" · ")}</p>`
+      : `<p class="sub">None.</p>`, s.free.length)}
+  ${P("Uncounted piles",
+      `Recorded as “many” rather than a real number (the old sheet wrote 99). Fine for screws, worth counting for anything you might run out of.`,
+      `<p class="sub">${s.bulk.slice(0,60).map(i =>
+        `<a href="#" data-box="${i.box}">${esc(i.name)}</a>`).join(" · ")}</p>`, s.bulk.length)}
+  ${P("Not seen in a while",
+      `No update in over ${STALE_DAYS} days — spot-check these when you next open the container.`,
+      `<p class="sub">${s.stale.slice(0,60).map(i =>
+        `<a href="#" data-box="${i.box}">box ${i.box} · ${esc(i.name)}</a>`).join(" · ")}</p>`, s.stale.length)}`;
+}
+
+function viewBuild(){
+  const lines = ui.bom.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const list = active();
+  const MIN = 0.55;
+  let results = "";
+  if(lines.length){
+    let have = 0, missing = 0;
+    const boxes = new Set();
+    const rows = lines.map(line => {
+      const m = line.match(/^(\d+)\s*[x×*]?\s+(.*)$/i);
+      const need = m ? parseInt(m[1],10) : 1;
+      const term = m ? m[2] : line;
+      let ranked = list.map(i => [i, matchScore(term, i)])
+                         .filter(p => p[1] >= MIN)
+                         // equal score: the shorter name is the more specific part
+                         .sort((a,b) => b[1]-a[1] || a[0].name.length-b[0].name.length || a[0].box-b[0].box)
+                         .slice(0,4);
+      // Among near-equally good name matches, prefer one that actually covers
+      // the quantity: a bulk pile of limit switches beats the single odd one.
+      let best = ranked[0];
+      if(best){
+        const covers = p => p[0].countType !== "exact" || Number(p[0].qty) >= need;
+        best = ranked.filter(p => p[1] >= best[1] * 0.9).find(covers) || ranked[0];
+        ranked = [best, ...ranked.filter(p => p !== best)];
+      }
+      let pill, detail;
+      if(!best){ pill = `<span class="pill no">not in any box</span>`; detail = ""; missing++; }
+      else{
+        const it = best[0];
+        boxes.add(it.box);
+        const enough = it.countType !== "exact" || Number(it.qty) >= need;
+        pill = enough ? `<span class="pill ok">box ${it.box}</span>`
+                      : `<span class="pill maybe">box ${it.box} · only ${it.qty}</span>`;
+        if(enough) have++; else missing++;
+        detail = `<div>${esc(it.name)} — ${it.countType==="exact"?it.qty+" pcs":"bulk"}
+          · container ${it.container}</div>` +
+          (ranked.length>1 ? `<div class="alt">also: ${ranked.slice(1).map(p =>
+            `box ${p[0].box} ${esc(p[0].name)}`).join(" · ")}</div>` : "");
+      }
+      return `<div class="bomrow"><div class="bomq">${need}×</div>
+        <div class="bomhit"><div><b>${esc(term)}</b> ${pill}</div>${detail}</div></div>`;
+    }).join("");
+    const boxList = [...boxes].sort((a,b)=>a-b);
+    results = `<div class="panel">
+      <h2>Result <span class="count">${have} found · ${missing} to sort out</span></h2>
+      ${boxList.length?`<p class="sub"><b>Open these boxes:</b> ${boxList.map(b=>
+        `<a href="#" data-box="${b}">${b}</a>`).join(" · ")}
+        &nbsp;(container${boxList.length>1?"s":""} ${[...new Set(boxList.map(containerOf))].join(", ")})</p>`:""}
+      ${rows}</div>`;
+  }
+  return `<div class="panel">
+    <h2>Build check</h2>
+    <p class="sub">Paste a parts list — one per line, optionally “2x ” in front.
+      It tells you which boxes to open and what you are missing.</p>
+    <textarea class="bom" id="bomtext" placeholder="1x ESP32-C3&#10;1x TMC2209&#10;2x limit switch&#10;1x TOF sensor&#10;4x M3 bolt&#10;1x GT2 belt">${esc(ui.bom)}</textarea>
+    <div class="ebtns" style="margin-top:9px">
+      <button class="btn" id="runbom">Check</button>
+      <button class="btn ghost" id="clearbom">Clear</button>
+    </div>
+  </div>${results}`;
+}
+
+function viewReorg(){
+  const cap = ui.cap, lvl = ui.level;
+  const p = planMoves(lvl, cap);
+  const levels = [
+    [1, "Merge duplicates", "Only pull the same part out of two boxes into one."],
+    [2, "Consolidate singles", "Also merge one-item boxes of the same type inside the same container."],
+    [3, "Regroup by type", "Also drag each category into one home container. Most work, best result."]
+  ];
+  const byWhy = new Map();
+  for(const m of p.moves){
+    if(!byWhy.has(m.why)) byWhy.set(m.why, []);
+    byWhy.get(m.why).push(m);
+  }
+  return `<div class="panel">
+    <h2>Reorganise</h2>
+    <p class="sub">Measured now: <b>${active().filter((i,_,a)=>
+        a.filter(x=>x.box===i.box).length===1).length}</b> of your
+      ${new Set(active().map(i=>i.box)).size} boxes hold a single item, and the average
+      category is spread over <b>${p.spreadBefore.toFixed(1)}</b> containers.</p>
+    <div class="chips">${levels.map(([n,t]) =>
+      `<button class="chip" data-level="${n}" aria-pressed="${lvl===n}">${n}. ${t}</button>`).join("")}</div>
+    <p class="sub">${levels.find(l=>l[0]===lvl)[2]}</p>
+    <div class="eline"><label>Max per box</label>
+      <button class="step" data-cap="-1">−</button>
+      <input type="number" id="capval" value="${cap}" min="2" max="20" readonly>
+      <button class="step" data-cap="1">+</button></div>
+    <div class="kv">
+      <b>${p.moves.length}</b><span>parts to move</span>
+      <b>${p.freed.length}</b><span>boxes freed up${p.freed.length?": "+p.freed.join(", "):""}</span>
+      <b>${p.spreadBefore.toFixed(1)} → ${p.spreadAfter.toFixed(1)}</b><span>containers per category (lower is better)</span>
+      <b>${p.pinned}</b><span>bulk piles left alone on purpose</span>
+    </div>
+    ${p.moves.length ? `<div class="ebtns" style="margin-top:11px">
+        <button class="btn" id="applyplan">Apply these ${p.moves.length} moves</button>
+        <button class="btn ghost" id="printplan">Print worksheet</button>
+      </div>` : `<p class="sub">Nothing to do at this level.</p>`}
+  </div>
+  ${[...byWhy.entries()].map(([why, ms]) => `<div class="panel">
+      <h2>${esc(why)} <span class="count">${ms.length}</span></h2>
+      ${ms.sort((a,b)=>a.from-b.from).map(m => `<div class="bomrow">
+        <div class="bomq">${m.from}→${m.to}</div>
+        <div class="bomhit">${esc(m.name)}
+          <span class="alt">container ${containerOf(m.from)} → ${containerOf(m.to)}</span></div>
+      </div>`).join("")}
+    </div>`).join("")}`;
+}
+
+function viewLabels(){
+  const byBox = new Map();
+  for(const i of active()){
+    if(!byBox.has(i.box)) byBox.set(i.box, []);
+    byBox.get(i.box).push(i);
+  }
+  const boxes = [...byBox.keys()].sort((a,b)=>a-b);
+  return `<div class="panel noprint">
+      <h2>Printable box labels</h2>
+      <p class="sub">One label per non-empty box, in box order. Print, cut, stick.</p>
+      <button class="btn" onclick="window.print()">Print</button>
+    </div>
+    <div class="labelsheet">${boxes.map(b => {
+      const c = byBox.get(b);
+      return `<div class="label"><b>${b}</b>
+        <span class="c">container ${Math.floor((b-1)/CONTAINER_SIZE)+1}</span>
+        <ul>${c.slice(0,4).map(i => `<li>${esc(i.name.slice(0,42))}${
+          i.countType==="exact"?" ("+i.qty+")":""}</li>`).join("")}
+        ${c.length>4?`<li>+${c.length-4} more</li>`:""}</ul></div>`;
+    }).join("")}</div>`;
+}
+
+function viewData(){
+  const s = issues();
+  const nEdit = Object.keys(overlay.edits).length;
+  return `<div class="panel">
+    <h2>Where this data came from</h2>
+    <p class="sub">Built from your Google Sheet export
+      (${SEED.meta.rawRows} rows, ${SEED.meta.source.split("(")[0].trim()}), generated ${SEED.meta.generated}.
+      The sheet is an append log: the same box+item can appear several times.
+      This app keeps the <b>newest row per box+item</b> and flags the ones where
+      the number changed, instead of silently guessing.</p>
+    <div class="kv">
+      <b>${SEED.meta.rawRows}</b><span>rows in the sheet</span>
+      <b>${SEED.items.length}</b><span>merged records</span>
+      <b>${active().length}</b><span>parts you actually have</span>
+      <b>${items.length - active().length}</b><span>removed / zero-qty (hidden by default)</span>
+      <b>${s.bulk.length}</b><span>uncounted piles (the old “99”)</span>
+      <b>${s.conflicts.length}</b><span>ambiguous quantities</span>
+      <b>${s.splits.length}</b><span>parts split across boxes</span>
+      <b>${s.free.length}</b><span>free box numbers</span>
+      <b>${nEdit}</b><span>local edits not yet exported</span>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Export</h2>
+    <p class="sub">CSV comes back in the exact same columns as the sheet, so you can paste
+      it straight over the Google Sheet — but with one row per part and the real numbers.</p>
+    <div class="ebtns">
+      <button class="btn" id="exp-csv">Export CSV</button>
+      <button class="btn ghost" id="exp-json">Export JSON backup</button>
+      <button class="btn ghost" id="exp-log">Export change log (${overlay.journal.length})</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Re-sync from the sheet</h2>
+    <p class="sub">Downloaded a fresh CSV from Google Sheets? Drop it here — it replaces the
+      base data. Your local edits stay on top of it.</p>
+    <input type="file" id="imp" accept=".csv,text/csv">
+  </div>
+  <div class="panel">
+    <h2>Reset</h2>
+    <p class="sub">Throws away all ${nEdit} local edits and returns to the sheet snapshot.</p>
+    <button class="btn danger" id="reset">Discard local edits</button>
+  </div>`;
+}
+
+/* ------------------------------------------------------------------ export */
+function toCSV(){
+  const head = ["Box","Item","Qty","Note","UpdatedAt"];
+  const q = v => /[",\n]/.test(v) ? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
+  const d = new Date(), pad = n => String(n).padStart(2,"0");
+  const today = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+  const rows = items.filter(i => i.status === "active").map(i => [
+    i.box, i.name,
+    i.countType === "exact" ? i.qty : (i.countType === "bulk" ? "many" : ""),
+    i.note || "", i.edited || i.added ? today : (i.updated ? i.updated.split("-").reverse().join("/") : "")
+  ].map(q).join(","));
+  return [head.join(","), ...rows].join("\r\n");
+}
+function download(name, text, mime){
+  const b = new Blob([text], {type: mime||"text/plain;charset=utf-8"});
+  const u = URL.createObjectURL(b), a = document.createElement("a");
+  a.href = u; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 4000);
+  toast("Saved " + name);
+}
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", inQ = false;
+  text = text.replace(/^﻿/, "");
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQ){
+      if(c === '"'){ if(text[i+1] === '"'){ cell += '"'; i++; } else inQ = false; }
+      else cell += c;
+    } else if(c === '"') inQ = true;
+    else if(c === ","){ row.push(cell); cell = ""; }
+    else if(c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if(c !== "\r") cell += c;
+  }
+  if(cell.length || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ""));
+}
+
+/* ------------------------------------------------------------------ wiring */
+function wire(){
+  const v = document.getElementById("view");
+
+  v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; render(); });
+  v.querySelectorAll("[data-zone]").forEach(b => b.onclick = () => { ui.zone = b.dataset.zone; render(); });
+  v.querySelectorAll("[data-flag]").forEach(b => b.onclick = () => {
+    ui.flag = ui.flag === b.dataset.flag ? null : b.dataset.flag; render(); });
+  v.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => {
+    const c = b.dataset.cat;
+    ui.cats.has(c) ? ui.cats.delete(c) : ui.cats.add(c); render(); });
+  v.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => {
+    ui.open = ui.open === b.dataset.toggle ? null : b.dataset.toggle; render(); });
+  v.querySelectorAll("[data-box]").forEach(b => b.onclick = ev => {
+    ev.preventDefault(); ui.box = Number(b.dataset.box); ui.tab = "find"; ui.q = ""; ui.flag = null;
+    document.getElementById("q").value = ""; render(); });
+  v.querySelectorAll("[data-clearbox]").forEach(b => b.onclick = () => { ui.box = null; render(); });
+  v.querySelectorAll("[data-onlybox]").forEach(b => b.onclick = () => {
+    ui.box = Number(b.dataset.onlybox); ui.open = null; ui.tab = "find"; render(); });
+  v.querySelectorAll("[data-add]").forEach(b => b.onclick = addItem);
+
+  const ed = v.querySelector(".editor");
+  if(ed){
+    const id = ed.closest(".item").dataset.id;
+    const get = f => ed.querySelector(`[data-f="${f}"]`);
+    ed.querySelectorAll("[data-step]").forEach(b => b.onclick = () => {
+      const inp = get("qty");
+      if(inp.disabled){ toast("Set count type to “exact” first"); return; }
+      inp.value = Math.max(0, (Number(inp.value)||0) + Number(b.dataset.step));
+    });
+    get("countType").onchange = e => { get("qty").disabled = e.target.value !== "exact"; };
+    ed.querySelector("[data-savechanges]").onclick = () => {
+      const ct = get("countType").value;
+      edit(id, {
+        qty: ct === "exact" ? (Number(get("qty").value)||0) : null,
+        countType: ct,
+        box: Math.max(1, Number(get("box").value)||1),
+        category: get("category").value,
+        name: get("name").value.trim() || "(unnamed)",
+        note: get("note").value.trim(),
+        updated: new Date().toISOString().slice(0,10),
+        conflict: false
+      }, "edit");
+      ui.open = null; toast("Saved");
+    };
+    ed.querySelector("[data-del]").onclick = () => {
+      if(confirm("Delete this entry from the inventory?")){
+        edit(id, {deleted:true}, "delete"); ui.open = null; toast("Deleted");
+      }
+    };
+  }
+
+  const on2 = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
+  v.querySelectorAll("[data-level]").forEach(b => b.onclick = () => {
+    ui.level = Number(b.dataset.level); render(); });
+  v.querySelectorAll("[data-cap]").forEach(b => b.onclick = () => {
+    ui.cap = Math.min(20, Math.max(2, ui.cap + Number(b.dataset.cap))); render(); });
+  on2("applyplan", () => {
+    const p = planMoves(ui.level, ui.cap);
+    if(!confirm(`Move ${p.moves.length} parts and free ${p.freed.length} boxes?\n\n`
+      + `This only changes the app. Print the worksheet first if you want to follow it at the bench.`)) return;
+    const today = new Date().toISOString().slice(0,10);
+    for(const m of p.moves)
+      overlay.edits[m.id] = Object.assign({}, overlay.edits[m.id], {box:m.to, updated:today});
+    journal({label:"reorganise", patch:{level:ui.level, moves:p.moves.length}});
+    save(); rebuild(); render();
+    toast(`Moved ${p.moves.length} parts · ${p.freed.length} boxes free`);
+  });
+  on2("printplan", () => window.print());
+
+  const bt = document.getElementById("bomtext");
+  if(bt){
+    document.getElementById("runbom").onclick = () => { ui.bom = bt.value; render(); };
+    document.getElementById("clearbom").onclick = () => { ui.bom = ""; render(); };
+    bt.onkeydown = e => { if(e.key === "Enter" && (e.ctrlKey||e.metaKey)){ ui.bom = bt.value; render(); } };
+  }
+
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
+  on("exp-csv",  () => download("box_inventory.csv", toCSV(), "text/csv;charset=utf-8"));
+  on("exp-json", () => download("box_inventory_backup.json",
+        JSON.stringify({items, overlay, meta:SEED.meta}, null, 2), "application/json"));
+  on("exp-log",  () => download("box_inventory_changes.json",
+        JSON.stringify(overlay.journal, null, 2), "application/json"));
+  on("reset",    () => {
+    if(confirm("Discard all local edits and return to the sheet snapshot?")){
+      overlay = {edits:{},added:[],journal:[]}; save(); rebuild(); render(); toast("Reset");
+    }
+  });
+  const imp = document.getElementById("imp");
+  if(imp) imp.onchange = e => {
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const rows = parseCSV(r.result);
+        const head = rows[0].map(h => h.trim().toLowerCase());
+        const ix = n => head.indexOf(n);
+        if(ix("box") < 0 || ix("item") < 0) throw new Error("need Box and Item columns");
+        toast(`Read ${rows.length-1} rows — re-run build.py to rebuild the app from this file`);
+      }catch(err){ toast("Could not read: " + err.message); }
+    };
+    r.readAsText(f);
+  };
+}
+
+function addItem(){
+  const name = prompt("Part name?"); if(!name) return;
+  const box = Number(prompt("Which box number?")); if(!box) return;
+  const qty = Number(prompt("How many? (blank = uncounted)", "1"));
+  const it = {
+    id: "new-" + Date.now(), box, name: name.trim(),
+    qty: isNaN(qty) ? null : qty, countType: isNaN(qty) ? "unknown" : "exact",
+    note: "", category: "misc", updated: new Date().toISOString().slice(0,10),
+    conflict:false, restated:false, history:[]
+  };
+  overlay.added.push(it); journal({id:it.id, label:"add", patch:it});
+  save(); rebuild(); ui.box = null; ui.q = ""; ui.open = it.id; render();
+  toast("Added to box " + box);
+}
+
+/* ------------------------------------------------------------------ camera
+   Present only when the page is served by server.py. Opened from file:// there
+   is no PC to send the photo to, so the button never appears. */
+const SERVED = location.protocol === "http:" || location.protocol === "https:";
+let pending = 0;
+
+function setupCamera(){
+  if(!SERVED) return;
+
+  const link = document.createElement("link");
+  link.rel = "manifest"; link.href = "/manifest.webmanifest";
+  document.head.appendChild(link);
+
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "image/*"; input.multiple = true;
+  // `capture` opens the camera straight away; removing it shows the gallery.
+  // Set as an attribute, not a property — the property does not reflect reliably.
+  input.setAttribute("capture", "environment");
+  input.style.display = "none";
+  document.body.appendChild(input);
+
+  const btn = document.createElement("button");
+  btn.id = "cam"; btn.title = "Photograph a part (long-press for gallery)";
+  btn.innerHTML = `<span>📷</span>`;
+  document.body.appendChild(btn);
+
+  const paint = () => {
+    btn.querySelector(".n")?.remove();
+    if(pending > 0){
+      const n = document.createElement("span");
+      n.className = "n"; n.textContent = pending;
+      btn.appendChild(n);
+    }
+  };
+
+  // Tap = camera. Long-press = pick existing shots from the gallery.
+  let timer = null, fromGallery = false;
+  const arm = () => { fromGallery = false; timer = setTimeout(() => {
+    fromGallery = true;
+    if(navigator.vibrate) navigator.vibrate(20);
+  }, 500); };
+  const fire = () => {
+    clearTimeout(timer);
+    if(fromGallery) input.removeAttribute("capture");
+    else input.setAttribute("capture", "environment");
+    input.value = "";
+    input.click();
+  };
+  btn.addEventListener("touchstart", arm, {passive:true});
+  btn.addEventListener("touchend", fire);
+  btn.addEventListener("mousedown", arm);
+  btn.addEventListener("mouseup", fire);
+
+  input.onchange = async () => {
+    const files = [...input.files];
+    if(!files.length) return;
+    btn.dataset.busy = "1";
+    let sent = 0;
+    for(const f of files){
+      try{
+        const res = await fetch("/upload", {
+          method: "POST",
+          headers: {"X-Filename": f.name || "photo.jpg",
+                    "Content-Type": f.type || "application/octet-stream"},
+          body: f,
+        });
+        const out = await res.json();
+        if(!res.ok) throw new Error(out.error || res.status);
+        pending = out.pending ?? pending + 1;
+        sent++;
+      }catch(err){
+        toast("Upload failed: " + err.message);
+        break;
+      }
+    }
+    delete btn.dataset.busy;
+    paint();
+    if(sent) toast(`${sent} photo${sent===1?"":"s"} sent · ${pending} waiting`);
+  };
+
+  fetch("/inbox").then(r => r.json())
+    .then(d => { pending = (d.pending || []).length; paint(); })
+    .catch(() => {});
+}
+
+/* ------------------------------------------------------------------- boot */
+document.getElementById("tabs").onclick = e => {
+  const b = e.target.closest("[data-tab]"); if(!b) return;
+  ui.tab = b.dataset.tab; ui.open = null; render();
+};
+const qEl = document.getElementById("q");
+qEl.oninput = () => { ui.q = qEl.value; if(ui.q) ui.box = null; render(); };
+document.getElementById("clearq").onclick = () => {
+  qEl.value = ""; ui.q = ""; ui.box = null; ui.flag = null; qEl.focus(); render(); };
+document.getElementById("theme-btn").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : cur === "light" ? "" : "dark";
+  next ? document.documentElement.setAttribute("data-theme", next)
+       : document.documentElement.removeAttribute("data-theme");
+  try{ localStorage.setItem("boxinv.theme", next); }catch(e){}
+};
+try{
+  const t = localStorage.getItem("boxinv.theme");
+  if(t) document.documentElement.setAttribute("data-theme", t);
+}catch(e){}
+document.addEventListener("keydown", e => {
+  if(e.key === "/" && document.activeElement !== qEl && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+    e.preventDefault(); qEl.focus(); qEl.select();
+  }
+  if(e.key === "Escape" && document.activeElement === qEl){
+    qEl.value = ""; ui.q = ""; render();
+  }
+});
+
+rebuild();
+render();
+setupCamera();
+</script>
+</body>
+</html>

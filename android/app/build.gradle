@@ -1,0 +1,40 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.arnodaamen.boxinventory'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.arnodaamen.boxinventory"
+        // 29 = Android 10. Above that, MediaStore takes a photo without needing
+        // WRITE_EXTERNAL_STORAGE, which keeps the app permission-free.
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        debug {
+            // The workflow ships the debug build: it is signed with the standard
+            // debug key, so it installs from a file without a Play account.
+            applicationIdSuffix ""
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// No dependencies on purpose — the framework WebView is all this needs, and an
+// empty dependency graph is one less thing that can break the CI build.
+dependencies {
+}

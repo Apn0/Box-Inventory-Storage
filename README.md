@@ -1,0 +1,167 @@
+# Box Inventory
+
+A replacement for the "Box Inventory Storage" Google Sheet — the numbered
+component boxes (1–128) and household boxes (401–438).
+
+**Open `index.html`.** No install, no server, no internet. Works from a USB
+stick, works on the phone if you copy the one file across.
+
+---
+
+## Why not just keep the sheet
+
+The sheet is an *append log*: every time a box was audited, its rows were
+written again. That is fine as a record and useless as an answer to "how many
+do I have". Measured on the 263-row export:
+
+| Problem in the sheet | Count |
+|---|---|
+| `99` used to mean "a pile", not ninety-nine | 53 rows (20%) |
+| Same box+item logged twice or more | 8 groups — **3 with a different number each time** |
+| Rows left at qty 0 after the part was moved out | 13 |
+| Boxes that are empty or never used, so invisible as free slots | 12 |
+| The same part living in two different boxes | 7 |
+| Rows with any note at all | 47 of 263 |
+| Category, so you can ask "show me every sensor" | none |
+
+263 raw rows collapse to **253 records — 242 parts you actually have across
+154 boxes**.
+
+## What this does instead
+
+- **One row per part.** Newest sheet row wins per box+item. The 3 cases where
+  the number genuinely changed are not silently guessed — they are flagged
+  **ambiguous** and listed under *Issues* so you can count them once and be done.
+- **`99` is gone.** A pile is `many` / *bulk*; a real count is a real count;
+  unknown is `?`. Nothing pretends to be a quantity it isn't.
+- **Categories** — 15 of them, auto-assigned from the part name (sensors,
+  power, drivers, motors, fasteners, …). Filter with one tap.
+- **Search that means it.** Type anything; matches on name, note, category and
+  box number.
+- **Boxes view** — every box as a grid, grouped into the physical containers of
+  30. Free slots are dashed green so you can reuse a number instead of buying
+  another box.
+- **Build check** — paste a parts list, get back *which boxes to open* and
+  what you're missing. Quantity-aware: asking for 2 limit switches points at
+  the bulk pile in box 21, not the single odd one.
+- **Printable labels** — one per non-empty box.
+- **Editing** — change a count, move a part, add a part. Edits are stored in
+  the browser and never touch the base data.
+- **Export CSV** in the sheet's exact columns, so you can paste it straight
+  back over the Google Sheet.
+
+## Reorganising
+
+The **Reorganise** tab plans real box moves at three effort levels and applies them.
+Measured on the current data (cap 6 items/box):
+
+| Level | Moves | Boxes freed | Result |
+|---|---|---|---|
+| 1. Merge duplicates | 7 | 7 | 154 → 147 boxes |
+| 2. Consolidate singles | 40 | 40 | 154 → 114 boxes, one-item boxes 116 → 51 |
+| 3. Regroup by type | 111 | 64 | 154 → 90 boxes, categories spread over 4.0 → 2.9 containers |
+
+Level 3 converges in two applications (111 → 5 → 0 moves, 154 → 87 boxes) — all 242
+parts are preserved. Bulk piles are never merged into a shared box. Boxes 10, 11 and
+12 already hold more than the cap; the plan does not empty them, it just won't add.
+
+## On the phone — `server.py`
+
+```powershell
+cd V:\_Claude\box-inventory; python server.py
+```
+
+It prints the addresses to use. On the phone, on the same WiFi, open
+`http://192.168.1.140:8781` → Chrome menu → **Add to Home screen**. That gives an
+icon in the app drawer that opens fullscreen with no browser bar — for this job it
+is what an APK would have been, without an Android SDK.
+
+A round camera button sits bottom-right (only when served — never on `file://`):
+
+- **tap** → camera opens straight away, shoot the part
+- **long-press** → pick shots you already took from the gallery, several at once
+
+Photos upload to the PC immediately and land in `data/inbox/`. The badge on the
+button shows how many are waiting. Nothing needs the vision API to *arrive* — they
+queue until you identify them, so snapping works even with the keys empty.
+
+**Two things can stop the phone reaching the PC:**
+
+1. **Windows Firewall.** Allow the port once, from an admin PowerShell:
+   ```powershell
+   New-NetFirewallRule -DisplayName "Box Inventory" -Direction Inbound -Protocol TCP -LocalPort 8781 -Profile Private -Action Allow
+   ```
+   This exposes the app to your local network — anyone on your WiFi can read the
+   inventory and post photos. There is no login. Keep it to `-Profile Private`.
+2. **VPN.** NordVPN was active on this machine; a VPN routes the phone's traffic
+   away from your LAN. Disconnect it, or exclude the local network.
+
+If the port is taken, `server.py` now says so and stops instead of half-binding —
+use `--port 8782`.
+
+## Photo intake — `identify.py`
+
+```powershell
+cd V:\_Claude\box-inventory; python identify.py "C:\path\to\photo.jpg"
+```
+
+Identifies the part, proposes a box (an existing box of the same category with room,
+else the lowest free number), asks before writing, then appends to the CSV and
+rebuilds. `--dry-run` identifies without writing; `--yes` skips the prompts.
+
+The API key is read from `Desktop\.env` at run time and is **never** written into
+`index.html` — the app stays offline and key-free.
+
+> ⚠️ **Not yet proven to work.** As of 2026-08-14 both vision keys in `Desktop\.env`
+> are out of credit — Anthropic returns *"credit balance is too low"*, Google returns
+> *"prepayment credits are depleted"*. The provider selection and fallback were
+> exercised against both live APIs and behave correctly, but no image has actually
+> been identified. Top up either account and re-run to confirm.
+
+## Files
+
+```
+index.html              the app — self-contained, this is the thing to open
+data/inventory_raw.csv  verbatim export of the Google Sheet (never edited)
+data/inventory_raw.xlsx same, original formatting
+data/inventory.json     the normalised data build.py produces
+data/photos/            photos filed by identify.py, named <box>_<part>
+data/inbox/             photos sent from the phone, waiting to be identified
+src/app.template.html   app source; build.py injects the data into it
+build.py                CSV -> JSON -> index.html
+sync.py                 re-download the sheet, then build
+server.py               serves the app to the phone + receives photos (stdlib only)
+identify.py             photo -> part -> box (needs a funded vision API key)
+```
+
+## Re-syncing after you change the Google Sheet
+
+```powershell
+cd V:\_Claude\box-inventory; python build.py
+```
+
+That rebuilds `data/inventory.json` and `index.html` from
+`data/inventory_raw.csv`. To pull a fresh copy of the sheet first:
+
+```powershell
+cd V:\_Claude\box-inventory; python sync.py
+```
+
+`sync.py` downloads the sheet over the raw CSV and then runs the build.
+
+> Windows PowerShell 5.1 has no `&&` — use `;` between commands.
+
+Local edits made in the app survive a rebuild — they are keyed by box+item and
+layered on top. Export the CSV when you want them back in the sheet.
+
+## Rules the code enforces
+
+- **Resolution**: newest row per `(box, normalised item name)`. Differing
+  quantities across rows set `conflict: true` rather than being averaged,
+  summed, or quietly dropped.
+- **Containers**: boxes group in sets of `CONTAINER_SIZE` (30). Boxes under 400
+  and the 400-series are separate physical sets, numbered independently —
+  `1…5` and `H1…H2`. `build.py: container_of()` and
+  `app.template.html: containerOf()` must stay identical.
+- **Matching** (search ranking and Build check) is whole-word or prefix, never
+  raw substring — substring matching made `TOF` match `cu`**`tof`**`fs`.
