@@ -11,9 +11,14 @@ android {
         // 29 = Android 10. Above that, MediaStore takes a photo without needing
         // WRITE_EXTERNAL_STORAGE, which keeps the app permission-free.
         minSdk 29
-        targetSdk 35
-        versionCode 2
-        versionName "1.1"
+        // 34, not 35, on purpose. Targeting 35 makes Android 15 force edge-to-edge,
+        // so the WebView draws under the status bar and the camera cutout hid the
+        // app's header. At 34 the system lays out the status bar normally.
+        // The page also pads itself with env(safe-area-inset-*) for browsers that
+        // go edge-to-edge regardless.
+        targetSdk 34
+        versionCode 3
+        versionName "1.2"
     }
 
     buildTypes {
