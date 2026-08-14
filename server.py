@@ -21,6 +21,7 @@ import http.server
 import json
 import mimetypes
 import pathlib
+import queue
 import re
 import socket
 import socketserver
@@ -33,6 +34,7 @@ import zlib
 ROOT = pathlib.Path(__file__).resolve().parent
 INDEX = ROOT / "index.html"
 INBOX = ROOT / "data" / "inbox"
+REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
@@ -40,6 +42,53 @@ MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
 ACCENT = (29, 92, 255)
 
 _build_lock = threading.Lock()
+
+# One worker, one queue. Two photos identified at the same time would both read
+# the inventory, both append, and the second would overwrite the first's count.
+_work: "queue.Queue[pathlib.Path]" = queue.Queue()
+_activity: list[dict] = []          # newest last; what the app shows as results
+_activity_lock = threading.Lock()
+AUTO = True                         # set False with --no-auto to just queue
+
+
+def record(entry: dict) -> None:
+    entry["at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    with _activity_lock:
+        _activity.append(entry)
+        del _activity[:-40]
+
+
+def worker() -> None:
+    """Identify each photo as it arrives, one at a time."""
+    import identify                                    # imported here so the
+                                                        # server starts even if
+                                                        # identify.py is broken
+    while True:
+        path = _work.get()
+        try:
+            if not path.exists():                       # already handled
+                continue
+            record({"photo": path.name, "state": "working"})
+            print(f"  identifying {path.name}…")
+            # unattended: file only confident matches to parts already on record.
+            # Anything else waits in the queue for a human look.
+            for out in identify.process([path], unattended=True):
+                if not out.get("ok"):
+                    out["state"] = "failed"
+                    print(f"   failed: {out.get('error')}")
+                elif out.get("filed"):
+                    out["state"] = "done"
+                    print(f"   {out['name']} -> box {out['box']} ({out['why']})")
+                else:
+                    out["state"] = "review"
+                    print(f"   held for review: {out['name']} ({out['hold']})")
+                record(out)
+        except Exception as exc:                        # noqa: BLE001
+            record({"photo": path.name, "state": "failed", "ok": False,
+                    "error": str(exc)[:200]})
+            print(f"   worker error: {exc}")
+        finally:
+            _work.task_done()
 
 
 # ----------------------------------------------------------------- tiny PNG
@@ -92,14 +141,23 @@ def safe_name(raw: str) -> str:
     return f"{stamp}_{clean}{suffix}"
 
 
-def inbox_list() -> list[dict]:
-    if not INBOX.exists():
+def _photos_in(folder: pathlib.Path) -> list[dict]:
+    if not folder.exists():
         return []
     return sorted(
         ({"name": p.name, "size": p.stat().st_size,
           "at": datetime.datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
-         for p in INBOX.iterdir() if p.is_file() and p.suffix.lower() in ALLOWED_SUFFIX),
+         for p in folder.iterdir() if p.is_file() and p.suffix.lower() in ALLOWED_SUFFIX),
         key=lambda d: d["at"], reverse=True)
+
+
+def inbox_list() -> list[dict]:
+    return _photos_in(INBOX)
+
+
+def review_list() -> list[dict]:
+    """Identified, but held back because it was not safe to file unattended."""
+    return _photos_in(REVIEW)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -139,7 +197,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, png(192 if "192" in path else 512), "image/png")
 
         if path == "/inbox":
-            return self._json(200, {"pending": inbox_list()})
+            with _activity_lock:
+                recent = list(_activity)
+            return self._json(200, {"pending": inbox_list(), "auto": AUTO,
+                                    "working": _work.unfinished_tasks,
+                                    "review": len(review_list()),
+                                    "activity": recent})
+
+        # the freshly built inventory, so the page can update without a reload
+        if path == "/data/inventory.json":
+            target = ROOT / "data" / "inventory.json"
+            if target.is_file():
+                return self._send(200, target.read_bytes(), "application/json; charset=utf-8")
+            return self._json(404, {"error": "not built yet"})
 
         # photos already filed, referenced by the app
         if path.startswith("/data/photos/"):
@@ -171,26 +241,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             name = safe_name(self.headers.get("X-Filename", "photo.jpg"))
             (INBOX / name).write_bytes(data)
             print(f"  photo received: {name} ({len(data)//1024} KB)")
-            return self._json(200, {"ok": True, "saved": name, "pending": len(inbox_list())})
+            if AUTO:
+                _work.put(INBOX / name)
+            return self._json(200, {"ok": True, "saved": name,
+                                    "queued": AUTO, "pending": len(inbox_list())})
 
         if path == "/identify":
-            if _build_lock.locked():
-                return self._json(409, {"error": "already running"})
             pending = inbox_list()
             if not pending:
                 return self._json(200, {"ok": True, "message": "inbox empty"})
-            threading.Thread(target=self._run_identify, daemon=True).start()
+            for entry in pending:
+                _work.put(INBOX / entry["name"])
             return self._json(202, {"ok": True, "started": len(pending)})
 
         return self._json(404, {"error": "not found"})
-
-    def _run_identify(self) -> None:
-        with _build_lock:
-            print("  running identify.py on the inbox…")
-            proc = subprocess.run(
-                [sys.executable, str(ROOT / "identify.py"), str(INBOX / "*"), "--yes"],
-                capture_output=True, text=True)
-            print((proc.stdout or "") + (proc.stderr or ""))
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -234,11 +298,21 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8781)
     ap.add_argument("--host", default="0.0.0.0", help="bind address (default: all interfaces)")
+    ap.add_argument("--no-auto", action="store_true",
+                    help="just queue photos; do not identify them on arrival")
     args = ap.parse_args()
+
+    global AUTO
+    AUTO = not args.no_auto
 
     if not INDEX.exists():
         sys.exit("index.html missing — run build.py first")
     INBOX.mkdir(parents=True, exist_ok=True)
+
+    threading.Thread(target=worker, daemon=True).start()
+    if AUTO:
+        for entry in inbox_list():        # anything left over from last time
+            _work.put(INBOX / entry["name"])
 
     # Binding alone is not a reliable conflict check on Windows: a server on the
     # IPv6 wildcard and one on the IPv4 wildcard both bind the same port happily,
@@ -256,6 +330,7 @@ def main() -> int:
         print(f"  phone:  http://{ip}:{args.port}")
     print(f"  here:   http://localhost:{args.port}")
     print(f"\n  inbox:  {INBOX}  ({len(inbox_list())} waiting)")
+    print(f"  auto:   {'on — photos are identified as they arrive' if AUTO else 'off (--no-auto)'}")
     print("\n  If the phone cannot connect: check the Windows firewall prompt, and")
     print("  note that an active VPN can stop the phone reaching this machine.")
     print("\n  Ctrl-C to stop.\n")

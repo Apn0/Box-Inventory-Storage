@@ -272,7 +272,9 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
 
 <script>
 "use strict";
-const SEED = /*__INVENTORY_DATA__*/null;
+// `let`, not `const`: when the server files a photo the baked-in data is stale,
+// and the page swaps in the freshly built JSON rather than making you reload.
+let SEED = /*__INVENTORY_DATA__*/null;
 const STORE_KEY = "boxinv.v1";
 const CAT = SEED.meta.categoryLabels;
 const CONTAINER_SIZE = SEED.meta.containerSize;
@@ -1135,6 +1137,18 @@ function addItem(){
 const SERVED = location.protocol === "http:" || location.protocol === "https:";
 let pending = 0;
 
+/** Pull the rebuilt inventory from the server, keeping local edits on top. */
+async function refreshSeed(){
+  try{
+    const fresh = await (await fetch("/data/inventory.json", {cache:"no-store"})).json();
+    if(fresh && Array.isArray(fresh.items)){
+      SEED = fresh;
+      rebuild();
+      render();
+    }
+  }catch(e){ /* offline or serving from file:// — keep what we have */ }
+}
+
 function setupCamera(){
   if(!SERVED) return;
 
@@ -1211,9 +1225,41 @@ function setupCamera(){
   camInput.onchange = () => upload(camInput);
   galInput.onchange = () => upload(galInput);
 
-  fetch("/inbox").then(r => r.json())
-    .then(d => { pending = (d.pending || []).length; paint(); })
-    .catch(() => {});
+  // Watch the queue and say what actually happened. Before this the toast said
+  // "1 waiting" and then nothing ever changed, because identification only ran
+  // when it was started by hand.
+  let lastSeen = null, idle = 0;
+  const poll = async () => {
+    try{
+      const d = await (await fetch("/inbox")).json();
+      pending = (d.pending || []).length + (d.working || 0) + (d.review || 0);
+      paint();
+
+      const acts = d.activity || [];
+      const settled = acts.filter(a => a.state !== "working");
+      const newest = settled[settled.length - 1];
+      if(newest && newest.at !== lastSeen){
+        if(lastSeen !== null){
+          if(newest.state === "done"){
+            const where = newest.from != null && newest.from !== newest.to
+              ? `box ${newest.box} · ${newest.from} → ${newest.to}`
+              : `box ${newest.box}`;
+            toast(`${newest.name} → ${where}`);
+            await refreshSeed();          // the counts on screen are now stale
+          } else if(newest.state === "review"){
+            toast(`${newest.name}? — needs your eyes (${newest.hold})`);
+          } else {
+            toast(`Could not identify: ${(newest.error||"").slice(0,60)}`);
+          }
+        }
+        lastSeen = newest.at;
+      }
+      // Poll briskly while something is in flight, then back off to a heartbeat.
+      idle = (pending > 0 || (d.working || 0) > 0) ? 0 : Math.min(idle + 1, 12);
+    }catch(e){ idle = Math.min(idle + 1, 12); }
+    setTimeout(poll, idle > 6 ? 15000 : 2500);
+  };
+  poll();
 }
 
 /* ------------------------------------------------------------------- boot */

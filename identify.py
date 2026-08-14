@@ -33,6 +33,9 @@ RAW = ROOT / "data" / "inventory_raw.csv"
 INVENTORY = ROOT / "data" / "inventory.json"
 PHOTOS = ROOT / "data" / "photos"
 INBOX = (ROOT / "data" / "inbox").resolve()
+# Identified but not confident enough to file unattended. Kept separate from the
+# inbox so a server restart does not pay to identify them all over again.
+REVIEW = (ROOT / "data" / "review").resolve()
 ENV = pathlib.Path.home() / "Desktop" / ".env"
 
 MODEL = "claude-opus-5"
@@ -390,6 +393,131 @@ def _claude(client, data: str, media: str, prompt: str) -> dict | None:
     return json.loads(text)
 
 
+def decide(data: dict, result: dict) -> dict:
+    """Where the identified part goes, and what quantity the appended row carries.
+
+    A part already on record must be written as the NEW TOTAL, never the delta:
+    rows resolve newest-wins per (box, item), so appending "1" to a stock of 5
+    would silently replace it with 1.
+    """
+    qty = max(0, int(result["quantity"]))
+    existing = find_existing(data, result["name"]) or (
+        find_existing(data, result["matches_existing"]) if result["matches_existing"] else None)
+
+    if existing and existing["countType"] == "exact":
+        total = int(existing["qty"]) + qty
+        return {"box": existing["box"], "name": existing["name"], "quantity": total,
+                "existing": True, "from": existing["qty"], "to": total,
+                "why": f"already in box {existing['box']} — count goes {existing['qty']} -> {total}"}
+    if existing:
+        return {"box": existing["box"], "name": existing["name"], "quantity": "many",
+                "existing": True, "from": None, "to": None,
+                "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
+
+    box, why = suggest_box(data, result["category"])
+    return {"box": box, "name": result["name"], "quantity": qty,
+            "existing": False, "from": None, "to": qty, "why": why}
+
+
+def file_one(path: pathlib.Path, result: dict, plan: dict) -> dict:
+    """Archive the photo, take it out of the queue, and return the row to append."""
+    PHOTOS.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "_", plan["name"].lower()).strip("_")[:40]
+    shutil.copy2(path, PHOTOS / f"{plan['box']}_{slug}{path.suffix.lower()}")
+    # Out of the queue, or the next run identifies it all over again. Moved,
+    # never deleted — the archived copy above is the keeper.
+    if INBOX in path.resolve().parents:
+        path.unlink()
+
+    note = result["note"].strip()
+    note = f"{note} ({COUNTED_MARK})" if note else f"({COUNTED_MARK})"
+    return {"box": plan["box"], "name": plan["name"],
+            "quantity": plan["quantity"], "note": note}
+
+
+# The model saying it cannot tell is a valid answer, and it must not become an
+# inventory row. Filing unattended wrote "No identifiable components" and a
+# handful of drink-can pull tabs into box 52 before this gate existed.
+UNSURE = re.compile(
+    r"no identifiable|unidentifi|unclear|cannot (be )?(determine|identify)|"
+    r"not (a )?(component|part)|unknown object|nothing (visible|identifiable)|"
+    r"blurry|too dark|indistinct", re.I)
+
+
+def auto_filable(result: dict, plan: dict) -> str | None:
+    """Reason to hold a photo back for review, or None when it is safe to file."""
+    if result.get("confidence") != "high":
+        return f"{result.get('confidence', 'unknown')} confidence"
+    if UNSURE.search(result.get("name", "")) or UNSURE.search(result.get("note", "")):
+        return "the model could not identify it"
+    if int(result.get("quantity") or 0) <= 0:
+        return "nothing countable in the photo"
+    if not plan["existing"]:
+        # A new part means a new row and a new box. Worth ten seconds of your
+        # eyes; a wrong one is far more annoying to unpick than to confirm.
+        return "a part not already in the inventory"
+    return None
+
+
+def process(paths, provider: str = "auto", unattended: bool = False) -> list[dict]:
+    """Identify and file every photo, no prompting. Used by server.py.
+
+    With unattended=True, only confident matches to parts already on record are
+    written; anything else is left in the queue and reported for review.
+
+    Returns one outcome per photo so the caller can report what happened,
+    rather than the caller having to scrape stdout.
+    """
+    data = load_inventory()
+    context = context_for_prompt(data)
+    client = None
+    anthropic_key = read_key("ANTHROPIC_API_KEY")
+    if provider in {"auto", "anthropic"} and anthropic_key:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_key)
+        except ImportError:
+            pass
+
+    outcomes, rows = [], []
+    for path in paths:
+        path = pathlib.Path(path)
+        try:
+            result = identify(client, path, context, provider,
+                              read_key("GOOGLE_API_KEY"), read_key("OPENAI_API_KEY"))
+        except Exception as exc:                          # noqa: BLE001
+            outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
+            continue
+        if result is None:
+            outcomes.append({"photo": path.name, "ok": False, "error": "no answer"})
+            continue
+
+        plan = decide(data, result)
+        outcome = {"photo": path.name, "ok": True,
+                   "name": plan["name"], "box": plan["box"],
+                   "confidence": result["confidence"], "note": result["note"],
+                   "existing": plan["existing"],
+                   "from": plan["from"], "to": plan["to"],
+                   "why": plan["why"]}
+
+        hold = auto_filable(result, plan) if unattended else None
+        if hold:
+            REVIEW.mkdir(parents=True, exist_ok=True)
+            if INBOX in path.resolve().parents:
+                shutil.move(str(path), str(REVIEW / path.name))
+            outcome.update(filed=False, hold=hold)
+        else:
+            rows.append(file_one(path, result, plan))
+            outcome.update(filed=True)
+        outcomes.append(outcome)
+
+    if rows:
+        append_rows(rows)
+        subprocess.run([sys.executable, str(ROOT / "build.py")],
+                       capture_output=True, text=True)
+    return outcomes
+
+
 def append_rows(rows: list[dict]) -> None:
     shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
 
@@ -472,29 +600,11 @@ def main() -> int:
         if result is None:
             continue
 
-        qty = max(0, int(result["quantity"]))
-        print(f"  {result['name']}  x{qty}  [{result['confidence']} confidence]")
+        plan = decide(data, result)
+        print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
         if result["note"]:
             print(f"  note: {result['note']}")
-
-        # If this part is already on record, the appended row must carry the NEW
-        # TOTAL, not the delta. Rows resolve newest-wins per (box, item), so
-        # writing the delta would silently replace the existing count with it.
-        existing = find_existing(data, result["name"]) or \
-            (find_existing(data, result["matches_existing"]) if result["matches_existing"] else None)
-
-        if existing and existing["countType"] == "exact":
-            box = existing["box"]
-            total = int(existing["qty"]) + qty
-            why = (f"already in box {box} — count goes {existing['qty']} -> {total}")
-            qty = total
-        elif existing:
-            box = existing["box"]
-            why = f"already in box {box} as a bulk pile — left as 'many'"
-            qty = None
-        else:
-            box, why = suggest_box(data, result["category"])
-        print(f"  -> box {box}  ({why})")
+        print(f"  -> box {plan['box']}  ({plan['why']})")
 
         if args.dry_run:
             continue
@@ -503,22 +613,9 @@ def main() -> int:
             if answer in {"n", "no"}:
                 continue
             if answer.isdigit():
-                box = int(answer)
+                plan["box"] = int(answer)
 
-        PHOTOS.mkdir(parents=True, exist_ok=True)
-        slug = re.sub(r"[^a-z0-9]+", "_", result["name"].lower()).strip("_")[:40]
-        shutil.copy2(path, PHOTOS / f"{box}_{slug}{path.suffix.lower()}")
-        # Take it out of the queue, or the next run identifies it all over again.
-        # Moved, never deleted — the copy above is the keeper.
-        if INBOX in path.resolve().parents:
-            path.unlink()
-
-        note = result["note"].strip()
-        note = f"{note} ({COUNTED_MARK})" if note else f"({COUNTED_MARK})"
-        accepted.append({"box": box,
-                         "name": existing["name"] if existing else result["name"],
-                         "quantity": "many" if qty is None else qty,
-                         "note": note})
+        accepted.append(file_one(path, result, plan))
 
     if not accepted:
         print("\nnothing filed")
