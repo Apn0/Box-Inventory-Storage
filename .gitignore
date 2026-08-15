@@ -7,7 +7,12 @@ android/local.properties
 
 # photos and queue — your parts, not the project's
 data/inbox/
+data/review/
+data/ignored/
 data/photos/
+data/pending.json
+data/server.log
+data/server.err
 
 # rolling backups made by sync.py
 data/*.bak
