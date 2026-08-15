@@ -511,9 +511,11 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     note = (entry.get("note") or "").strip()
     note = f"{note} ({COUNTED_MARK})" if note else f"({COUNTED_MARK})"
 
-    src = REVIEW / entry["photo"]
-    if src.exists():
-        shutil.move(str(src), str(archive_name(box, name, src.suffix.lower())))
+    photo = entry.get("photo")            # typed entries have none
+    if photo:
+        src = REVIEW / photo
+        if src.exists():
+            shutil.move(str(src), str(archive_name(box, name, src.suffix.lower())))
 
     append_rows([{"box": box, "name": name,
                   "quantity": "many" if qty in (None, "many") else int(qty),

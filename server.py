@@ -253,6 +253,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "saved": name,
                                     "queued": AUTO, "pending": len(inbox_list())})
 
+        # Typed or spoken entry: no photo, no vision call, nothing to identify.
+        # For a part you can name, this is the whole pipeline.
+        if path == "/quickadd":
+            import identify
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+
+            name = (body.get("name") or "").strip()
+            if not name:
+                return self._json(400, {"error": "name is required"})
+            try:
+                box = int(body.get("box"))
+            except (TypeError, ValueError):
+                return self._json(400, {"error": "box must be a number"})
+
+            with _build_lock:
+                try:
+                    done = identify.commit({"photo": None, "name": name, "box": box,
+                                            "note": body.get("note", "")},
+                                           body.get("qty"), box, name)
+                except Exception as exc:               # noqa: BLE001
+                    return self._json(500, {"error": str(exc)[:200]})
+            record({"photo": None, "state": "done", "ok": True,
+                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
+            print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
+            return self._json(200, {"ok": True, **done})
+
         if path in ("/confirm", "/dismiss"):
             import identify
             try:
