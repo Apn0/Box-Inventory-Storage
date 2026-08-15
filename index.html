@@ -220,6 +220,34 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
 .card ul.targets a{text-decoration:none}
 .card .more{background:none;border:0;color:var(--ink-3);font-size:12.5px;padding:2px 0}
 .donebar{text-align:center;color:var(--ink-3);font-size:13px;padding:20px 12px 4px}
+
+/* count confirmation */
+#sheetwrap{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);
+  display:flex;align-items:flex-end;justify-content:center}
+#sheet{background:var(--panel);border-top-left-radius:18px;border-top-right-radius:18px;
+  width:100%;max-width:520px;padding:16px 16px calc(18px + env(safe-area-inset-bottom));
+  box-shadow:0 -6px 30px rgba(0,0,0,.4);max-height:92vh;overflow:auto}
+#sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px}
+#sheet .shot{width:100%;max-height:34vh;object-fit:contain;border-radius:10px;
+  background:var(--panel-2);margin-bottom:12px}
+#sheet h2{margin:0 0 2px;font-size:17px;letter-spacing:-.01em}
+#sheet .sub2{margin:0 0 12px;color:var(--ink-2);font-size:13px}
+#sheet .ask{font-size:14px;font-weight:600;margin:0 0 8px}
+.counter{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.counter button{width:52px;height:52px;border-radius:12px;background:var(--panel-2);
+  border:1px solid var(--line);font-size:24px;font-weight:700;line-height:1}
+.counter input{flex:1;min-width:0;height:52px;text-align:center;font-size:26px;
+  font-weight:700;font-family:var(--mono);border-radius:12px;border:1px solid var(--line);
+  background:var(--panel-2)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.quick button{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;
+  padding:7px 12px;font-size:13px;color:var(--ink-2)}
+.quick button.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+#sheet .row2{display:flex;gap:8px}
+#sheet .row2 .btn{flex:1}
+#sheet .wrongname{width:100%;margin-bottom:10px;padding:9px 10px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel-2);font-size:14px}
+#sheet .queued{text-align:center;color:var(--ink-3);font-size:12px;margin-top:10px}
 .empty{text-align:center;color:var(--ink-3);padding:38px 12px;font-size:14px}
 .toast{
   position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
@@ -1137,6 +1165,114 @@ function addItem(){
 const SERVED = location.protocol === "http:" || location.protocol === "https:";
 let pending = 0;
 
+/* ---------------------------------------------------- count confirmation
+   A photo does not mean "+1". You may have taken parts out without logging it,
+   so the only number that can be trusted is the one you read off the box now.
+   The recorded count is pre-filled; whatever you leave here becomes the truth. */
+let confirmQueue = [];
+
+function showConfirm(){
+  const q = confirmQueue[0];
+  const old = document.getElementById("sheetwrap");
+  if(!q){ old?.remove(); return; }
+  if(old && old.dataset.id === q.id) return;      // already asking about this one
+  old?.remove();
+
+  const recorded = q.recorded;
+  const known = recorded !== null && recorded !== undefined && recorded !== "many";
+  const start = known ? Number(recorded) : Math.max(1, Number(q.seen) || 1);
+
+  const wrap = document.createElement("div");
+  wrap.id = "sheetwrap"; wrap.dataset.id = q.id;
+  wrap.innerHTML = `
+    <div id="sheet">
+      <div class="grab"></div>
+      <img class="shot" src="/data/review/${encodeURIComponent(q.photo)}" alt="">
+      <h2>${esc(q.recordedName || q.name)}</h2>
+      <p class="sub2">${known
+          ? `Box ${q.box} · recorded ${recorded}${
+              Number(q.seen) ? ` · ${q.seen} in the photo` : ""}`
+          : (recorded === "many"
+              ? `Box ${q.box} · recorded as a bulk pile`
+              : `Not in the inventory yet · suggested box ${q.box}`)}</p>
+      <input class="wrongname" id="cname" value="${esc(q.recordedName || q.name)}">
+      <p class="ask">How many are in the box now?</p>
+      <div class="counter">
+        <button id="cminus">−</button>
+        <input id="cqty" type="number" inputmode="numeric" value="${start}" min="0">
+        <button id="cplus">+</button>
+      </div>
+      <div class="quick" id="cquick"></div>
+      <div class="row2">
+        <button class="btn" id="csave">Save count</button>
+        <button class="btn ghost" id="cskip">Not this</button>
+      </div>
+      <div class="queued">${confirmQueue.length > 1
+        ? `${confirmQueue.length - 1} more waiting` : "last one"}</div>
+    </div>`;
+  document.body.appendChild(wrap);
+
+  const qty = wrap.querySelector("#cqty");
+  const quick = wrap.querySelector("#cquick");
+  // The two answers you give most: the count is unchanged, or one came back.
+  const options = [];
+  if(known){
+    options.push([Number(recorded), `still ${recorded}`]);
+    options.push([Number(recorded) + 1, `${Number(recorded) + 1} — one back`]);
+    if(Number(recorded) > 0) options.push([Number(recorded) - 1, `${Number(recorded) - 1} — one gone`]);
+  } else {
+    options.push([Number(q.seen) || 1, `${Number(q.seen) || 1} in the photo`]);
+  }
+  options.push(["many", "a pile — do not count"]);
+
+  const paintQuick = () => {
+    quick.innerHTML = options.map(([v, label]) =>
+      `<button data-v="${v}" class="${String(v) === qty.dataset.v ? "sel" : ""}">${label}</button>`).join("");
+    quick.querySelectorAll("button").forEach(b => b.onclick = () => {
+      qty.dataset.v = b.dataset.v;
+      if(b.dataset.v === "many"){ qty.value = ""; qty.placeholder = "many"; qty.disabled = true; }
+      else { qty.disabled = false; qty.value = b.dataset.v; }
+      paintQuick();
+    });
+  };
+  qty.dataset.v = String(start);
+  paintQuick();
+
+  const bump = d => { qty.disabled = false; qty.value = Math.max(0, (Number(qty.value)||0) + d);
+                      qty.dataset.v = qty.value; paintQuick(); };
+  wrap.querySelector("#cminus").onclick = () => bump(-1);
+  wrap.querySelector("#cplus").onclick = () => bump(1);
+
+  wrap.querySelector("#csave").onclick = async () => {
+    const isBulk = qty.dataset.v === "many";
+    const body = {id:q.id, qty: isBulk ? "many" : (Number(qty.value)||0),
+                  box:q.box, name: wrap.querySelector("#cname").value.trim()};
+    wrap.querySelector("#csave").disabled = true;
+    try{
+      const res = await fetch("/confirm", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+      const out = await res.json();
+      if(!res.ok) throw new Error(out.error || res.status);
+      toast(`${out.name} → box ${out.box} = ${isBulk ? "many" : body.qty}`);
+      confirmQueue.shift();
+      wrap.remove();
+      await refreshSeed();
+      showConfirm();
+    }catch(err){
+      toast("Could not save: " + err.message);
+      wrap.querySelector("#csave").disabled = false;
+    }
+  };
+
+  wrap.querySelector("#cskip").onclick = async () => {
+    await fetch("/dismiss", {method:"POST", headers:{"Content-Type":"application/json"},
+                             body: JSON.stringify({id:q.id})}).catch(()=>{});
+    confirmQueue.shift();
+    wrap.remove();
+    showConfirm();
+  };
+}
+
 /** Pull the rebuilt inventory from the server, keeping local edits on top. */
 async function refreshSeed(){
   try{
@@ -1232,25 +1368,17 @@ function setupCamera(){
   const poll = async () => {
     try{
       const d = await (await fetch("/inbox")).json();
-      pending = (d.pending || []).length + (d.working || 0) + (d.review || 0);
+      confirmQueue = d.confirm || [];
+      pending = (d.pending || []).length + (d.working || 0) + confirmQueue.length;
       paint();
+      showConfirm();                       // ask as soon as there is something to ask
 
       const acts = d.activity || [];
       const settled = acts.filter(a => a.state !== "working");
       const newest = settled[settled.length - 1];
       if(newest && newest.at !== lastSeen){
-        if(lastSeen !== null){
-          if(newest.state === "done"){
-            const where = newest.from != null && newest.from !== newest.to
-              ? `box ${newest.box} · ${newest.from} → ${newest.to}`
-              : `box ${newest.box}`;
-            toast(`${newest.name} → ${where}`);
-            await refreshSeed();          // the counts on screen are now stale
-          } else if(newest.state === "review"){
-            toast(`${newest.name}? — needs your eyes (${newest.hold})`);
-          } else {
-            toast(`Could not identify: ${(newest.error||"").slice(0,60)}`);
-          }
+        if(lastSeen !== null && newest.state === "failed"){
+          toast(`Could not identify: ${(newest.error||"").slice(0,60)}`);
         }
         lastSeen = newest.at;
       }

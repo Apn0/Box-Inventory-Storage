@@ -419,11 +419,26 @@ def decide(data: dict, result: dict) -> dict:
             "existing": False, "from": None, "to": qty, "why": why}
 
 
+def archive_name(box: int, name: str, suffix: str) -> pathlib.Path:
+    """A free filename in the photo archive.
+
+    Never reuse one: the slug is derived from box + part name, so re-filing the
+    same part — or a misidentification that lands on an existing name — would
+    silently replace an earlier photo. One was lost that way before this.
+    """
+    PHOTOS.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:40]
+    target = PHOTOS / f"{box}_{slug}{suffix}"
+    n = 2
+    while target.exists():
+        target = PHOTOS / f"{box}_{slug}_{n}{suffix}"
+        n += 1
+    return target
+
+
 def file_one(path: pathlib.Path, result: dict, plan: dict) -> dict:
     """Archive the photo, take it out of the queue, and return the row to append."""
-    PHOTOS.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^a-z0-9]+", "_", plan["name"].lower()).strip("_")[:40]
-    shutil.copy2(path, PHOTOS / f"{plan['box']}_{slug}{path.suffix.lower()}")
+    shutil.copy2(path, archive_name(plan["box"], plan["name"], path.suffix.lower()))
     # Out of the queue, or the next run identifies it all over again. Moved,
     # never deleted — the archived copy above is the keeper.
     if INBOX in path.resolve().parents:
@@ -457,6 +472,54 @@ def auto_filable(result: dict, plan: dict) -> str | None:
         # eyes; a wrong one is far more annoying to unpick than to confirm.
         return "a part not already in the inventory"
     return None
+
+
+PENDING = ROOT / "data" / "pending.json"
+
+
+def load_pending() -> list[dict]:
+    if not PENDING.exists():
+        return []
+    try:
+        return json.loads(PENDING.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def save_pending(entries: list[dict]) -> None:
+    PENDING.parent.mkdir(parents=True, exist_ok=True)
+    PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def commit(entry: dict, qty, box: int | None = None, name: str | None = None) -> dict:
+    """Write the count the user confirmed. Their number is the truth, not a sum.
+
+    The row carries the count as an absolute total, which is what the resolver
+    wants anyway (newest row wins per box+item) — so a part quietly taken out
+    and put back corrects itself instead of drifting.
+    """
+    data = load_inventory()
+    box = int(box if box is not None else entry["box"])
+    name = (name or entry["name"]).strip()
+
+    # If the confirmed name matches something already on record, write against
+    # that record's spelling and box so a variant name cannot fork the entry.
+    existing = find_existing(data, name)
+    if existing:
+        name, box = existing["name"], existing["box"]
+
+    note = (entry.get("note") or "").strip()
+    note = f"{note} ({COUNTED_MARK})" if note else f"({COUNTED_MARK})"
+
+    src = REVIEW / entry["photo"]
+    if src.exists():
+        shutil.move(str(src), str(archive_name(box, name, src.suffix.lower())))
+
+    append_rows([{"box": box, "name": name,
+                  "quantity": "many" if qty in (None, "many") else int(qty),
+                  "note": note}])
+    subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    return {"box": box, "name": name, "quantity": qty}
 
 
 def process(paths, provider: str = "auto", unattended: bool = False) -> list[dict]:
@@ -500,12 +563,24 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
                    "from": plan["from"], "to": plan["to"],
                    "why": plan["why"]}
 
-        hold = auto_filable(result, plan) if unattended else None
-        if hold:
+        if unattended:
+            # Never write a count unattended. What is actually in the box is
+            # something only you can see — you may have taken parts out without
+            # logging it, so an increment would quietly drift from reality.
+            # The photo becomes a question with the recorded number filled in.
             REVIEW.mkdir(parents=True, exist_ok=True)
             if INBOX in path.resolve().parents:
                 shutil.move(str(path), str(REVIEW / path.name))
-            outcome.update(filed=False, hold=hold)
+            existing = find_existing(data, result["name"]) or (
+                find_existing(data, result["matches_existing"])
+                if result["matches_existing"] else None)
+            outcome.update(
+                filed=False,
+                recorded=(existing["qty"] if existing and existing["countType"] == "exact"
+                          else ("many" if existing else None)),
+                recordedName=existing["name"] if existing else None,
+                seen=int(result["quantity"] or 0),
+                category=result.get("category", "misc"))
         else:
             rows.append(file_one(path, result, plan))
             outcome.update(filed=True)

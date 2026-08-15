@@ -23,6 +23,7 @@ import mimetypes
 import pathlib
 import queue
 import re
+import shutil
 import socket
 import socketserver
 import struct
@@ -76,12 +77,15 @@ def worker() -> None:
                 if not out.get("ok"):
                     out["state"] = "failed"
                     print(f"   failed: {out.get('error')}")
-                elif out.get("filed"):
-                    out["state"] = "done"
-                    print(f"   {out['name']} -> box {out['box']} ({out['why']})")
                 else:
-                    out["state"] = "review"
-                    print(f"   held for review: {out['name']} ({out['hold']})")
+                    out["state"] = "confirm"
+                    out["id"] = out["photo"]
+                    pending = identify.load_pending()
+                    pending = [p for p in pending if p["id"] != out["id"]]
+                    pending.append(out)
+                    identify.save_pending(pending)
+                    print(f"   asks: {out['name']} -> box {out['box']} "
+                          f"(recorded {out.get('recorded')})")
                 record(out)
         except Exception as exc:                        # noqa: BLE001
             record({"photo": path.name, "state": "failed", "ok": False,
@@ -199,9 +203,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/inbox":
             with _activity_lock:
                 recent = list(_activity)
+            import identify
             return self._json(200, {"pending": inbox_list(), "auto": AUTO,
                                     "working": _work.unfinished_tasks,
                                     "review": len(review_list()),
+                                    "confirm": identify.load_pending(),
                                     "activity": recent})
 
         # the freshly built inventory, so the page can update without a reload
@@ -211,14 +217,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, target.read_bytes(), "application/json; charset=utf-8")
             return self._json(404, {"error": "not built yet"})
 
-        # photos already filed, referenced by the app
-        if path.startswith("/data/photos/"):
-            name = pathlib.PurePosixPath(path).name
-            target = PHOTOS / name
-            if target.is_file() and target.parent.resolve() == PHOTOS.resolve():
-                ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-                return self._send(200, target.read_bytes(), ctype)
-            return self._json(404, {"error": "not found"})
+        # photos, so the confirmation card can show what it is asking about
+        for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
+            if path.startswith(prefix):
+                name = pathlib.PurePosixPath(path).name
+                target = folder / name
+                if target.is_file() and target.parent.resolve() == folder.resolve():
+                    ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+                    return self._send(200, target.read_bytes(), ctype)
+                return self._json(404, {"error": "not found"})
 
         return self._json(404, {"error": "not found"})
 
@@ -245,6 +252,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _work.put(INBOX / name)
             return self._json(200, {"ok": True, "saved": name,
                                     "queued": AUTO, "pending": len(inbox_list())})
+
+        if path in ("/confirm", "/dismiss"):
+            import identify
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                return self._json(400, {"error": "bad body"})
+
+            entries = identify.load_pending()
+            entry = next((e for e in entries if e["id"] == body.get("id")), None)
+            if entry is None:
+                return self._json(404, {"error": "no such pending photo"})
+
+            entries = [e for e in entries if e["id"] != entry["id"]]
+            if path == "/dismiss":
+                src = REVIEW / entry["photo"]
+                if src.exists():                       # keep the photo, file nothing
+                    (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
+                identify.save_pending(entries)
+                record({"photo": entry["photo"], "state": "dismissed", "ok": True,
+                        "name": entry.get("name")})
+                return self._json(200, {"ok": True, "dismissed": entry["id"]})
+
+            with _build_lock:
+                try:
+                    done = identify.commit(entry, body.get("qty"),
+                                           body.get("box"), body.get("name"))
+                except Exception as exc:               # noqa: BLE001
+                    return self._json(500, {"error": str(exc)[:200]})
+                identify.save_pending(entries)
+            record({"photo": entry["photo"], "state": "done", "ok": True,
+                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
+            print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
+            return self._json(200, {"ok": True, **done})
 
         if path == "/identify":
             pending = inbox_list()
