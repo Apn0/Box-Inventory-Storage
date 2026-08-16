@@ -50,9 +50,25 @@ do I have". Measured on the 263-row export:
 - **Export CSV** in the sheet's exact columns, so you can paste it straight
   back over the Google Sheet.
 
-## Reorganising
+## At the bench
 
-The **Reorganise** tab plans real box moves at three effort levels and applies them.
+- **+ / −** on every counted row. Taking a part out is the commonest thing you
+  do; it used to cost four taps through the editor.
+- **Undo** appears after any change. Each count is one appended row, so undo is
+  exact — and the server refuses if the file no longer ends with what it wrote,
+  because the CSV is also hand-edited and re-exported from the sheet.
+- **Type a box number** into search (`13`) to jump to that box instead of
+  matching the digits.
+- **Running low** means the count has actually come down from its peak, not
+  just that it is small. On quantity alone it flagged 128 of 242 parts — owning
+  one GPS module is not a shortage. With the evidence it flags 2.
+
+Offline: if this machine is off, the app falls back to the phone's cached copy
+and says so. You can read the inventory in a shop; saving still needs the server.
+
+## Reorganizing
+
+The **Reorganize** tab plans real box moves at three effort levels and applies them.
 Measured on the current data (cap 6 items/box):
 
 | Level | Moves | Boxes freed | Result |
@@ -195,7 +211,7 @@ in more than one box the match is refused rather than guessed.
 index.html              the app — self-contained, this is the thing to open
 data/inventory_raw.csv  verbatim export of the Google Sheet (never edited)
 data/inventory_raw.xlsx same, original formatting
-data/inventory.json     the normalised data build.py produces
+data/inventory.json     the normalized data build.py produces
 data/photos/            photos filed by identify.py, named <box>_<part>
 data/inbox/             photos sent from the phone, waiting to be identified
 src/app.template.html   app source; build.py injects the data into it
@@ -227,7 +243,7 @@ layered on top. Export the CSV when you want them back in the sheet.
 
 ## Rules the code enforces
 
-- **Resolution**: newest row per `(box, normalised item name)`. Differing
+- **Resolution**: newest row per `(box, normalized item name)`. Differing
   quantities across rows set `conflict: true` rather than being averaged,
   summed, or quietly dropped.
 - **Containers**: boxes group in sets of `CONTAINER_SIZE` (30). Boxes under 400
