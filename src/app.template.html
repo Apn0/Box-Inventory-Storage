@@ -99,8 +99,10 @@ nav.tabs .badge{
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow); overflow:hidden;
 }
-.item>.row{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;width:100%;
+.item{display:flex;flex-wrap:wrap;align-items:stretch}
+.item>.row{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;flex:1;min-width:0;
   background:none;border:0;text-align:left}
+.item>.editor{width:100%}
 .boxno{
   flex:none;min-width:46px;height:40px;border-radius:9px;background:var(--panel-2);
   border:1px solid var(--line); display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -122,6 +124,22 @@ nav.tabs .badge{
 .qty small{display:block;font-size:9.5px;font-weight:600;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink-3);font-family:var(--sans)}
 .qty.bulk{color:var(--bulk)} .qty.unknown{color:var(--ink-3)} .qty.zero{color:var(--bad)}
+
+/* take one out / put one back, straight from the list */
+.tally{flex:none;display:flex;flex-direction:column;gap:4px;padding:6px 10px 6px 0;
+  justify-content:center}
+.tally button{width:40px;height:32px;border-radius:8px;background:var(--panel-2);
+  border:1px solid var(--line);font-size:17px;font-weight:700;line-height:1;color:var(--ink-2)}
+.tally button:active{background:var(--accent);color:var(--accent-ink)}
+.tally button:disabled{opacity:.3}
+.item.low .boxno{border-color:var(--warn)}
+.item.low .qty{color:var(--warn)}
+#undobar{position:fixed;left:12px;right:12px;bottom:calc(92px + env(safe-area-inset-bottom));
+  z-index:45;background:var(--ink);color:var(--bg);border-radius:12px;padding:11px 14px;
+  display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);font-size:13.5px}
+#undobar b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#undobar button{background:var(--bg);color:var(--ink);border:0;border-radius:8px;
+  padding:7px 14px;font-weight:700;font-size:13px}
 
 /* editor */
 .editor{border-top:1px dashed var(--line);padding:11px 12px;background:var(--panel-2)}
@@ -343,6 +361,18 @@ const STORE_KEY = "boxinv.v1";
 const CAT = SEED.meta.categoryLabels;
 const CONTAINER_SIZE = SEED.meta.containerSize;
 const STALE_DAYS = 150;
+// At or below this, a part is worth reordering before a build stalls on it.
+const LOW_STOCK = 2;
+
+/** Low means "you had more and now you don't", not "you own one of these".
+    Owning a single GPS module is not a shortage; going from five TMC2209s to
+    one is. Without the peak this flagged 128 of 242 parts and meant nothing. */
+function isRunningLow(i){
+  if(i.countType !== "exact") return false;
+  const now = Number(i.qty);
+  if(!(now > 0 && now <= LOW_STOCK)) return false;
+  return Number(i.peak || now) >= LOW_STOCK + 1;
+}
 
 /* ------------------------------------------------------------------ state */
 let overlay = load();
@@ -622,7 +652,14 @@ function filtered(){
   if(ui.flag === "bulk")  list = list.filter(i => i.countType !== "exact");
   if(ui.flag === "conflict") list = list.filter(i => i.conflict);
   if(ui.flag === "stale") list = list.filter(i => (daysAgo(i.updated)||0) > STALE_DAYS);
+  if(ui.flag === "low") list = list.filter(i =>
+    isRunningLow(i));
   const q = ui.q.trim().toLowerCase();
+  // Typing a bare box number jumps to that box instead of searching for the
+  // digits — with 154 boxes that is what you nearly always mean.
+  if(/^\d{1,3}$/.test(q) && items.some(i => i.box === Number(q))){
+    return list.filter(i => i.box === Number(q));
+  }
   if(q){
     const ts = tokens(q);
     list = list.filter(i => ts.every(t => i._hay.includes(t)))
@@ -646,7 +683,8 @@ function viewFind(){
       ${["all","elec","house"].map(z =>
         `<button class="chip" data-zone="${z}" aria-pressed="${ui.zone===z}">${zoneLabel[z]}</button>`).join("")}
       <span style="width:10px"></span>
-      ${[["bulk","Uncounted"],["conflict","Ambiguous"],["stale","Stale"],["gone","Removed"]].map(([k,l]) =>
+      ${[["low","Running low"],["bulk","Uncounted"],["conflict","Ambiguous"],
+         ["stale","Stale"],["gone","Removed"]].map(([k,l]) =>
         `<button class="chip" data-flag="${k}" aria-pressed="${ui.flag===k}">${l}</button>`).join("")}
     </div>
     <div class="chips">
@@ -673,7 +711,10 @@ function itemHTML(it){
   if(it.added)  flags.push(`<span class="tag flag">new</span>`);
   const d = daysAgo(it.updated);
   const open = ui.open === it.id;
-  return `<div class="item" data-id="${esc(it.id)}">
+  const exact = it.countType === "exact";
+  const low = isRunningLow(it);
+  if(low) flags.push(`<span class="tag flag">was ${it.peak}, now ${it.qty}</span>`);
+  return `<div class="item${low ? " low" : ""}" data-id="${esc(it.id)}">
     <button class="row" data-toggle="${esc(it.id)}">
       <span class="boxno"><b>${it.box}</b><span>box</span></span>
       <span class="itemmain">
@@ -688,6 +729,11 @@ function itemHTML(it){
       </span>
       ${qtyHTML(it)}
     </button>
+    ${SERVED && exact ? `<span class="tally">
+        <button data-tally="1" data-t-id="${esc(it.id)}" title="Put one back">+</button>
+        <button data-tally="-1" data-t-id="${esc(it.id)}" title="Take one out"
+          ${Number(it.qty) <= 0 ? "disabled" : ""}>−</button>
+      </span>` : ""}
     ${open ? editorHTML(it) : ""}
   </div>`;
 }
@@ -782,6 +828,27 @@ function todoCards(){
     targets: s.splits.map(x => ({box:x.boxes[0],
       label:`${esc(x.name)} — boxes ${x.boxes.join(" and ")}`})),
     go:{tab:"reorg", level:1, label:"Plan the merge"},
+  });
+
+  // Down to the last one or two — the thing you find out at the worst moment.
+  const low = active()
+    .filter(i => i.countType === "exact" && Number(i.qty) > 0 && Number(i.qty) <= LOW_STOCK)
+    .sort((a,b) => a.qty - b.qty || a.box - b.box);
+  if(low.length) cards.push({
+    tone:"soon", when:"Before your next order",
+    title:`${plural(low.length, "part is", "parts are")} nearly used up`,
+    why:"You had more of these and now you do not — the count has actually come down. Parts you simply own one of are not listed here. Worth a glance before you next order anything.",
+    effort:"reading, not work",
+    targets: low.map(i => ({box:i.box, label:`${esc(i.name)} — was ${i.peak}, ${i.qty} left`})),
+  });
+
+  const gone = active().filter(i => i.countType === "exact" && Number(i.qty) === 0);
+  if(gone.length) cards.push({
+    tone:"soon", when:"Worth knowing",
+    title:`${plural(gone.length, "part is", "parts are")} at zero but still listed`,
+    why:"The box is empty. Either the part is genuinely used up — in which case the box number is free — or the count is wrong.",
+    effort:"a look each",
+    targets: gone.map(i => ({box:i.box, label:`${esc(i.name)} — box ${i.box} is empty`})),
   });
 
   const risky = s.bulk.filter(i => ["mcu","sensor","driver","power","motor","interface","comms"]
@@ -1114,6 +1181,28 @@ function wire(){
       }
     };
   }
+
+  // One tap = one part in or out. This is the commonest thing you do at the
+  // bench and it used to cost four taps through the editor.
+  v.querySelectorAll("[data-tally]").forEach(b => b.onclick = async ev => {
+    ev.stopPropagation();
+    const it = items.find(i => i.id === b.dataset.tId);
+    if(!it || it.countType !== "exact") return;
+    const next = Math.max(0, Number(it.qty) + Number(b.dataset.tally));
+    b.disabled = true;
+    try{
+      const res = await fetch("/quickadd", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({name:it.name, box:it.box, qty:next})});
+      const out = await res.json();
+      if(!res.ok) throw new Error(out.error || res.status);
+      await refreshSeed();
+      showUndo(`${it.name}: ${it.qty} → ${next}`);
+    }catch(err){
+      toast("Could not save: " + err.message);
+      b.disabled = false;
+    }
+  });
 
   v.querySelectorAll("[data-card]").forEach(b => b.onclick = () => {
     const i = Number(b.dataset.card);
@@ -1709,6 +1798,33 @@ function askCount(q){
       wrap.remove();
     }
   };
+}
+
+/* ------------------------------------------------------------------- undo
+   Every count is one append to the CSV, so taking the last one back off is
+   exact. The server refuses if the file no longer ends with what it wrote —
+   better to decline than to delete a line somebody else added. */
+let undoTimer = null;
+
+function showUndo(what){
+  document.getElementById("undobar")?.remove();
+  const bar = document.createElement("div");
+  bar.id = "undobar";
+  bar.innerHTML = `<b>${esc(what)}</b><button>Undo</button>`;
+  bar.querySelector("button").onclick = async () => {
+    bar.querySelector("button").disabled = true;
+    try{
+      const res = await fetch("/undo", {method:"POST"});
+      const out = await res.json();
+      if(!res.ok) throw new Error(out.error || res.status);
+      if(!out.ok){ toast(out.message || "Nothing to undo"); }
+      else { await refreshSeed(); toast("Undone"); }
+    }catch(err){ toast("Undo refused: " + err.message); }
+    bar.remove();
+  };
+  document.body.appendChild(bar);
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => bar.remove(), 9000);
 }
 
 /** Pull the rebuilt inventory from the server, keeping local edits on top. */

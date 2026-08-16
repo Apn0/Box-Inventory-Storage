@@ -20,6 +20,7 @@ import collections
 import csv
 import datetime
 import glob
+import io
 import json
 import mimetypes
 import pathlib
@@ -595,6 +596,56 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     return outcomes
 
 
+CHANGES = ROOT / "data" / "changes.json"
+MAX_CHANGES = 200
+
+
+def load_changes() -> list[dict]:
+    if not CHANGES.exists():
+        return []
+    try:
+        return json.loads(CHANGES.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def record_change(rows: list[dict], lines: list[str]) -> None:
+    """Remember exactly what was appended, so it can be taken back off again."""
+    log = load_changes()
+    log.append({"at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "rows": rows, "lines": lines})
+    del log[:-MAX_CHANGES]
+    CHANGES.parent.mkdir(parents=True, exist_ok=True)
+    CHANGES.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def undo_last() -> dict | None:
+    """Remove the most recent append, but only if the file still ends with it.
+
+    Refusing when the tail does not match is the point: the CSV is also edited
+    by hand and re-exported from the sheet, and silently deleting somebody
+    else's lines would be far worse than declining to undo.
+    """
+    log = load_changes()
+    if not log:
+        return None
+    last = log[-1]
+
+    text = RAW.read_text(encoding="utf-8-sig")
+    tail = "".join(f"{line}\r\n" for line in last["lines"])
+    if not text.endswith(tail):
+        alt = "".join(f"{line}\n" for line in last["lines"])
+        if not text.endswith(alt):
+            raise RuntimeError("the file changed since then — undo would remove the wrong lines")
+        tail = alt
+
+    shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
+    RAW.write_text(text[:-len(tail)], encoding="utf-8", newline="")
+    CHANGES.write_text(json.dumps(log[:-1], indent=2, ensure_ascii=False), encoding="utf-8")
+    subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    return last
+
+
 def append_rows(rows: list[dict]) -> None:
     shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
 
@@ -607,10 +658,16 @@ def append_rows(rows: list[dict]) -> None:
             fh.write(b"\r\n")
 
     today = datetime.date.today().strftime("%d/%m/%Y")
+    written = []
     with RAW.open("a", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\r\n")
         for r in rows:
-            w.writerow([r["box"], r["name"], r["quantity"], r["note"], today])
+            buf = io.StringIO()
+            csv.writer(buf, lineterminator="").writerow(
+                [r["box"], r["name"], r["quantity"], r["note"], today])
+            written.append(buf.getvalue())
+            fh.write(buf.getvalue() + "\r\n")
+    record_change(rows, written)
     print(f"\nappended {len(rows)} row(s) to {RAW.name} (previous kept as inventory_raw.csv.bak)")
 
 

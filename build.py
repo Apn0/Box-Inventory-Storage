@@ -186,6 +186,14 @@ def main() -> int:
 
         status = "gone" if (count_type == "exact" and qty == 0) else "active"
 
+        # The highest count ever recorded. Without it "running low" fires on
+        # every part you simply own one of, which was 128 of 242 items — noise
+        # that hides the handful actually being used up.
+        peak = qty if count_type == "exact" else None
+        for r in history:
+            if r["qty_txt"].isdigit() and int(r["qty_txt"]) != BULK_SENTINEL:
+                peak = max(peak or 0, int(r["qty_txt"]))
+
         note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
 
         items.append(
@@ -195,6 +203,7 @@ def main() -> int:
                 "container": container_of(box),
                 "name": latest["name"],
                 "qty": qty,
+                "peak": peak,
                 "countType": count_type,
                 "status": status,
                 "note": note,

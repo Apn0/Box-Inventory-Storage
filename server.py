@@ -204,10 +204,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with _activity_lock:
                 recent = list(_activity)
             import identify
+            changes = identify.load_changes()
             return self._json(200, {"pending": inbox_list(), "auto": AUTO,
                                     "working": _work.unfinished_tasks,
                                     "review": len(review_list()),
                                     "confirm": identify.load_pending(),
+                                    "changes": changes[-12:][::-1],
                                     "activity": recent})
 
         # the freshly built inventory, so the page can update without a reload
@@ -318,6 +320,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "name": done["name"], "box": done["box"], "to": done["quantity"]})
             print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
             return self._json(200, {"ok": True, **done})
+
+        if path == "/undo":
+            import identify
+            with _build_lock:
+                try:
+                    undone = identify.undo_last()
+                except Exception as exc:               # noqa: BLE001
+                    return self._json(409, {"error": str(exc)[:200]})
+            if not undone:
+                return self._json(200, {"ok": False, "message": "nothing to undo"})
+            names = ", ".join(r["name"] for r in undone["rows"])
+            record({"state": "undone", "ok": True, "name": names})
+            print(f"  undone: {names}")
+            return self._json(200, {"ok": True, "undone": undone["rows"]})
 
         if path == "/identify":
             pending = inbox_list()
