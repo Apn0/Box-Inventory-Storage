@@ -126,6 +126,32 @@ queue until you identify them, so snapping works even with the keys empty.
 If the port is taken, `server.py` now says so and stops instead of half-binding —
 use `--port 8782`.
 
+## Entering parts without a photo
+
+Three buttons, bottom right. For a part you can name, **⌨️ is the fast one** —
+it matches against the inventory already in the page, so there is no vision
+call, no wait and no cost, and it works with every API account empty.
+
+- **tap ⌨️** — type or dictate a name, pick the match, set the count
+- **hold ⌨️** — voice mode
+
+Voice mode is a fixed question tree run on the phone: part → any attributes that
+apply to its category (soldered? heat sink?) → box → count → logged → "anything
+else?". No model, no API call. **It ends when you say "stop", not on a timer** —
+long silences are expected while you walk to a container.
+
+Speech is on-device: Android's own recognizer in the APK, Chrome's in the
+browser. A plain WebView does not implement the Web Speech API at all, which is
+what `SpeechBridge.java` exists for — without it the microphone does nothing
+inside the app, however well it works in Chrome.
+
+Part numbers arrive as words in pieces, so they are normalized before matching.
+These all resolve to the right box: `tmc twenty two zero nine`,
+`t m c twenty two zero nine`, `one eight six five zero`,
+`a d s one one one five`, `mt three six zero eight`, `hx seven one one`.
+
+Everything is en-US: page language, recognizer, speech synthesis, spelling.
+
 ## Photo intake — `identify.py`
 
 ```powershell
