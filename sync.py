@@ -60,7 +60,7 @@ def main() -> int:
             form_body = r.read()
         if form_body.decode("utf-8-sig", errors="replace").startswith("Timestamp"):
             FORM_CSV.write_bytes(form_body)
-            print(f"wrote {FORM_CSV}  ({form_body.count(b'\\n') + 1} lines)")
+            print(f"wrote {FORM_CSV}  ({form_body.count(b'\n')} rows)")
     except Exception as exc:                           # noqa: BLE001
         print(f"form tab skipped: {exc}")
 
