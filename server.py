@@ -172,11 +172,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         sys.stderr.write(f"  {self.address_string()} {fmt % args}\n")
 
     # -------------------------------------------------------------- helpers
-    def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None) -> None:
+    def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None,
+              cache: str = "no-store") -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache)
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -192,7 +193,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             if not INDEX.exists():
                 return self._json(500, {"error": "index.html missing — run build.py"})
-            return self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
+            # Let the phone keep a copy: when this machine is off, the app falls
+            # back to it and you can still read the inventory in a shop. Short
+            # max-age so a running server always wins.
+            return self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8",
+                              cache="max-age=30, stale-if-error=604800")
 
         if path == "/manifest.webmanifest":
             return self._send(200, json.dumps(MANIFEST).encode("utf-8"), "application/manifest+json")

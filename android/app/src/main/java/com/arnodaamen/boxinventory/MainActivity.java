@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> pendingCallback;
     private Uri pendingCameraUri;
     private SpeechBridge speech;
+    /** Set once we have already retried from cache, so a miss cannot loop. */
+    private boolean triedCache;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,7 +79,30 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) showUnreachable();
+                if (!req.isForMainFrame()) return;
+                // The PC is off, or you are away from the network. Rather than a
+                // dead app, fall back to the cached copy: reading the inventory
+                // in a shop is the case this matters for. Writing needs the
+                // server, and the page already reports when a save fails.
+                if (!triedCache) {
+                    triedCache = true;
+                    v.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ONLY);
+                    v.loadUrl(serverUrl());
+                    return;
+                }
+                showUnreachable();
+            }
+
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                if (triedCache) {
+                    v.evaluateJavascript(
+                        "window.__offline = true;"
+                        + "document.body && (document.body.insertAdjacentHTML('afterbegin',"
+                        + "'<div style=\"background:#b06f00;color:#fff;padding:7px 12px;"
+                        + "font:600 13px system-ui;text-align:center\">Offline — last known"
+                        + " counts, changes will not save</div>'));", null);
+                }
             }
         });
 
@@ -171,6 +196,8 @@ public class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == 1) {
             setContentView(web);
+            triedCache = false;                       // try the server again
+            web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
             web.loadUrl(serverUrl());
             return true;
         }
