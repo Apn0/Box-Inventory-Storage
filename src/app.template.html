@@ -514,14 +514,12 @@ function sheetCsvUrl(gid){
   return `https://docs.google.com/spreadsheets/d/${SHEET.id}/export?format=csv&gid=${gid}&t=${Date.now()}`;
 }
 
-/** Fetch one tab as CSV text. Served pages go through the server's /proxy
-    (docs.google.com sends no CORS headers, so a direct fetch from an http
-    origin is blocked); the asset page in the APK fetches directly (the WebView
-    grants file:// pages universal access). */
-function fetchTab(gid){
-  const direct = location.protocol === "file:";
-  const url = direct ? sheetCsvUrl(gid) : `/proxy?gid=${gid}&t=${Date.now()}`;
-  return new Promise((resolve, reject) => {
+/** Fetch one tab as CSV text, straight from Google. Measured 2026-08-16: the
+    CSV export answers a cross-origin fetch with status 200 from an http origin,
+    so no proxy is needed anywhere. The server's /proxy stays as a fallback in
+    served mode in case Google ever tightens that. */
+async function fetchTab(gid){
+  const get = url => new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("GET", url, true);
     x.timeout = 20000;
@@ -531,6 +529,11 @@ function fetchTab(gid){
     x.ontimeout = () => reject(new Error("timeout"));
     x.send();
   });
+  try{ return await get(sheetCsvUrl(gid)); }
+  catch(e){
+    if(SERVED) return get(`/proxy?gid=${gid}&t=${Date.now()}`);
+    throw e;
+  }
 }
 
 /** Append one row by submitting the hidden form. A form submission is a

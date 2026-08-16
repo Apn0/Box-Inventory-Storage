@@ -50,6 +50,39 @@ do I have". Measured on the 263-row export:
 - **Export CSV** in the sheet's exact columns, so you can paste it straight
   back over the Google Sheet.
 
+## The Google Sheet is the database (v2.0)
+
+There is no server in the loop for counting or searching. The sheet was
+already an append log resolved newest-wins, and that is exactly what a Google
+Form provides for free: a form POST is an append, with no OAuth, no Apps Script
+deployment and nothing to host.
+
+- **Read:** the app fetches the `BOX` tab and the `Form responses 1` tab as CSV
+  straight from Google (link-view export; measured 2026-08-16 to answer
+  cross-origin with 200, so no proxy). It shows the baked snapshot instantly,
+  then the live sheet replaces it within a second or two.
+- **Write:** every count from every flow — tally buttons, typed, voice, photo
+  confirm, undo — is one hidden-form submit to the linked Google Form. Form rows
+  carry a time of day and are deliberate recounts by definition, so a form write
+  on the same day as a hand edit wins and never raises the ambiguity flag.
+- **Undo** is a compensating append of the previous value. A form response
+  cannot be deleted without auth; under newest-wins it does not need to be.
+- **Collisions** are a non-issue: single user, append-only, Google serializes
+  form submits, later row wins.
+- **Resolver parity:** the JavaScript resolver in the page and `build.py` were
+  diffed on all 253 records — identical. Both save and undo were exercised
+  against the real sheet (6 → 7 → 6).
+
+The form's action URL and entry IDs live at the top of `src/app.template.html`
+(`SHEET`) and in `identify.py` (`FORM_ACTION`, `FORM_ENTRIES`). If the form is
+ever recreated, both change.
+
+**What still needs the PC:** photo identification only. The app probes
+`server.py` and shows the camera buttons only when it answers; its address is
+in the APK menu (LAN at home, Meshnet away). `sync.py` pulls both tabs and
+`server.py`'s own writes go to the same form, mirroring locally, so the CSV in
+this repo is a cache, not the truth.
+
 ## At the bench
 
 - **+ / −** on every counted row. Taking a part out is the commonest thing you

@@ -2,7 +2,7 @@
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
     "generated": "2026-08-16",
-    "rawRows": 264,
+    "rawRows": 266,
     "containerSize": 30,
     "bulkSentinel": 99,
     "categoryLabels": {
@@ -777,10 +777,10 @@
       "container": "1",
       "name": "TMC2209 stepper driver",
       "qty": 6,
-      "peak": 6,
+      "peak": 7,
       "countType": "exact",
       "status": "active",
-      "note": "restatement test via form (photo-counted)",
+      "note": "undo (photo-counted)",
       "category": "driver",
       "updated": "2026-08-16",
       "conflict": false,
@@ -795,6 +795,16 @@
           "qty": "6",
           "date": "2026-08-16",
           "note": "restatement test via form (photo-counted)"
+        },
+        {
+          "qty": "7",
+          "date": "2026-08-16",
+          "note": "cloud write test (photo-counted)"
+        },
+        {
+          "qty": "6",
+          "date": "2026-08-16",
+          "note": "undo (photo-counted)"
         }
       ]
     },
