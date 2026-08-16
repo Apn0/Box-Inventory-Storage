@@ -37,7 +37,12 @@ jobs:
 
       - name: Name the artifact
         id: name
-        run: echo "file=box-inventory-${GITHUB_RUN_NUMBER}.apk" >> "$GITHUB_OUTPUT"
+        run: |
+          v=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # Version in the filename, so the phone shows which build it is
+          # downloading rather than an opaque run number.
+          echo "file=box-inventory-v${v}-${GITHUB_RUN_NUMBER}.apk" >> "$GITHUB_OUTPUT"
 
       # Deliberately NOT actions/upload-artifact: this account's Actions artifact
       # storage is full, and an artifact is a zip Android cannot install anyway.
@@ -46,8 +51,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           cp android/app/build/outputs/apk/debug/app-debug.apk "${{ steps.name.outputs.file }}"
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest "${{ steps.name.outputs.file }}" \
-            --title "Latest APK" \
-            --notes "Debug build of commit ${GITHUB_SHA:0:7}. Install on the phone, then set the server address from the menu."
+          # Delete-then-create raced with its own tag: --cleanup-tag left the tag
+          # behind, so create failed with "tag_name already exists" while the run
+          # still looked half-successful. Ensure the release exists, then upload
+          # over it — upload --clobber is idempotent.
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "Latest APK" --notes "Rolling debug build."
+          gh release upload latest "${{ steps.name.outputs.file }}" --clobber
+          gh release edit latest \
+            --notes "Debug build of commit ${GITHUB_SHA:0:7} (v${{ steps.name.outputs.version }}). Install on the phone, then set the server address from the menu."
