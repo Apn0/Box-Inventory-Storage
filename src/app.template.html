@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-US">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -273,6 +273,17 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
 .matches .bx{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);white-space:nowrap}
 .matches .qt{font-family:var(--mono);font-weight:700;font-size:14px}
 .heard{font-size:12.5px;color:var(--ink-3);min-height:17px;margin:-4px 0 8px}
+
+/* voice mode banner */
+#vbanner{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--panel);
+  border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(0,0,0,.3);
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:12px}
+#vbanner .vtext{flex:1;font-size:15px;font-weight:600;line-height:1.35}
+#vbanner .vsub{position:absolute;left:16px;bottom:calc(4px + env(safe-area-inset-bottom));
+  font-size:11.5px;color:var(--ink-3)}
+#vbanner button{background:var(--bad);color:#fff;border:0;border-radius:10px;
+  padding:10px 16px;font-weight:700;font-size:14px}
 .empty{text-align:center;color:var(--ink-3);padding:38px 12px;font-size:14px}
 .toast{
   position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
@@ -473,7 +484,7 @@ function issues(){
           total: conflicts.length + splits.length + free.length};
 }
 
-/* --------------------------------------------------------------- reorganise
+/* --------------------------------------------------------------- Reorganize
    Three effort levels. Each returns concrete part-moves you can apply.
    Bulk piles are never merged into a shared box — a pile of 99 screws fills
    its own box physically, whatever the data says. */
@@ -595,7 +606,7 @@ function renderTabs(){
   // 22 — a number that only made the tab look like a chore.
   const n = todoCards().filter(c => c.tone === "now").length;
   const tabs = [["find","Find"],["boxes","Boxes"],["issues","To do"],["build","Build check"],
-                ["reorg","Reorganise"],["labels","Labels"],["data","Data"]];
+                ["reorg","Reorganize"],["labels","Labels"],["data","Data"]];
   document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
     `<button data-tab="${k}" aria-selected="${ui.tab===k}">${label}${
       k==="issues" && n ? `<span class="badge">${n}</span>` : ""}</button>`).join("");
@@ -766,7 +777,7 @@ function todoCards(){
   if(s.splits.length) cards.push({
     tone:"now", when:"Do first",
     title:`Merge ${plural(s.splits.length, "part", "parts")} living in two boxes`,
-    why:"Every time you look one of these up you can open the wrong box. The Reorganise tab does all of them in one pass.",
+    why:"Every time you look one of these up you can open the wrong box. The Reorganize tab does all of them in one pass.",
     effort:`${s.splits.length} moves`,
     targets: s.splits.map(x => ({box:x.boxes[0],
       label:`${esc(x.name)} — boxes ${x.boxes.join(" and ")}`})),
@@ -786,7 +797,7 @@ function todoCards(){
   if(s.free.length) cards.push({
     tone:"later", when:"When you feel like it",
     title:`Reuse ${plural(s.free.length, "free box number", "free box numbers")}`,
-    why:"Empty or never used. Fill these before buying more boxes — and the Reorganise tab can free a lot more.",
+    why:"Empty or never used. Fill these before buying more boxes — and the Reorganize tab can free a lot more.",
     effort:"no work, just useful",
     targets: s.free.slice(0, 6).map(f => ({box:f.box, label:`box ${f.box} — ${f.reason}`})),
     extra: s.free.length - 6,
@@ -915,7 +926,7 @@ function viewReorg(){
     byWhy.get(m.why).push(m);
   }
   return `<div class="panel">
-    <h2>Reorganise</h2>
+    <h2>Reorganize</h2>
     <p class="sub">Measured now: <b>${active().filter((i,_,a)=>
         a.filter(x=>x.box===i.box).length===1).length}</b> of your
       ${new Set(active().map(i=>i.box)).size} boxes hold a single item, and the average
@@ -1128,7 +1139,7 @@ function wire(){
     const today = new Date().toISOString().slice(0,10);
     for(const m of p.moves)
       overlay.edits[m.id] = Object.assign({}, overlay.edits[m.id], {box:m.to, updated:today});
-    journal({label:"reorganise", patch:{level:ui.level, moves:p.moves.length}});
+    journal({label:"Reorganize", patch:{level:ui.level, moves:p.moves.length}});
     save(); rebuild(); render();
     toast(`Moved ${p.moves.length} parts · ${p.freed.length} boxes free`);
   });
@@ -1191,7 +1202,7 @@ const SERVED = location.protocol === "http:" || location.protocol === "https:";
 let pending = 0;
 
 /* ------------------------------------------------------- speech (local)
-   Dictation uses the browser's own recogniser. In Chrome on Android that runs
+   Dictation uses the browser's own recognizer. In Chrome on Android that runs
    on the device — no key, no per-minute cost. It is NOT available inside a
    plain WebView, so the APK needs a native bridge; `speechAvailable` says
    which of the two you are in rather than failing silently. */
@@ -1199,11 +1210,11 @@ const NativeSpeech = window.AndroidSpeech || null;
 const WebSpeech = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const speechAvailable = () => Boolean(NativeSpeech || WebSpeech);
 
-let recogniser = null, onHeard = null;
+let recognizer = null, onHeard = null;
 
 function listen(handler, {continuous = false} = {}){
   onHeard = handler;
-  if(NativeSpeech){                       // APK: Android's on-device recogniser
+  if(NativeSpeech){                       // APK: Android's on-device recognizer
     try{ NativeSpeech.start(continuous); return true; }
     catch(e){ toast("Speech failed: " + e.message); return false; }
   }
@@ -1212,11 +1223,11 @@ function listen(handler, {continuous = false} = {}){
     return false;
   }
   stopListening();
-  recogniser = new WebSpeech();
-  recogniser.lang = "en-GB";
-  recogniser.continuous = continuous;
-  recogniser.interimResults = true;
-  recogniser.onresult = ev => {
+  recognizer = new WebSpeech();
+  recognizer.lang = "en-US";
+  recognizer.continuous = continuous;
+  recognizer.interimResults = true;
+  recognizer.onresult = ev => {
     let finalText = "", interim = "";
     for(let i = ev.resultIndex; i < ev.results.length; i++){
       const r = ev.results[i];
@@ -1225,29 +1236,264 @@ function listen(handler, {continuous = false} = {}){
     }
     if(onHeard) onHeard({final: finalText.trim(), interim: interim.trim()});
   };
-  // Android stops the recogniser after a short silence whatever `continuous`
+  // Android stops the recognizer after a short silence whatever `continuous`
   // says. Restart it so the channel stays open while you walk to a container.
-  recogniser.onend = () => { if(recogniser && recogniser._keep) try{ recogniser.start(); }catch(e){} };
-  recogniser.onerror = ev => {
+  recognizer.onend = () => { if(recognizer && recognizer._keep) try{ recognizer.start(); }catch(e){} };
+  recognizer.onerror = ev => {
     if(ev.error === "not-allowed") toast("Microphone permission refused");
-    else if(ev.error === "no-speech" && recogniser?._keep) return;
+    else if(ev.error === "no-speech" && recognizer?._keep) return;
     else if(ev.error !== "aborted") toast("Speech error: " + ev.error);
   };
-  recogniser._keep = continuous;
-  try{ recogniser.start(); return true; }
+  recognizer._keep = continuous;
+  try{ recognizer.start(); return true; }
   catch(e){ toast("Could not start listening"); return false; }
 }
 
 function stopListening(){
   if(NativeSpeech){ try{ NativeSpeech.stop(); }catch(e){} }
-  if(recogniser){ recogniser._keep = false; try{ recogniser.abort(); }catch(e){} recogniser = null; }
+  if(recognizer){ recognizer._keep = false; try{ recognizer.abort(); }catch(e){} recognizer = null; }
 }
 
-// The APK calls this from Java when the native recogniser returns text.
+// The APK calls these from Java.
 window.onSpeechResult = (text, isFinal) => {
   if(onHeard) onHeard({final: isFinal ? String(text||"").trim() : "",
                        interim: isFinal ? "" : String(text||"").trim()});
 };
+window.onSpeechError = err => { if(onSpeechErr) onSpeechErr(String(err||"")); };
+window.onSpeechState = s => { if(onSpeechSt) onSpeechSt(String(s||"")); };
+window.onSpeechSpoken = () => { if(onSpoken){ const f = onSpoken; onSpoken = null; f(); } };
+let onSpeechErr = null, onSpeechSt = null, onSpoken = null;
+
+/** Speak, and resolve once the phone has finished talking. */
+function say(text){
+  return new Promise(resolve => {
+    if(NativeSpeech && NativeSpeech.speak){
+      onSpoken = resolve;
+      try{ NativeSpeech.speak(text); }catch(e){ onSpoken = null; resolve(); }
+      return;
+    }
+    if(window.speechSynthesis){
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-US";
+      u.onend = u.onerror = () => resolve();
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      // Some browsers never fire onend; do not let the flow hang on it.
+      setTimeout(resolve, Math.min(9000, 1200 + text.length * 70));
+      return;
+    }
+    resolve();
+  });
+}
+
+/* ------------------------------------------------------- understanding speech
+   Numbers arrive as words, and a part number arrives in pieces: "TMC twenty two
+   zero nine" is five tokens for one string. Both are normalized before matching. */
+const NUM_WORD = {zero:0, oh:0, o:0, one:1, two:2, three:3, four:4, five:5, six:6,
+  seven:7, eight:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14,
+  fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20,
+  thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90,
+  hundred:100, none:0};
+// "a" and "an" are deliberately not numbers here: spelling a part out loud
+// ("a d s eleven fifteen") turned the letter A into a 1.
+
+function wordsToDigits(text){
+  const out = [];
+  const toks = String(text).toLowerCase().replace(/[,.]/g, " ").split(/\s+/).filter(Boolean);
+  for(let i = 0; i < toks.length; i++){
+    const t = toks[i].replace(/-/g, " ").trim();
+    if(t.includes(" ")){ toks.splice(i, 1, ...t.split(" ")); i--; continue; }
+    if(NUM_WORD[t] !== undefined){
+      let v = NUM_WORD[t];
+      // "twenty two" is one number; "two zero" is two digits of a part number.
+      if(v >= 20 && v < 100 && v % 10 === 0 && NUM_WORD[toks[i+1]] !== undefined
+         && NUM_WORD[toks[i+1]] < 10 && NUM_WORD[toks[i+1]] > 0){
+        v += NUM_WORD[toks[++i]];
+      }
+      out.push(String(v));
+    } else out.push(t);
+  }
+  return out.join(" ");
+}
+
+/** "tmc twenty two zero nine" -> "tmc2209", so it can match the inventory. */
+function spokenPartName(text){
+  let s = wordsToDigits(text);
+  // "a d s" -> "ads": a part spelled out letter by letter.
+  s = s.replace(/\b([a-z](?:\s+[a-z]){1,5})\b/g, m => m.replace(/\s+/g, ""));
+  // "tmc 22 0 9" -> "tmc2209"
+  s = s.replace(/\b([a-z]{2,6})\s+((?:\d+\s*){1,6})/g,
+                (m, letters, digits) => letters + digits.replace(/\s+/g, ""));
+  // "1 8 6 5 0" -> "18650". A run of three or more single digits is a part
+  // number spelled out, not three separate quantities.
+  s = s.replace(/\b(\d(?:\s+\d){2,})\b/g, m => m.replace(/\s+/g, ""));
+  return s.replace(/\s{2,}/g, " ").trim();
+}
+
+function spokenNumber(text){
+  const s = wordsToDigits(text);
+  const m = s.match(/-?\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+const YES = /\b(yes|yeah|yep|yup|correct|right|affirmative|it is|sure|ok|okay)\b/i;
+const NO  = /\b(no|nope|nah|negative|it is not|isn'?t|not)\b/i;
+const STOP_WORDS = /\b(stop|done|finished|that'?s all|quit|exit|end|no more|nothing else)\b/i;
+
+/* ------------------------------------------------------------- voice mode
+   A fixed question tree, run entirely on the phone: no model, no API call, no
+   cost, and no reason for it to close while you walk to a shelf. It ends when
+   you say so, or when you tap the button. */
+const ATTRS = {
+  driver:    [["Are the pins soldered on?", "pins soldered", "pins not soldered"],
+              ["Does it have a heat sink?", "with heat sink", "no heat sink"]],
+  mcu:       [["Are the headers soldered on?", "headers soldered", "headers loose"]],
+  sensor:    [["Are the headers soldered on?", "headers soldered", "headers loose"]],
+  interface: [["Are the headers soldered on?", "headers soldered", "headers loose"]],
+  power:     [["Are the wires attached?", "wired", "bare board"]],
+};
+
+let voiceOn = false, voiceLog = [];
+
+function voiceBanner(text, sub){
+  let el = document.getElementById("vbanner");
+  if(!voiceOn){ el?.remove(); return; }
+  if(!el){
+    el = document.createElement("div");
+    el.id = "vbanner";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="vtext">${esc(text)}</div>
+    <div class="vsub">${esc(sub || "")}</div>
+    <button id="vstop">Stop</button>`;
+  el.querySelector("#vstop").onclick = () => stopVoice("Stopped.");
+}
+
+/** Wait for one spoken answer. No timeout — silence is expected. */
+function hear(){
+  return new Promise(resolve => {
+    let settled = false;
+    onHeard = ({final, interim}) => {
+      if(interim) voiceBanner(document.querySelector("#vbanner .vtext")?.textContent || "",
+                              "…" + interim);
+      if(final && !settled){ settled = true; onHeard = null; resolve(final); }
+    };
+    if(!listen(() => {}, {continuous: true})) resolve(null);
+    // listen() replaced onHeard; put ours back.
+    onHeard = ({final, interim}) => {
+      if(interim) voiceBanner(document.querySelector("#vbanner .vtext")?.textContent || "",
+                              "…" + interim);
+      if(final && !settled){ settled = true; onHeard = null; resolve(final); }
+    };
+  });
+}
+
+async function ask(question, sub){
+  voiceBanner(question, sub);
+  await say(question);
+  if(!voiceOn) return null;
+  const answer = await hear();
+  if(!voiceOn) return null;
+  if(answer && STOP_WORDS.test(answer)){ await stopVoice("Okay, stopping."); return null; }
+  return answer;
+}
+
+async function startVoice(){
+  if(voiceOn) return stopVoice("Stopped.");
+  if(!speechAvailable()){
+    toast("No speech here — open the app in Chrome, or type it");
+    return;
+  }
+  voiceOn = true; voiceLog = [];
+  document.getElementById("say")?.classList.add("live");
+  await say("Voice mode on. Which part?");
+
+  while(voiceOn){
+    const spoken = await ask("Which part?", "say a part name, or “stop”");
+    if(!voiceOn || !spoken) break;
+
+    const guess = spokenPartName(spoken);
+    const hits = active().map(i => [i, matchScore(guess, i)])
+      .filter(p => p[1] >= 0.5)
+      .sort((a,b) => b[1]-a[1] || a[0].name.length-b[0].name.length);
+    const found = hits[0]?.[0] || null;
+
+    // Attribute questions, from the part's own category — a note, not a new part.
+    const notes = [];
+    const cat = found ? found.category : "misc";
+    for(const [q, yes, no] of (ATTRS[cat] || [])){
+      const a = await ask(q, "yes or no");
+      if(!voiceOn) return;
+      if(a && YES.test(a)) notes.push(yes);
+      else if(a && NO.test(a)) notes.push(no);
+    }
+
+    let box = found ? found.box : null;
+    if(box === null){
+      const free = (SEED.freeBoxes || []).filter(f => f.box < 400)[0];
+      const a = await ask(`I do not have ${guess}. Which box number?`,
+                          free ? `free: ${free.box}` : "");
+      if(!voiceOn) return;
+      box = spokenNumber(a || "") ?? (free ? free.box : null);
+      if(box === null){ await say("I did not catch a box number. Skipping."); continue; }
+    }
+
+    const recorded = found
+      ? (found.countType === "exact" ? found.qty : "many")
+      : null;
+    const a = await ask(
+      found ? `${found.name}, box ${box}. I have ${recorded}. How many now?`
+            : `New part in box ${box}. How many?`,
+      "say the total in the box");
+    if(!voiceOn) return;
+
+    let qty = spokenNumber(a || "");
+    if(a && /\b(many|a pile|lots|loads|uncounted)\b/i.test(a)) qty = "many";
+    if(qty === null){ await say("I did not catch a number. Skipping that one."); continue; }
+
+    try{
+      const res = await fetch("/quickadd", {method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({name: found ? found.name : guess, box,
+                              qty, note: notes.join("; ")})});
+      const out = await res.json();
+      if(!res.ok) throw new Error(out.error || res.status);
+      voiceLog.push(`${out.name} = ${qty} in box ${out.box}`);
+      await refreshSeed();
+      await say(`Logged. ${out.name}, ${qty === "many" ? "a pile" : qty} in box ${out.box}.`);
+    }catch(err){
+      await say("I could not save that.");
+      toast("Save failed: " + err.message);
+    }
+    if(!voiceOn) return;
+
+    const more = await ask("Anything else?", "say a part name, or “stop”");
+    if(!voiceOn || !more) break;
+    if(NO.test(more) || STOP_WORDS.test(more)) break;
+    // Treat anything else as the next part rather than making you repeat it.
+    if(!YES.test(more)){
+      // reuse the answer by looping with it already spoken
+      voiceLog.push("");   // marker only
+      // fall through: the next loop asks again; keeping this simple beats
+      // guessing wrong about what was said.
+    }
+  }
+  await stopVoice();
+}
+
+async function stopVoice(finalWord){
+  const wasOn = voiceOn;
+  voiceOn = false;
+  stopListening();
+  onHeard = null;
+  document.getElementById("say")?.classList.remove("live");
+  document.getElementById("vbanner")?.remove();
+  if(wasOn){
+    const done = voiceLog.filter(Boolean);
+    if(finalWord) await say(finalWord);
+    toast(done.length ? `Voice mode: ${done.length} logged` : "Voice mode off");
+  }
+}
 
 /* ------------------------------------------------------- typed / spoken add
    For a part you can name, this is the whole pipeline: it matches against the
@@ -1511,11 +1757,30 @@ function setupCamera(){
 
   // For a part you can name, typing beats photographing it — no vision call,
   // no waiting, and it works with no credit on any account.
-  const say = document.createElement("button");
-  say.id = "say"; say.title = "Type or say a part name";
-  say.innerHTML = `<span>⌨️</span>`;
-  say.onclick = () => showAdd();
-  document.body.appendChild(say);
+  const sayBtn = document.createElement("button");
+  sayBtn.id = "say"; sayBtn.title = "Type a part name — hold for voice mode";
+  sayBtn.innerHTML = `<span>⌨️</span>`;
+  document.body.appendChild(sayBtn);
+
+  // Tap types, hold talks. Voice mode is the bigger commitment of the two, so
+  // it is the deliberate gesture.
+  let holdTimer = null, wentVoice = false;
+  const armHold = () => {
+    wentVoice = false;
+    holdTimer = setTimeout(() => {
+      wentVoice = true;
+      if(navigator.vibrate) navigator.vibrate(30);
+      startVoice();
+    }, 550);
+  };
+  const releaseHold = ev => {
+    clearTimeout(holdTimer);
+    if(!wentVoice){ ev.preventDefault(); showAdd(); }
+  };
+  sayBtn.addEventListener("touchstart", armHold, {passive:true});
+  sayBtn.addEventListener("touchend", releaseHold);
+  sayBtn.addEventListener("mousedown", armHold);
+  sayBtn.addEventListener("mouseup", releaseHold);
 
   const paint = () => {
     btn.querySelector(".n")?.remove();

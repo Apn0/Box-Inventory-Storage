@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Voice entry. Asked for at the moment you first use it, not on install. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- The camera is opened through the phone's own camera app, so this app
          never needs the CAMERA permission itself. Declaring it would actually
@@ -19,6 +21,13 @@
         <intent>
             <action android:name="android.intent.action.GET_CONTENT" />
             <data android:mimeType="image/*" />
+        </intent>
+        <!-- Without this, SpeechRecognizer reports no recogniser on API 30+. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 

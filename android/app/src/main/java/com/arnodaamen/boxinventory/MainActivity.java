@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -45,6 +46,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> pendingCallback;
     private Uri pendingCameraUri;
+    private SpeechBridge speech;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +80,11 @@ public class MainActivity extends Activity {
                 if (req.isForMainFrame()) showUnreachable();
             }
         });
+
+        // Speech for the page. Safe to expose because this WebView only ever
+        // loads the one address you configure — it is not a general browser.
+        speech = new SpeechBridge(this, web);
+        web.addJavascriptInterface(speech, "AndroidSpeech");
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -272,6 +279,31 @@ public class MainActivity extends Activity {
             pendingCallback = null;
         }
         pendingCameraUri = null;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        if (requestCode == SpeechBridge.requestCode()) {
+            boolean granted = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            speech.onPermissionResult(granted);
+            return;
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (speech != null) speech.release();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onPause() {
+        // Do not hold the microphone while the app is in the background.
+        if (speech != null) speech.stop();
+        super.onPause();
     }
 
     // --------------------------------------------------------------- back

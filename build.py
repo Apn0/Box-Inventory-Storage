@@ -3,7 +3,7 @@
 Build the Box Inventory app.
 
 Reads  data/inventory_raw.csv   (verbatim export of the Google Sheet)
-Writes data/inventory.json      (normalised, resolved, categorised)
+Writes data/inventory.json      (normalized, resolved, categorised)
        index.html               (single-file offline app, data injected)
 
 Run:  python build.py
