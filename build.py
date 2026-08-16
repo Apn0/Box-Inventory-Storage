@@ -20,6 +20,7 @@ import unicodedata
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
+FORM_CSV = ROOT / "data" / "form_responses.csv"
 OUT_JSON = ROOT / "data" / "inventory.json"
 TEMPLATE = ROOT / "src" / "app.template.html"
 OUT_HTML = ROOT / "index.html"
@@ -149,8 +150,41 @@ def main() -> int:
                     "qty_txt": (row.get("Qty") or "").strip(),
                     "note": (row.get("Note") or "").strip(),
                     "date": parse_date(row.get("UpdatedAt") or ""),
+                    "time": "00:00:00",
+                    "src": 0,
                 }
             )
+
+    # Rows written through the Google Form (phone counts, photo confirms).
+    # They carry a real time of day, so a form write on the same day as a
+    # hand edit deliberately wins; being deliberate recounts, they are also
+    # exempt from the ambiguity flag. Same rules as the JS resolver in
+    # src/app.template.html — keep the two in step.
+    if FORM_CSV.exists():
+        with FORM_CSV.open(newline="", encoding="utf-8-sig") as fh:
+            for line_no, row in enumerate(csv.DictReader(fh), start=2):
+                box_txt = (row.get("Box") or "").strip()
+                name = (row.get("Item") or "").strip()
+                if not box_txt or not name or not box_txt.lstrip("-").isdigit():
+                    continue
+                ts = (row.get("Timestamp") or "").strip()
+                date_part, _, time_part = ts.partition(" ")
+                try:
+                    date = parse_date(date_part)
+                except ValueError:
+                    date = None
+                raw_rows.append(
+                    {
+                        "line": line_no,
+                        "box": int(box_txt),
+                        "name": name,
+                        "qty_txt": (row.get("Qty") or "").strip(),
+                        "note": (row.get("Note") or "").strip(),
+                        "date": date,
+                        "time": time_part or "00:00:01",
+                        "src": 1,
+                    }
+                )
 
     # ---- group into one record per (box, item), newest row wins -------------
     groups: dict[tuple[int, str], list[dict]] = {}
@@ -160,7 +194,8 @@ def main() -> int:
 
     items = []
     for (box, key_slug), history in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
-        history.sort(key=lambda r: (r["date"] or "", r["line"]))
+        history.sort(key=lambda r: (r["date"] or "", r.get("time", "00:00:00"),
+                                    r.get("src", 0), r["line"]))
         latest = history[-1]
 
         if not latest["name"]:
@@ -173,7 +208,8 @@ def main() -> int:
         # Differing quantities normally mean the sheet contradicts itself. A row
         # identify.py wrote is a deliberate recount, not an ambiguity — it says
         # so in its Note, so it must not raise a false flag on every photo filed.
-        deliberate = COUNTED_MARK in (latest["note"] or "").lower()
+        deliberate = (latest.get("src", 0) == 1
+                      or COUNTED_MARK in (latest["note"] or "").lower())
         conflict = len(history) > 1 and len(distinct) > 1 and not deliberate
 
         qty_txt = latest["qty_txt"]

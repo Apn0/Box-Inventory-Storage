@@ -16,10 +16,14 @@ import sys
 import urllib.request
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+BOX_GID = 788564724       # the BOX tab — the historical append log
+FORM_GID = 677102738      # "Form responses 1" — rows written through the app
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={BOX_GID}"
+FORM_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={FORM_GID}"
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
+FORM_CSV = ROOT / "data" / "form_responses.csv"
 
 
 def main() -> int:
@@ -47,6 +51,18 @@ def main() -> int:
 
     RAW.write_bytes(body)
     print(f"wrote {RAW}  ({rows} lines)")
+
+    # The form tab holds every row the app wrote. Replacing the local mirror
+    # with the cloud copy is safe: the cloud is the superset (post_to_form
+    # mirrors locally only after the cloud accepted the row).
+    try:
+        with urllib.request.urlopen(FORM_URL, timeout=60) as r:
+            form_body = r.read()
+        if form_body.decode("utf-8-sig", errors="replace").startswith("Timestamp"):
+            FORM_CSV.write_bytes(form_body)
+            print(f"wrote {FORM_CSV}  ({form_body.count(b'\\n') + 1} lines)")
+    except Exception as exc:                           # noqa: BLE001
+        print(f"form tab skipped: {exc}")
 
     return subprocess.call([sys.executable, str(ROOT / "build.py")])
 

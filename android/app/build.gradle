@@ -17,8 +17,8 @@ android {
         // The page also pads itself with env(safe-area-inset-*) for browsers that
         // go edge-to-edge regardless.
         targetSdk 34
-        versionCode 5
-        versionName "1.4"
+        versionCode 6
+        versionName "2.0"
     }
 
     buildTypes {

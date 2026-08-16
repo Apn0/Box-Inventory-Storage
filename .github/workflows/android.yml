@@ -3,7 +3,9 @@ name: Build APK
 on:
   push:
     branches: [main]
-    paths: ['android/**', '.github/workflows/android.yml']
+    # The page is bundled into the APK, so a page change is an APK change.
+    paths: ['android/**', 'src/**', 'build.py', 'data/inventory_raw.csv',
+            'data/form_responses.csv', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:
@@ -14,6 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Build the page and bundle it into the APK. The snapshot baked in here is
+      # only the first paint — the page fetches the live sheet right after boot.
+      - name: Build index.html and bundle it as an asset
+        run: |
+          python3 build.py
+          mkdir -p android/app/src/main/assets
+          cp index.html android/app/src/main/assets/index.html
+          ls -la android/app/src/main/assets/
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5

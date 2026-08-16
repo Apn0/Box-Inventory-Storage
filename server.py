@@ -38,6 +38,8 @@ INBOX = ROOT / "data" / "inbox"
 REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
+SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
 ACCENT = (29, 92, 255)
@@ -216,6 +218,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     "confirm": identify.load_pending(),
                                     "changes": changes[-12:][::-1],
                                     "activity": recent})
+
+        # CSV of one sheet tab, fetched server-side. docs.google.com sends no
+        # CORS headers, so a served page cannot read it directly — this makes
+        # the read same-origin. Locked to our sheet: gid is the only input.
+        if path == "/proxy":
+            import urllib.parse
+            import urllib.request
+            qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            gid = (qs.get("gid") or [""])[0]
+            if not gid.isdigit():
+                return self._json(400, {"error": "gid must be a number"})
+            url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+                   f"/export?format=csv&gid={gid}")
+            try:
+                with urllib.request.urlopen(url, timeout=20) as r:
+                    body = r.read()
+            except Exception as exc:                   # noqa: BLE001
+                return self._json(502, {"error": str(exc)[:200]})
+            return self._send(200, body, "text/csv; charset=utf-8")
 
         # the freshly built inventory, so the page can update without a reload
         if path == "/data/inventory.json":

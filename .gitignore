@@ -3,6 +3,7 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+android/app/src/main/assets/index.html   # copied in by CI from the built page
 *.apk
 
 # photos and queue — your parts, not the project's

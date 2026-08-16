@@ -492,6 +492,44 @@ def save_pending(entries: list[dict]) -> None:
     PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+FORM_ACTION = ("https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9k"
+               "EePiOvndgu1jlUsIQ/formResponse")
+FORM_ENTRIES = {"box": "entry.2127766863", "name": "entry.957000781",
+                "qty": "entry.971108864", "note": "entry.1227292805"}
+FORM_MIRROR = ROOT / "data" / "form_responses.csv"
+
+
+def post_to_form(box: int, name: str, qty, note: str) -> bool:
+    """Append the row to the Google Sheet via the form — the same write path the
+    phone uses, so every count lands in the cloud regardless of which device
+    made it. Returns False (rather than raising) when offline."""
+    import urllib.parse
+    import urllib.request
+
+    data = urllib.parse.urlencode({
+        FORM_ENTRIES["box"]: str(box), FORM_ENTRIES["name"]: name,
+        FORM_ENTRIES["qty"]: str(qty), FORM_ENTRIES["note"]: note or "",
+    }).encode("utf-8")
+    try:
+        with urllib.request.urlopen(
+                urllib.request.Request(FORM_ACTION, data=data), timeout=20) as r:
+            ok = 200 <= r.status < 300
+    except Exception:                                  # noqa: BLE001 - offline is normal
+        return False
+    if ok:
+        # Mirror it locally at once: the rebuild that follows must see this row
+        # now, not whenever the sheet export next gets fetched.
+        FORM_MIRROR.parent.mkdir(parents=True, exist_ok=True)
+        new = not FORM_MIRROR.exists()
+        with FORM_MIRROR.open("a", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh, lineterminator="\r\n")
+            if new:
+                w.writerow(["Timestamp", "Box", "Item", "Qty", "Note"])
+            w.writerow([datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                        box, name, qty, note or ""])
+    return ok
+
+
 def commit(entry: dict, qty, box: int | None = None, name: str | None = None) -> dict:
     """Write the count the user confirmed. Their number is the truth, not a sum.
 
@@ -518,9 +556,12 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
         if src.exists():
             shutil.move(str(src), str(archive_name(box, name, src.suffix.lower())))
 
-    append_rows([{"box": box, "name": name,
-                  "quantity": "many" if qty in (None, "many") else int(qty),
-                  "note": note}])
+    quantity = "many" if qty in (None, "many") else int(qty)
+    # The sheet is the database: write there first, exactly like the phone does.
+    # Only when offline does the row go to the local CSV instead — sync.py
+    # reconciles later, and a duplicate is a harmless restatement.
+    if not post_to_form(box, name, quantity, note):
+        append_rows([{"box": box, "name": name, "quantity": quantity, "note": note}])
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
     return {"box": box, "name": name, "quantity": qty}
 

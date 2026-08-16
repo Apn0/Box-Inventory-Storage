@@ -28,27 +28,32 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 /**
- * A WebView around the Box Inventory app served by server.py on the PC.
+ * A WebView around the Box Inventory app, bundled in the APK.
  *
- * The only thing this shell adds over a browser tab is file-chooser plumbing:
- * a WebView does not handle <input type="file"> at all unless the host app
- * implements onShowFileChooser, so the camera button in the page would silently
- * do nothing without the code below.
+ * The page talks to the Google Sheet directly (CSV export to read, a Form to
+ * write), so it works anywhere with internet and needs no server. The PC's
+ * server.py is optional and only for photo identification; its address is
+ * configurable from the menu.
+ *
+ * What the shell adds over a browser tab: file-chooser plumbing (a WebView does
+ * not handle <input type="file"> at all without onShowFileChooser) and the
+ * on-device speech bridge (a WebView has no Web Speech API).
  */
 public class MainActivity extends Activity {
 
     private static final String PREFS = "boxinventory";
     private static final String KEY_URL = "server_url";
     private static final String DEFAULT_URL = "http://192.168.1.140:8781";
+    private static final String APP_URL = "file:///android_asset/index.html";
     private static final int REQ_FILE = 1001;
 
     private WebView web;
     private ValueCallback<Uri[]> pendingCallback;
     private Uri pendingCameraUri;
     private SpeechBridge speech;
-    /** Set once we have already retried from cache, so a miss cannot loop. */
-    private boolean triedCache;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,10 +71,13 @@ public class MainActivity extends Activity {
         s.setUseWideViewPort(true);
         s.setSupportZoom(false);
         s.setMediaPlaybackRequiresUserGesture(false);
-        // The page is served from the PC; there is no reason to let it read the
-        // phone's filesystem.
-        s.setAllowFileAccess(false);
+        // The app ships inside the APK and talks to Google Sheets itself, so the
+        // asset page needs cross-origin XHR. Universal access is scoped to
+        // file:// pages, and the only file:// page this WebView ever loads is
+        // our own asset — it is not a general browser.
+        s.setAllowFileAccess(false);      // assets stay readable regardless
         s.setAllowContentAccess(false);
+        s.setAllowUniversalAccessFromFileURLs(true);
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -79,30 +87,18 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
-                if (!req.isForMainFrame()) return;
-                // The PC is off, or you are away from the network. Rather than a
-                // dead app, fall back to the cached copy: reading the inventory
-                // in a shop is the case this matters for. Writing needs the
-                // server, and the page already reports when a save fails.
-                if (!triedCache) {
-                    triedCache = true;
-                    v.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ONLY);
-                    v.loadUrl(serverUrl());
-                    return;
-                }
-                showUnreachable();
+                // The app ships in the APK; only a broken build fails here.
+                if (req.isForMainFrame()) showUnreachable();
             }
 
             @Override
             public void onPageFinished(WebView v, String url) {
-                if (triedCache) {
-                    v.evaluateJavascript(
-                        "window.__offline = true;"
-                        + "document.body && (document.body.insertAdjacentHTML('afterbegin',"
-                        + "'<div style=\"background:#b06f00;color:#fff;padding:7px 12px;"
-                        + "font:600 13px system-ui;text-align:center\">Offline — last known"
-                        + " counts, changes will not save</div>'));", null);
-                }
+                // Tell the page where the photo server lives (menu-configurable).
+                // The page's own default matches, so a first launch works too.
+                v.evaluateJavascript(
+                    "window.BOXINV_SERVER=" + JSONObject.quote(serverUrl()) + ";"
+                    + "try{localStorage.setItem('boxinv.server',window.BOXINV_SERVER)}catch(e){}",
+                    null);
             }
         });
 
@@ -121,7 +117,9 @@ public class MainActivity extends Activity {
             }
         });
 
-        web.loadUrl(serverUrl());
+        // The app is bundled: it starts instantly, works anywhere with internet
+        // (Google Sheet directly), and probes the PC only for photo features.
+        web.loadUrl(APP_URL);
     }
 
     // ------------------------------------------------------------- settings
@@ -146,19 +144,19 @@ public class MainActivity extends Activity {
         box.addView(field);
 
         new AlertDialog.Builder(this)
-                .setTitle("Server address")
-                .setMessage("Where server.py is running.\n"
-                        + "At home: the PC's LAN address.\n"
-                        + "Away: its Meshnet address.")
+                .setTitle("Photo server address")
+                .setMessage("Only photo identification needs the PC.\n"
+                        + "Counts and search talk to the Google Sheet directly.\n"
+                        + "At home: the PC's LAN address. Away: its Meshnet address.")
                 .setView(box)
-                .setPositiveButton("Connect", (d, w) -> {
+                .setPositiveButton("Save", (d, w) -> {
                     String url = field.getText().toString().trim();
                     if (url.isEmpty()) return;
                     if (!url.startsWith("http://") && !url.startsWith("https://")) {
                         url = "http://" + url;
                     }
                     prefs().edit().putString(KEY_URL, url).apply();
-                    web.loadUrl(url);
+                    web.loadUrl(APP_URL);   // reload so the page re-probes it
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -170,11 +168,9 @@ public class MainActivity extends Activity {
         t.setPadding(pad, pad * 3, pad, pad);
         t.setTextColor(Color.parseColor("#E8ECF3"));
         t.setTextSize(15f);
-        t.setText("Cannot reach\n" + serverUrl() + "\n\n"
-                + "· is server.py running on the PC?\n"
-                + "· is the phone on the same WiFi (or Meshnet)?\n"
-                + "· a VPN on either side can block it\n\n"
-                + "Menu → Server address to change it.");
+        t.setText("The app page failed to load from the APK.\n\n"
+                + "That should not happen — reinstall the latest build.\n"
+                + "Menu → Reload to try again.");
 
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
@@ -188,7 +184,7 @@ public class MainActivity extends Activity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(0, 1, 0, "Reload");
-        menu.add(0, 2, 1, "Server address");
+        menu.add(0, 2, 1, "Photo server address");
         return true;
     }
 
@@ -196,9 +192,7 @@ public class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == 1) {
             setContentView(web);
-            triedCache = false;                       // try the server again
-            web.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
-            web.loadUrl(serverUrl());
+            web.loadUrl(APP_URL);
             return true;
         }
         if (item.getItemId() == 2) {

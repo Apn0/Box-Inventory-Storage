@@ -780,9 +780,9 @@
       "peak": 6,
       "countType": "exact",
       "status": "active",
-      "note": "Purple PCB with header pins. Marking: TMC2209. (photo-counted)",
+      "note": "restatement test via form (photo-counted)",
       "category": "driver",
-      "updated": "2026-08-15",
+      "updated": "2026-08-16",
       "conflict": false,
       "restated": false,
       "history": [
@@ -793,8 +793,8 @@
         },
         {
           "qty": "6",
-          "date": "2026-08-15",
-          "note": "Purple PCB with header pins. Marking: TMC2209. (photo-counted)"
+          "date": "2026-08-16",
+          "note": "restatement test via form (photo-counted)"
         }
       ]
     },
