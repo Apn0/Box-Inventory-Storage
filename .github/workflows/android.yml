@@ -51,9 +51,11 @@ jobs:
         run: |
           v=$(grep -oP 'versionName\s+"\K[^"]+' android/app/build.gradle)
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          # Version in the filename, so the phone shows which build it is
-          # downloading rather than an opaque run number.
-          echo "file=box-inventory-v${v}-${GITHUB_RUN_NUMBER}.apk" >> "$GITHUB_OUTPUT"
+          # Fixed filename on purpose: gh release upload --clobber only replaces
+          # an asset with the SAME name. A name that varied per run (it used to
+          # include GITHUB_RUN_NUMBER) meant every push added a new asset instead
+          # of replacing one, and the release silently accumulated stale APKs.
+          echo "file=box-inventory.apk" >> "$GITHUB_OUTPUT"
 
       # Deliberately NOT actions/upload-artifact: this account's Actions artifact
       # storage is full, and an artifact is a zip Android cannot install anyway.
@@ -72,4 +74,4 @@ jobs:
             gh release create latest --title "Latest APK" --notes "Rolling debug build."
           gh release upload latest "${{ steps.name.outputs.file }}" --clobber
           gh release edit latest \
-            --notes "Debug build of commit ${GITHUB_SHA:0:7} (v${{ steps.name.outputs.version }}). Install on the phone, then set the server address from the menu."
+            --notes "Debug build of commit ${GITHUB_SHA:0:7} (v${{ steps.name.outputs.version }}, run ${GITHUB_RUN_NUMBER}). Install on the phone, then set the server address from the menu."
