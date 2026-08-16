@@ -44,7 +44,9 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: gradle assembleDebug --no-daemon --stacktrace
+        # versionCode must strictly increase every install, or a phone that
+        # already has an older build just keeps it instead of updating.
+        run: gradle assembleDebug --no-daemon --stacktrace -PappVersionCode=${{ github.run_number }}
 
       - name: Name the artifact
         id: name

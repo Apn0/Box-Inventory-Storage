@@ -1360,7 +1360,7 @@ function wire(){
   v.querySelectorAll("[data-clearbox]").forEach(b => b.onclick = () => { ui.box = null; render(); });
   v.querySelectorAll("[data-onlybox]").forEach(b => b.onclick = () => {
     ui.box = Number(b.dataset.onlybox); ui.open = null; ui.tab = "find"; render(); });
-  v.querySelectorAll("[data-add]").forEach(b => b.onclick = addItem);
+  v.querySelectorAll("[data-add]").forEach(b => b.onclick = () => showAdd());
 
   const ed = v.querySelector(".editor");
   if(ed){
@@ -1469,21 +1469,6 @@ function wire(){
     };
     r.readAsText(f);
   };
-}
-
-function addItem(){
-  const name = prompt("Part name?"); if(!name) return;
-  const box = Number(prompt("Which box number?")); if(!box) return;
-  const qty = Number(prompt("How many? (blank = uncounted)", "1"));
-  const it = {
-    id: "new-" + Date.now(), box, name: name.trim(),
-    qty: isNaN(qty) ? null : qty, countType: isNaN(qty) ? "unknown" : "exact",
-    note: "", category: "misc", updated: new Date().toISOString().slice(0,10),
-    conflict:false, restated:false, history:[]
-  };
-  overlay.added.push(it); journal({id:it.id, label:"add", patch:it});
-  save(); rebuild(); ui.box = null; ui.q = ""; ui.open = it.id; render();
-  toast("Added to box " + box);
 }
 
 /* ------------------------------------------------------------------ camera
