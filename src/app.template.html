@@ -1472,10 +1472,9 @@ function wire(){
 }
 
 /* ------------------------------------------------------------------ camera
-   Present only when the page is served by server.py. Opened from file:// there
-   is no PC to send the photo to, so the button never appears. */
+   Identification runs in the cloud (see setupCamera below) — this flag only
+   decides whether to add a browser install manifest link. */
 const SERVED = location.protocol === "http:" || location.protocol === "https:";
-let pending = 0;
 
 /* ------------------------------------------------------- speech (local)
    Dictation uses the browser's own recognizer. In Chrome on Android that runs
@@ -1991,6 +1990,7 @@ function askCount(q){
       showConfirm();
     } else {
       wrap.remove();
+      if(typeof q.then === "function") q.then(null);
     }
   };
 }
@@ -2059,16 +2059,14 @@ async function appendRow({name, box, qty, note, prev}){
   return false;
 }
 
-async function setupCamera(){
-  // Photos need the PC: the vision call and the review queue live there. From
-  // the APK (file://) the server may still be reachable over LAN or Meshnet —
-  // probe rather than assume either way. Counts never need the server.
-  if(!SERVED){
-    try{
-      const r = await fetch(serverBase() + "/inbox", {signal: AbortSignal.timeout(3500)});
-      if(!r.ok) return;
-    }catch(e){ return; }
-  } else {
+// Photo identification runs in the cloud, not on any PC — a stateless service
+// that reads the live sheet, asks Vertex to identify the photo, and returns a
+// proposal. It writes nothing itself; the phone confirms and appends to the
+// sheet exactly like a typed entry (see askCount). No PC needs to be running.
+const IDENTIFY_URL = "https://box-identify-463126624138.us-central1.run.app/identify";
+
+function setupCamera(){
+  if(SERVED){
     const link = document.createElement("link");
     link.rel = "manifest"; link.href = "/manifest.webmanifest";
     document.head.appendChild(link);
@@ -2126,77 +2124,39 @@ async function setupCamera(){
   sayBtn.addEventListener("mousedown", armHold);
   sayBtn.addEventListener("mouseup", releaseHold);
 
-  const paint = () => {
-    btn.querySelector(".n")?.remove();
-    if(pending > 0){
-      const n = document.createElement("span");
-      n.className = "n"; n.textContent = pending;
-      btn.appendChild(n);
-    }
-  };
-
   // A plain click handler: on Android a tap also synthesises mousedown/mouseup,
   // so listening to touch *and* mouse events fired the picker twice.
   btn.onclick = () => { camInput.value = ""; camInput.click(); };
   gal.onclick = () => { galInput.value = ""; galInput.click(); };
 
+  // One photo at a time, straight to the cloud, straight into the same count
+  // sheet a typed entry uses (askCount is called with no q.id, so it writes
+  // through appendRow — no server round trip involved at all).
   const upload = async (input) => {
     const files = [...input.files];
     if(!files.length) return;
     btn.dataset.busy = gal.dataset.busy = "1";
-    let sent = 0;
     for(const f of files){
+      toast("Identifying…");
       try{
-        const res = await fetch(serverBase() + "/upload", {
+        const res = await fetch(IDENTIFY_URL, {
           method: "POST",
           headers: {"X-Filename": f.name || "photo.jpg",
-                    "Content-Type": f.type || "application/octet-stream"},
+                    "Content-Type": f.type || "image/jpeg"},
           body: f,
         });
         const out = await res.json();
         if(!res.ok) throw new Error(out.error || res.status);
-        pending = out.pending ?? pending + 1;
-        sent++;
+        await new Promise(resolve => askCount(Object.assign({}, out, {then: resolve})));
       }catch(err){
-        toast("Upload failed: " + err.message);
-        break;
+        toast("Could not identify: " + err.message);
       }
     }
     delete btn.dataset.busy; delete gal.dataset.busy;
-    paint();
-    if(sent) toast(`${sent} photo${sent===1?"":"s"} sent · ${pending} waiting`);
   };
 
   camInput.onchange = () => upload(camInput);
   galInput.onchange = () => upload(galInput);
-
-  // Watch the queue and say what actually happened. Before this the toast said
-  // "1 waiting" and then nothing ever changed, because identification only ran
-  // when it was started by hand.
-  let lastSeen = null, idle = 0;
-  const poll = async () => {
-    try{
-      const d = await (await fetch(serverBase() + "/inbox")).json();
-      confirmQueue = d.confirm || [];
-      pending = (d.pending || []).length + (d.working || 0) + confirmQueue.length;
-      paint();
-      showConfirm();                       // ask as soon as there is something to ask
-
-      const acts = d.activity || [];
-      const settled = acts.filter(a => a.state !== "working");
-      const newest = settled[settled.length - 1];
-      if(newest && newest.at !== lastSeen){
-        if(lastSeen !== null && newest.state === "failed"){
-          toast(`Could not identify: ${(newest.error||"").slice(0,60)}`);
-        }
-        lastSeen = newest.at;
-      }
-      // Poll briskly while something is in flight, then back off to a heartbeat.
-      idle = (pending > 0 || (d.working || 0) > 0) ? 0 : Math.min(idle + 1, 12);
-    }catch(e){ idle = Math.min(idle + 1, 12); }
-    setTimeout(poll, idle > 6 ? 15000 : 2500);
-  };
-  poll();
 }
 
 /* ------------------------------------------------------------------- boot */

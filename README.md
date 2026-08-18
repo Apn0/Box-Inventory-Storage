@@ -77,11 +77,20 @@ The form's action URL and entry IDs live at the top of `src/app.template.html`
 (`SHEET`) and in `identify.py` (`FORM_ACTION`, `FORM_ENTRIES`). If the form is
 ever recreated, both change.
 
-**What still needs the PC:** photo identification only. The app probes
-`server.py` and shows the camera buttons only when it answers; its address is
-in the APK menu (LAN at home, Meshnet away). `sync.py` pulls both tabs and
-`server.py`'s own writes go to the same form, mirroring locally, so the CSV in
-this repo is a cache, not the truth.
+**Nothing needs the PC anymore (2026-08-18).** Photo identification is a
+stateless Cloud Run service (`main.py`, deployed as `box-identify` on the
+`peterfrissen123@gmail.com` / `deft-melody-503207-k8` project — the account
+holding the Vertex credits). The camera button posts straight to
+`https://box-identify-463126624138.us-central1.run.app/identify`, which
+re-fetches the live sheet, runs the same resolver as `build.py`, asks Vertex
+to identify the photo, and returns a proposal. It writes nothing itself — the
+phone confirms the count and appends to the sheet exactly like a typed entry.
+No probing, no PC reachability check, works anywhere with internet.
+
+`server.py`/`identify.py` still work as a local/offline fallback (e.g. bulk
+filing many photos at once from the desktop) but the phone app no longer
+depends on either. `sync.py` still pulls both tabs so the CSV in this repo
+stays a readable cache, not the source of truth.
 
 ## At the bench
 

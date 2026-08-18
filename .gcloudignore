@@ -1,0 +1,10 @@
+.git/
+android/
+.gradle/
+data/photos/
+data/inbox/
+data/review/
+data/ignored/
+*.apk
+__pycache__/
+*.pyc

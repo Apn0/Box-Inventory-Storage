@@ -21,3 +21,4 @@ data/inventory_raw.csv.*.bak
 
 __pycache__/
 *.pyc
+test_photo.jpg
