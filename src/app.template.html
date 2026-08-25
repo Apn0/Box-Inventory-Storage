@@ -849,7 +849,7 @@ function renderTabs(){
   const tabs = [["find","Find"],["boxes","Boxes"],["issues","To do"],["build","Build check"],
                 ["reorg","Reorganize"],["labels","Labels"],["data","Data"]];
   document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
-    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${label}${
+    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${esc(label)}${
       k==="issues" && n ? `<span class="badge">${n}</span>` : ""}</button>`).join("");
 }
 
