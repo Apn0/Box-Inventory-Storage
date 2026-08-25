@@ -277,12 +277,16 @@ def main() -> int:
 
     # ---- items whose name appears in more than one box ----------------------
     by_name: dict[str, list[int]] = {}
+    orig_name: dict[str, str] = {}
     for i in items:
         if i["status"] != "active":
             continue
-        by_name.setdefault(slug(i["name"]), []).append(i["box"])
+        k = slug(i["name"])
+        by_name.setdefault(k, []).append(i["box"])
+        if k not in orig_name:
+            orig_name[k] = i["name"]
     split_items = [
-        {"name": next(i["name"] for i in items if slug(i["name"]) == k), "boxes": sorted(set(v))}
+        {"name": orig_name[k], "boxes": sorted(set(v))}
         for k, v in by_name.items()
         if len(set(v)) > 1
     ]
