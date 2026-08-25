@@ -131,10 +131,10 @@ def container_of(box: int) -> str:
     return ("H" if base else "") + str(n)
 
 
-def main() -> int:
+def load_raw_rows() -> list[dict] | None:
     if not RAW.exists():
         print(f"missing {RAW}", file=sys.stderr)
-        return 1
+        return None
 
     raw_rows = []
     with RAW.open(newline="", encoding="utf-8-sig") as fh:
@@ -185,7 +185,10 @@ def main() -> int:
                         "src": 1,
                     }
                 )
+    return raw_rows
 
+
+def build_items(raw_rows: list[dict]) -> list[dict]:
     # ---- group into one record per (box, item), newest row wins -------------
     groups: dict[tuple[int, str], list[dict]] = {}
     for row in raw_rows:
@@ -255,8 +258,10 @@ def main() -> int:
                 else [],
             }
         )
+    return items
 
-    # ---- box-level facts ---------------------------------------------------
+
+def find_free_boxes(items: list[dict]) -> list[dict]:
     used_boxes = sorted({i["box"] for i in items})
     low = [b for b in used_boxes if b < 400]
     high = [b for b in used_boxes if b >= 400]
@@ -272,8 +277,10 @@ def main() -> int:
             if active_by_box.get(b, 0) == 0:
                 reason = "emptied" if b in used_boxes else "never used"
                 free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
+    return free_boxes
 
-    # ---- items whose name appears in more than one box ----------------------
+
+def find_split_items(items: list[dict]) -> list[dict]:
     by_name: dict[str, list[int]] = {}
     for i in items:
         if i["status"] != "active":
@@ -285,7 +292,26 @@ def main() -> int:
         if len(set(v)) > 1
     ]
     split_items.sort(key=lambda s: s["name"].lower())
+    return split_items
 
+
+def main() -> int:
+    raw_rows = load_raw_rows()
+    if raw_rows is None:
+        return 1
+
+    items = build_items(raw_rows)
+    free_boxes = find_free_boxes(items)
+    split_items = find_split_items(items)
+
+    if not write_outputs(raw_rows, items, free_boxes, split_items):
+        return 1
+
+    print_stats(raw_rows, items, free_boxes, split_items)
+    return 0
+
+
+def write_outputs(raw_rows: list[dict], items: list[dict], free_boxes: list[dict], split_items: list[dict]) -> bool:
     data = {
         "meta": {
             "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
@@ -307,10 +333,13 @@ def main() -> int:
     marker = "/*__INVENTORY_DATA__*/null"
     if marker not in template:
         print(f"template is missing the {marker} marker", file=sys.stderr)
-        return 1
+        return False
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     OUT_HTML.write_text(template.replace(marker, payload), encoding="utf-8")
+    return True
 
+
+def print_stats(raw_rows: list[dict], items: list[dict], free_boxes: list[dict], split_items: list[dict]) -> None:
     active = [i for i in items if i["status"] == "active"]
     print(f"raw rows        {len(raw_rows)}")
     print(f"merged records  {len(items)}  ({len(active)} active, {len(items) - len(active)} gone)")
@@ -325,7 +354,6 @@ def main() -> int:
     for n in uncat:
         print(f"   - {n}")
     print(f"\nwrote {OUT_JSON}\nwrote {OUT_HTML}")
-    return 0
 
 
 if __name__ == "__main__":
