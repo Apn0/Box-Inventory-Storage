@@ -18,6 +18,8 @@ import argparse
 import base64
 import collections
 import csv
+import typing
+import dataclasses
 import datetime
 import glob
 import io
@@ -304,21 +306,29 @@ def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
     return json.loads(choices[0]["message"]["content"])
 
 
-def identify(client, path: pathlib.Path, context: str, provider: str,
-             gemini_key: str | None, openai_key: str | None = None) -> dict | None:
+@dataclasses.dataclass
+class IdentifyConfig:
+    client: typing.Any
+    context: str
+    provider: str
+    gemini_key: str | None
+    openai_key: str | None = None
+
+
+def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
         print(f"  skipped — {path.suffix} is not a supported image type")
         return None
 
     data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-    prompt = f"Identify this part.\n\n{context}"
+    prompt = f"Identify this part.\n\n{config.context}"
 
-    if provider == "gemini":
-        return _gemini(data, media, prompt, gemini_key)
-    if provider == "openai":
-        return _openai(data, media, prompt, openai_key)
-    if provider == "vertex":
+    if config.provider == "gemini":
+        return _gemini(data, media, prompt, config.gemini_key)
+    if config.provider == "openai":
+        return _openai(data, media, prompt, config.openai_key)
+    if config.provider == "vertex":
         return _vertex(data, media, prompt, vertex_token())
 
     # provider == "auto": Vertex first — it spends the credits on the separate
@@ -327,9 +337,9 @@ def identify(client, path: pathlib.Path, context: str, provider: str,
     # a key being usable are different things.
     chain = [(f"vertex/{VERTEX_MODEL}",
               lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
-    chain.append(("claude", lambda: _claude(client, data, media, prompt), client))
-    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, gemini_key), gemini_key))
-    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, openai_key), openai_key))
+    chain.append(("claude", lambda: _claude(config.client, data, media, prompt), config.client))
+    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, config.gemini_key), config.gemini_key))
+    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, config.openai_key), config.openai_key))
 
     last: Exception | None = None
     for name, call, available in chain:
@@ -587,11 +597,17 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             pass
 
     outcomes, rows = [], []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=provider,
+        gemini_key=read_key("GOOGLE_API_KEY"),
+        openai_key=read_key("OPENAI_API_KEY")
+    )
     for path in paths:
         path = pathlib.Path(path)
         try:
-            result = identify(client, path, context, provider,
-                              read_key("GOOGLE_API_KEY"), read_key("OPENAI_API_KEY"))
+            result = identify(path, config)
         except Exception as exc:                          # noqa: BLE001
             outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
             continue
@@ -764,11 +780,18 @@ def main() -> int:
     data = load_inventory()
     context = context_for_prompt(data)
     accepted: list[dict] = []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=args.provider,
+        gemini_key=gemini_key,
+        openai_key=openai_key
+    )
 
     for path in paths:
         print(f"\n{path.name}")
         try:
-            result = identify(client, path, context, args.provider, gemini_key, openai_key)
+            result = identify(path, config)
         except Exception as exc:                     # noqa: BLE001 - report and continue
             print(f"  failed: {exc}")
             continue
