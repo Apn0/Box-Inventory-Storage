@@ -27,7 +27,6 @@ import shutil
 import socket
 import socketserver
 import struct
-import subprocess
 import sys
 import threading
 import zlib
