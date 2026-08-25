@@ -106,19 +106,41 @@ GEMINI_SCHEMA = {
 }
 
 
+_env_cache = None
+_env_mtime = 0.0
+
 def read_key(name: str) -> str | None:
+    global _env_cache, _env_mtime
     if not ENV.exists():
         return None
-    for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.strip().startswith(f"{name}="):
-            return line.split("=", 1)[1].strip() or None
-    return None
 
+    mtime = ENV.stat().st_mtime
+    if _env_cache is None or mtime > _env_mtime:
+        _env_cache = {}
+        for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                _env_cache[k.strip()] = v.strip() or None
+        _env_mtime = mtime
+
+    return _env_cache.get(name)
+
+
+_inventory_cache = None
+_inventory_mtime = 0.0
 
 def load_inventory() -> dict:
+    global _inventory_cache, _inventory_mtime
     if not INVENTORY.exists():
         sys.exit(f"missing {INVENTORY} — run build.py first")
-    return json.loads(INVENTORY.read_text(encoding="utf-8"))
+
+    mtime = INVENTORY.stat().st_mtime
+    if _inventory_cache is None or mtime > _inventory_mtime:
+        _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
+        _inventory_mtime = mtime
+
+    return _inventory_cache
 
 
 def context_for_prompt(data: dict) -> str:
