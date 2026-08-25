@@ -18,6 +18,8 @@ import argparse
 import base64
 import collections
 import csv
+import typing
+import dataclasses
 import datetime
 import glob
 import io
@@ -104,19 +106,41 @@ GEMINI_SCHEMA = {
 }
 
 
+_env_cache = None
+_env_mtime = 0.0
+
 def read_key(name: str) -> str | None:
+    global _env_cache, _env_mtime
     if not ENV.exists():
         return None
-    for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.strip().startswith(f"{name}="):
-            return line.split("=", 1)[1].strip() or None
-    return None
 
+    mtime = ENV.stat().st_mtime
+    if _env_cache is None or mtime > _env_mtime:
+        _env_cache = {}
+        for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                _env_cache[k.strip()] = v.strip() or None
+        _env_mtime = mtime
+
+    return _env_cache.get(name)
+
+
+_inventory_cache = None
+_inventory_mtime = 0.0
 
 def load_inventory() -> dict:
+    global _inventory_cache, _inventory_mtime
     if not INVENTORY.exists():
         sys.exit(f"missing {INVENTORY} — run build.py first")
-    return json.loads(INVENTORY.read_text(encoding="utf-8"))
+
+    mtime = INVENTORY.stat().st_mtime
+    if _inventory_cache is None or mtime > _inventory_mtime:
+        _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
+        _inventory_mtime = mtime
+
+    return _inventory_cache
 
 
 def context_for_prompt(data: dict) -> str:
@@ -144,7 +168,7 @@ def _part_numbers(name: str) -> set[str]:
     return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
 
 
-def find_existing(data: dict, name: str) -> dict | None:
+def find_existing(active: list[dict], name: str) -> dict | None:
     """The active record for this part, tolerating how the model words it.
 
     Vision models do not name a part identically twice — the same board came
@@ -152,7 +176,6 @@ def find_existing(data: dict, name: str) -> dict | None:
     Exact matching alone therefore files a second row for a part already on
     record, and the inventory drifts apart one photo at a time.
     """
-    active = [i for i in data["items"] if i["status"] == "active"]
     key = _norm(name)
 
     for item in active:                                   # exact wins
@@ -168,9 +191,8 @@ def find_existing(data: dict, name: str) -> dict | None:
     return None
 
 
-def suggest_box(data: dict, category: str) -> tuple[int, str]:
+def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    active = [i for i in data["items"] if i["status"] == "active"]
     per_box = collections.Counter(i["box"] for i in active)
 
     same_cat = sorted({i["box"] for i in active
@@ -225,7 +247,7 @@ def vertex_token() -> str | None:
     try:
         out = subprocess.run(
             ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
-            capture_output=True, text=True, timeout=60, shell=True)
+            capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return None
     token = out.stdout.strip()
@@ -304,21 +326,29 @@ def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
     return json.loads(choices[0]["message"]["content"])
 
 
-def identify(client, path: pathlib.Path, context: str, provider: str,
-             gemini_key: str | None, openai_key: str | None = None) -> dict | None:
+@dataclasses.dataclass
+class IdentifyConfig:
+    client: typing.Any
+    context: str
+    provider: str
+    gemini_key: str | None
+    openai_key: str | None = None
+
+
+def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
         print(f"  skipped — {path.suffix} is not a supported image type")
         return None
 
     data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-    prompt = f"Identify this part.\n\n{context}"
+    prompt = f"Identify this part.\n\n{config.context}"
 
-    if provider == "gemini":
-        return _gemini(data, media, prompt, gemini_key)
-    if provider == "openai":
-        return _openai(data, media, prompt, openai_key)
-    if provider == "vertex":
+    if config.provider == "gemini":
+        return _gemini(data, media, prompt, config.gemini_key)
+    if config.provider == "openai":
+        return _openai(data, media, prompt, config.openai_key)
+    if config.provider == "vertex":
         return _vertex(data, media, prompt, vertex_token())
 
     # provider == "auto": Vertex first — it spends the credits on the separate
@@ -327,9 +357,9 @@ def identify(client, path: pathlib.Path, context: str, provider: str,
     # a key being usable are different things.
     chain = [(f"vertex/{VERTEX_MODEL}",
               lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
-    chain.append(("claude", lambda: _claude(client, data, media, prompt), client))
-    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, gemini_key), gemini_key))
-    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, openai_key), openai_key))
+    chain.append(("claude", lambda: _claude(config.client, data, media, prompt), config.client))
+    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, config.gemini_key), config.gemini_key))
+    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, config.openai_key), config.openai_key))
 
     last: Exception | None = None
     for name, call, available in chain:
@@ -402,8 +432,11 @@ def decide(data: dict, result: dict) -> dict:
     would silently replace it with 1.
     """
     qty = max(0, int(result["quantity"]))
-    existing = find_existing(data, result["name"]) or (
-        find_existing(data, result["matches_existing"]) if result["matches_existing"] else None)
+
+    active = [i for i in data["items"] if i["status"] == "active"]
+
+    existing = find_existing(active, result["name"]) or (
+        find_existing(active, result["matches_existing"]) if result["matches_existing"] else None)
 
     if existing and existing["countType"] == "exact":
         total = int(existing["qty"]) + qty
@@ -415,7 +448,7 @@ def decide(data: dict, result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = suggest_box(data, result["category"])
+    box, why = suggest_box(data, active, result["category"])
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -543,7 +576,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
 
     # If the confirmed name matches something already on record, write against
     # that record's spelling and box so a variant name cannot fork the entry.
-    existing = find_existing(data, name)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    existing = find_existing(active, name)
     if existing:
         name, box = existing["name"], existing["box"]
 
@@ -587,11 +621,17 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             pass
 
     outcomes, rows = [], []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=provider,
+        gemini_key=read_key("GOOGLE_API_KEY"),
+        openai_key=read_key("OPENAI_API_KEY")
+    )
     for path in paths:
         path = pathlib.Path(path)
         try:
-            result = identify(client, path, context, provider,
-                              read_key("GOOGLE_API_KEY"), read_key("OPENAI_API_KEY"))
+            result = identify(path, config)
         except Exception as exc:                          # noqa: BLE001
             outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
             continue
@@ -615,8 +655,10 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             REVIEW.mkdir(parents=True, exist_ok=True)
             if INBOX in path.resolve().parents:
                 shutil.move(str(path), str(REVIEW / path.name))
-            existing = find_existing(data, result["name"]) or (
-                find_existing(data, result["matches_existing"])
+
+            active = [i for i in data["items"] if i["status"] == "active"]
+            existing = find_existing(active, result["name"]) or (
+                find_existing(active, result["matches_existing"])
                 if result["matches_existing"] else None)
             outcome.update(
                 filed=False,
@@ -764,11 +806,18 @@ def main() -> int:
     data = load_inventory()
     context = context_for_prompt(data)
     accepted: list[dict] = []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=args.provider,
+        gemini_key=gemini_key,
+        openai_key=openai_key
+    )
 
     for path in paths:
         print(f"\n{path.name}")
         try:
-            result = identify(client, path, context, args.provider, gemini_key, openai_key)
+            result = identify(path, config)
         except Exception as exc:                     # noqa: BLE001 - report and continue
             print(f"  failed: {exc}")
             continue

@@ -849,7 +849,7 @@ function renderTabs(){
   const tabs = [["find","Find"],["boxes","Boxes"],["issues","To do"],["build","Build check"],
                 ["reorg","Reorganize"],["labels","Labels"],["data","Data"]];
   document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
-    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${label}${
+    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${esc(label)}${
       k==="issues" && n ? `<span class="badge">${n}</span>` : ""}</button>`).join("");
 }
 
@@ -1885,15 +1885,15 @@ function askCount(q){
         encodeURIComponent(q.photo)}" alt="">` : ""}
       <h2>${esc(q.recordedName || q.name)}</h2>
       <p class="sub2">${known
-          ? `Box ${q.box} · recorded ${recorded}${
-              Number(q.seen) ? ` · ${q.seen} in the photo` : ""}`
+          ? `Box ${esc(q.box)} · recorded ${esc(recorded)}${
+              Number(q.seen) ? ` · ${esc(q.seen)} in the photo` : ""}`
           : (recorded === "many"
-              ? `Box ${q.box} · recorded as a bulk pile`
-              : `Not in the inventory yet · going to box ${q.box}`)}</p>
+              ? `Box ${esc(q.box)} · recorded as a bulk pile`
+              : `Not in the inventory yet · going to box ${esc(q.box)}`)}</p>
       <input class="wrongname" id="cname" value="${esc(q.recordedName || q.name)}">
       ${q.isNew ? `<div class="counter" style="margin-bottom:10px">
           <label style="font-size:12px;color:var(--ink-3);min-width:34px">Box</label>
-          <input id="cbox" type="number" inputmode="numeric" value="${q.box}" min="1"
+          <input id="cbox" type="number" inputmode="numeric" value="${esc(q.box)}" min="1"
                  style="height:44px;font-size:19px">
         </div>` : ""}
       <p class="ask">How many are in the box now?</p>

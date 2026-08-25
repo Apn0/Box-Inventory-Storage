@@ -25,6 +25,7 @@ import urllib.request
 import google.auth
 import google.auth.transport.requests
 from flask import Flask, jsonify, request
+from concurrent.futures import ThreadPoolExecutor
 
 from build import CATEGORY_LABELS, categorise, parse_date, slug
 
@@ -82,8 +83,8 @@ def resolve_items() -> list[dict]:
     category), not the full app.template.html item shape. If build.py's
     resolver logic changes, mirror it here too.
     """
-    raw_text = _fetch(BOX_CSV_URL)
-    form_text = _fetch(FORM_CSV_URL)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
 
     raw_rows = []
     for line_no, row in enumerate(csv.DictReader(io.StringIO(raw_text)), start=2):
@@ -144,9 +145,8 @@ def resolve_items() -> list[dict]:
     return items
 
 
-def find_existing(items: list[dict], name: str) -> dict | None:
+def find_existing(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
-    active = [i for i in items if i["status"] == "active"]
     key = slug(name)
     for item in active:
         if slug(item["name"]) == key:
@@ -163,8 +163,7 @@ def find_existing(items: list[dict], name: str) -> dict | None:
     return None
 
 
-def suggest_box(items: list[dict], category: str) -> int:
-    active = [i for i in items if i["status"] == "active"]
+def suggest_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
     for i in active:
         per_box[i["box"]] = per_box.get(i["box"], 0) + 1
@@ -250,8 +249,11 @@ def identify():
         return jsonify(error=f"identification failed: {exc}"), 502
 
     seen = max(0, int(result.get("quantity") or 0))
-    existing = find_existing(items, result["name"]) or (
-        find_existing(items, result["matches_existing"]) if result.get("matches_existing") else None)
+
+    active = [i for i in items if i["status"] == "active"]
+
+    existing = find_existing(active, result["name"]) or (
+        find_existing(active, result["matches_existing"]) if result.get("matches_existing") else None)
 
     if existing:
         recorded = existing["qty"] if existing["countType"] == "exact" else "many"
@@ -259,7 +261,7 @@ def identify():
                        recorded=recorded, seen=seen, isNew=False,
                        confidence=result.get("confidence"), note=result.get("note", ""))
 
-    box = suggest_box(items, result.get("category", "misc"))
+    box = suggest_box(active, result.get("category", "misc"))
     return jsonify(name=result["name"], recordedName=result["name"], box=box,
                    recorded=None, seen=seen, isNew=True,
                    confidence=result.get("confidence"), note=result.get("note", ""))
