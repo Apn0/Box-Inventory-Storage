@@ -225,7 +225,7 @@ def vertex_token() -> str | None:
     try:
         out = subprocess.run(
             ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
-            capture_output=True, text=True, timeout=60, shell=True)
+            capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return None
     token = out.stdout.strip()
