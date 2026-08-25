@@ -144,7 +144,7 @@ def _part_numbers(name: str) -> set[str]:
     return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
 
 
-def find_existing(data: dict, name: str) -> dict | None:
+def find_existing(active: list[dict], name: str) -> dict | None:
     """The active record for this part, tolerating how the model words it.
 
     Vision models do not name a part identically twice — the same board came
@@ -152,7 +152,6 @@ def find_existing(data: dict, name: str) -> dict | None:
     Exact matching alone therefore files a second row for a part already on
     record, and the inventory drifts apart one photo at a time.
     """
-    active = [i for i in data["items"] if i["status"] == "active"]
     key = _norm(name)
 
     for item in active:                                   # exact wins
@@ -168,9 +167,8 @@ def find_existing(data: dict, name: str) -> dict | None:
     return None
 
 
-def suggest_box(data: dict, category: str) -> tuple[int, str]:
+def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    active = [i for i in data["items"] if i["status"] == "active"]
     per_box = collections.Counter(i["box"] for i in active)
 
     same_cat = sorted({i["box"] for i in active
@@ -225,7 +223,7 @@ def vertex_token() -> str | None:
     try:
         out = subprocess.run(
             ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
-            capture_output=True, text=True, timeout=60, shell=True)
+            capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError):
         return None
     token = out.stdout.strip()
@@ -402,8 +400,11 @@ def decide(data: dict, result: dict) -> dict:
     would silently replace it with 1.
     """
     qty = max(0, int(result["quantity"]))
-    existing = find_existing(data, result["name"]) or (
-        find_existing(data, result["matches_existing"]) if result["matches_existing"] else None)
+
+    active = [i for i in data["items"] if i["status"] == "active"]
+
+    existing = find_existing(active, result["name"]) or (
+        find_existing(active, result["matches_existing"]) if result["matches_existing"] else None)
 
     if existing and existing["countType"] == "exact":
         total = int(existing["qty"]) + qty
@@ -415,7 +416,7 @@ def decide(data: dict, result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = suggest_box(data, result["category"])
+    box, why = suggest_box(data, active, result["category"])
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -543,7 +544,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
 
     # If the confirmed name matches something already on record, write against
     # that record's spelling and box so a variant name cannot fork the entry.
-    existing = find_existing(data, name)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    existing = find_existing(active, name)
     if existing:
         name, box = existing["name"], existing["box"]
 
@@ -615,8 +617,10 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             REVIEW.mkdir(parents=True, exist_ok=True)
             if INBOX in path.resolve().parents:
                 shutil.move(str(path), str(REVIEW / path.name))
-            existing = find_existing(data, result["name"]) or (
-                find_existing(data, result["matches_existing"])
+
+            active = [i for i in data["items"] if i["status"] == "active"]
+            existing = find_existing(active, result["name"]) or (
+                find_existing(active, result["matches_existing"])
                 if result["matches_existing"] else None)
             outcome.update(
                 filed=False,

@@ -11,6 +11,7 @@ Run:  python build.py
 from __future__ import annotations
 
 import csv
+import bisect
 import datetime
 import json
 import pathlib
@@ -258,8 +259,9 @@ def main() -> int:
 
     # ---- box-level facts ---------------------------------------------------
     used_boxes = sorted({i["box"] for i in items})
-    low = [b for b in used_boxes if b < 400]
-    high = [b for b in used_boxes if b >= 400]
+    split_idx = bisect.bisect_left(used_boxes, 400)
+    low = used_boxes[:split_idx]
+    high = used_boxes[split_idx:]
 
     active_by_box: dict[int, int] = {}
     for i in items:
