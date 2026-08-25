@@ -25,6 +25,7 @@ import urllib.request
 import google.auth
 import google.auth.transport.requests
 from flask import Flask, jsonify, request
+from concurrent.futures import ThreadPoolExecutor
 
 from build import CATEGORY_LABELS, categorise, parse_date, slug
 
@@ -82,8 +83,8 @@ def resolve_items() -> list[dict]:
     category), not the full app.template.html item shape. If build.py's
     resolver logic changes, mirror it here too.
     """
-    raw_text = _fetch(BOX_CSV_URL)
-    form_text = _fetch(FORM_CSV_URL)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
 
     raw_rows = []
     for line_no, row in enumerate(csv.DictReader(io.StringIO(raw_text)), start=2):
