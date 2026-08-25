@@ -23,6 +23,7 @@ import json
 import mimetypes
 import pathlib
 import queue
+import urllib.parse
 import re
 import shutil
 import socket
@@ -231,7 +232,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            import urllib.parse
             import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
@@ -256,9 +256,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                name = pathlib.PurePosixPath(path).name
+                name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
                 target = folder / name
-                if target.is_file() and target.parent.resolve() == folder.resolve():
+                if target.is_file() and folder.resolve() in target.resolve().parents:
                     ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
                     return self._send(Response(200, target.read_bytes(), ctype))
                 return self._json(404, {"error": "not found"})
