@@ -23,6 +23,8 @@ def test_parse_date_error_paths():
 
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
+import unittest
+from build import categorise, DEFAULT_CATEGORY
 
     with pytest.raises(ValueError, match="unparseable date: '12/31/2023'"):
         parse_date("12/31/2023")
