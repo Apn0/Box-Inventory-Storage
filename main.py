@@ -27,7 +27,7 @@ import google.auth.transport.requests
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, slug
+from build import CATEGORY_LABELS, categorise, parse_date, slug, part_numbers
 
 app = Flask(__name__)
 
@@ -67,8 +67,6 @@ GEMINI_SCHEMA = {
     "required": ["name", "quantity", "category", "note", "confidence", "matches_existing"],
     "propertyOrdering": ["name", "quantity", "category", "note", "confidence", "matches_existing"],
 }
-
-PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
 
 
 def _fetch(url: str) -> str:
@@ -151,9 +149,6 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     for item in active:
         if slug(item["name"]) == key:
             return item
-
-    def part_numbers(n: str) -> set[str]:
-        return {t for t in slug(n).split() if PART_NUMBER.match(t)}
 
     wanted = part_numbers(name)
     if wanted:
