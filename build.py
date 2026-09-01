@@ -14,6 +14,7 @@ import csv
 import bisect
 import datetime
 import json
+import operator
 import pathlib
 import re
 import sys
@@ -98,6 +99,16 @@ def slug(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+# A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
+# or a bare run of digits (18650). Distinctive enough to identify a part on its
+# own, which plain words like "module" or "sensor" are not.
+PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
+
+
+def part_numbers(name: str) -> set[str]:
+    return {t for t in slug(name).split() if PART_NUMBER.match(t)}
 
 
 def categorise(name: str, note: str) -> str:
@@ -197,9 +208,13 @@ def build_items(raw_rows: list[dict]) -> list[dict]:
         groups.setdefault(key, []).append(row)
 
     items = []
-    for (box, key_slug), history in sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1])):
-        history.sort(key=lambda r: (r["date"] or "", r.get("time", "00:00:00"),
-                                    r.get("src", 0), r["line"]))
+
+    # Sort keys for performance
+    group_sort_key = operator.itemgetter(0)
+    history_sort_key = lambda r: (r["date"] or "", r["time"], r["src"], r["line"])
+
+    for (box, key_slug), history in sorted(groups.items(), key=group_sort_key):
+        history.sort(key=history_sort_key)
         latest = history[-1]
 
         if not latest["name"]:
