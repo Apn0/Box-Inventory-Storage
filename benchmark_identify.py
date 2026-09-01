@@ -7,8 +7,8 @@ def slug(text: str) -> str:
     import re
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
-import re
-PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
+
+from build import part_numbers
 
 def find_existing_old(items: list[dict], name: str) -> dict | None:
     active = [i for i in items if i["status"] == "active"]
@@ -16,9 +16,6 @@ def find_existing_old(items: list[dict], name: str) -> dict | None:
     for item in active:
         if slug(item["name"]) == key:
             return item
-
-    def part_numbers(n: str) -> set[str]:
-        return {t for t in slug(n).split() if PART_NUMBER.match(t)}
 
     wanted = part_numbers(name)
     if wanted:
@@ -59,9 +56,6 @@ def find_existing_new(active: list[dict], name: str) -> dict | None:
     for item in active:
         if slug(item["name"]) == key:
             return item
-
-    def part_numbers(n: str) -> set[str]:
-        return {t for t in slug(n).split() if PART_NUMBER.match(t)}
 
     wanted = part_numbers(name)
     if wanted:

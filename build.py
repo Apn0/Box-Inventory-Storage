@@ -101,6 +101,16 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
+# A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
+# or a bare run of digits (18650). Distinctive enough to identify a part on its
+# own, which plain words like "module" or "sensor" are not.
+PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
+
+
+def part_numbers(name: str) -> set[str]:
+    return {t for t in slug(name).split() if PART_NUMBER.match(t)}
+
+
 def categorise(name: str, note: str) -> str:
     hay = f"{name} {note}".lower()
     for cat, pattern in CATEGORY_RULES:
