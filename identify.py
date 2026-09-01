@@ -504,7 +504,7 @@ def auto_filable(result: dict, plan: dict) -> str | None:
     if not plan["existing"]:
         # A new part means a new row and a new box. Worth ten seconds of your
         # eyes; a wrong one is far more annoying to unpick than to confirm.
-        return "a part not already in the inventory"
+        return "new item, requires visual check"
     return None
 
 

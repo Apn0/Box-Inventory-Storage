@@ -265,117 +265,132 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         return self._json(404, {"error": "not found"})
 
+    def _handle_upload(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self._json(400, {"error": "bad length"})
+        if length <= 0:
+            return self._json(400, {"error": "empty upload"})
+        if length > MAX_UPLOAD:
+            return self._json(413, {"error": f"too large ({length} bytes)"})
+
+        data = self.rfile.read(length)
+        INBOX.mkdir(parents=True, exist_ok=True)
+        name = safe_name(self.headers.get("X-Filename", "photo.jpg"))
+        (INBOX / name).write_bytes(data)
+        print(f"  photo received: {name} ({len(data)//1024} KB)")
+        if AUTO:
+            _work.put(INBOX / name)
+        return self._json(200, {"ok": True, "saved": name,
+                                "queued": AUTO, "pending": len(inbox_list())})
+
+    def _handle_quickadd(self) -> None:
+        import identify
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "bad body"})
+
+        name = (body.get("name") or "").strip()
+        if not name:
+            return self._json(400, {"error": "name is required"})
+        try:
+            box = int(body.get("box"))
+        except (TypeError, ValueError):
+            return self._json(400, {"error": "box must be a number"})
+
+        with _build_lock:
+            try:
+                done = identify.commit({"photo": None, "name": name, "box": box,
+                                        "note": body.get("note", "")},
+                                       body.get("qty"), box, name)
+            except Exception as exc:               # noqa: BLE001
+                return self._json(500, {"error": str(exc)[:200]})
+        record({"photo": None, "state": "done", "ok": True,
+                "name": done["name"], "box": done["box"], "to": done["quantity"]})
+        print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
+        return self._json(200, {"ok": True, **done})
+
+    def _handle_confirm_dismiss(self, path: str) -> None:
+        import identify
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "bad body"})
+
+        entries = identify.load_pending()
+        entry = next((e for e in entries if e["id"] == body.get("id")), None)
+        if entry is None:
+            return self._json(404, {"error": "no such pending photo"})
+
+        entries = [e for e in entries if e["id"] != entry["id"]]
+        if path == "/dismiss":
+            src = REVIEW / entry["photo"]
+            if src.exists():                       # keep the photo, file nothing
+                (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
+            identify.save_pending(entries)
+            record({"photo": entry["photo"], "state": "dismissed", "ok": True,
+                    "name": entry.get("name")})
+            return self._json(200, {"ok": True, "dismissed": entry["id"]})
+
+        with _build_lock:
+            try:
+                done = identify.commit(entry, body.get("qty"),
+                                       body.get("box"), body.get("name"))
+            except Exception as exc:               # noqa: BLE001
+                return self._json(500, {"error": str(exc)[:200]})
+            identify.save_pending(entries)
+        record({"photo": entry["photo"], "state": "done", "ok": True,
+                "name": done["name"], "box": done["box"], "to": done["quantity"]})
+        print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
+        return self._json(200, {"ok": True, **done})
+
+    def _handle_undo(self) -> None:
+        import identify
+        with _build_lock:
+            try:
+                undone = identify.undo_last()
+            except Exception as exc:               # noqa: BLE001
+                return self._json(409, {"error": str(exc)[:200]})
+        if not undone:
+            return self._json(200, {"ok": False, "message": "nothing to undo"})
+        names = ", ".join(r["name"] for r in undone["rows"])
+        record({"state": "undone", "ok": True, "name": names})
+        print(f"  undone: {names}")
+        return self._json(200, {"ok": True, "undone": undone["rows"]})
+
+    def _handle_identify(self) -> None:
+        pending = inbox_list()
+        if not pending:
+            return self._json(200, {"ok": True, "message": "inbox empty"})
+        for entry in pending:
+            _work.put(INBOX / entry["name"])
+        return self._json(202, {"ok": True, "started": len(pending)})
+
     # ----------------------------------------------------------------- POST
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
 
         if path == "/upload":
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return self._json(400, {"error": "bad length"})
-            if length <= 0:
-                return self._json(400, {"error": "empty upload"})
-            if length > MAX_UPLOAD:
-                return self._json(413, {"error": f"too large ({length} bytes)"})
-
-            data = self.rfile.read(length)
-            INBOX.mkdir(parents=True, exist_ok=True)
-            name = safe_name(self.headers.get("X-Filename", "photo.jpg"))
-            (INBOX / name).write_bytes(data)
-            print(f"  photo received: {name} ({len(data)//1024} KB)")
-            if AUTO:
-                _work.put(INBOX / name)
-            return self._json(200, {"ok": True, "saved": name,
-                                    "queued": AUTO, "pending": len(inbox_list())})
+            return self._handle_upload()
 
         # Typed or spoken entry: no photo, no vision call, nothing to identify.
         # For a part you can name, this is the whole pipeline.
         if path == "/quickadd":
-            import identify
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length) or b"{}")
-            except (ValueError, json.JSONDecodeError):
-                return self._json(400, {"error": "bad body"})
-
-            name = (body.get("name") or "").strip()
-            if not name:
-                return self._json(400, {"error": "name is required"})
-            try:
-                box = int(body.get("box"))
-            except (TypeError, ValueError):
-                return self._json(400, {"error": "box must be a number"})
-
-            with _build_lock:
-                try:
-                    done = identify.commit({"photo": None, "name": name, "box": box,
-                                            "note": body.get("note", "")},
-                                           body.get("qty"), box, name)
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(500, {"error": str(exc)[:200]})
-            record({"photo": None, "state": "done", "ok": True,
-                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
-            print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
-            return self._json(200, {"ok": True, **done})
+            return self._handle_quickadd()
 
         if path in ("/confirm", "/dismiss"):
-            import identify
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length) or b"{}")
-            except (ValueError, json.JSONDecodeError):
-                return self._json(400, {"error": "bad body"})
-
-            entries = identify.load_pending()
-            entry = next((e for e in entries if e["id"] == body.get("id")), None)
-            if entry is None:
-                return self._json(404, {"error": "no such pending photo"})
-
-            entries = [e for e in entries if e["id"] != entry["id"]]
-            if path == "/dismiss":
-                src = REVIEW / entry["photo"]
-                if src.exists():                       # keep the photo, file nothing
-                    (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
-                identify.save_pending(entries)
-                record({"photo": entry["photo"], "state": "dismissed", "ok": True,
-                        "name": entry.get("name")})
-                return self._json(200, {"ok": True, "dismissed": entry["id"]})
-
-            with _build_lock:
-                try:
-                    done = identify.commit(entry, body.get("qty"),
-                                           body.get("box"), body.get("name"))
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(500, {"error": str(exc)[:200]})
-                identify.save_pending(entries)
-            record({"photo": entry["photo"], "state": "done", "ok": True,
-                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
-            print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
-            return self._json(200, {"ok": True, **done})
+            return self._handle_confirm_dismiss(path)
 
         if path == "/undo":
-            import identify
-            with _build_lock:
-                try:
-                    undone = identify.undo_last()
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(409, {"error": str(exc)[:200]})
-            if not undone:
-                return self._json(200, {"ok": False, "message": "nothing to undo"})
-            names = ", ".join(r["name"] for r in undone["rows"])
-            record({"state": "undone", "ok": True, "name": names})
-            print(f"  undone: {names}")
-            return self._json(200, {"ok": True, "undone": undone["rows"]})
+            return self._handle_undo()
 
         if path == "/identify":
-            pending = inbox_list()
-            if not pending:
-                return self._json(200, {"ok": True, "message": "inbox empty"})
-            for entry in pending:
-                _work.put(INBOX / entry["name"])
-            return self._json(202, {"ok": True, "started": len(pending)})
+            return self._handle_identify()
 
         return self._json(404, {"error": "not found"})
 
