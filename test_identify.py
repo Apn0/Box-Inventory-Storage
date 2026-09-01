@@ -129,5 +129,66 @@ class TestFindExisting(unittest.TestCase):
         result = find_existing(active, "resistor pack")
         self.assertIsNone(result)
 
+
+class TestSuggestBox(unittest.TestCase):
+    def test_existing_box_with_room(self):
+        # A box of the same category with < MAX_BOX_ITEMS (6)
+        data = {"freeBoxes": [{"box": 100, "reason": "empty"}]}
+        active = [
+            {"box": 1, "category": "resistor"},
+            {"box": 2, "category": "capacitor"},
+            {"box": 2, "category": "capacitor"},
+        ]
+
+        box, why = suggest_box(data, active, "capacitor")
+        self.assertEqual(box, 2)
+        self.assertIn("already holds capacitor", why)
+
+    def test_existing_box_but_full(self):
+        # A box of the same category with exactly MAX_BOX_ITEMS (6)
+        data = {"freeBoxes": [{"box": 100, "reason": "empty"}]}
+        active = [
+            {"box": 2, "category": "capacitor"} for _ in range(6)
+        ]
+
+        box, why = suggest_box(data, active, "capacitor")
+        # Should fallback to free box 100
+        self.assertEqual(box, 100)
+        self.assertIn("box 100 is free", why)
+
+    def test_no_existing_box_use_free_box(self):
+        data = {"freeBoxes": [{"box": 42, "reason": "empty"}]}
+        active = [
+            {"box": 1, "category": "resistor"}
+        ]
+
+        box, why = suggest_box(data, active, "capacitor")
+        self.assertEqual(box, 42)
+        self.assertIn("box 42 is free", why)
+
+    def test_no_existing_box_no_free_box(self):
+        # Fallback to max + 1
+        data = {"freeBoxes": []}
+        active = [
+            {"box": 10, "category": "resistor"}
+        ]
+
+        box, why = suggest_box(data, active, "capacitor")
+        self.assertEqual(box, 11)
+        self.assertIn("is a new number", why)
+
+    def test_ignore_box_numbers_over_400(self):
+        # Boxes >= 400 should not be suggested as existing, free, or used to calculate next
+        data = {"freeBoxes": [{"box": 401, "reason": "empty"}]}
+        active = [
+            {"box": 400, "category": "capacitor"}, # existing but >= 400
+            {"box": 10, "category": "resistor"},
+        ]
+
+        box, why = suggest_box(data, active, "capacitor")
+        # Should ignore the existing box 400, and free box 401, so picks max + 1 = 11
+        self.assertEqual(box, 11)
+        self.assertIn("is a new number", why)
+
 if __name__ == "__main__":
     unittest.main()
