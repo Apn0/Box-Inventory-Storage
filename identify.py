@@ -193,11 +193,19 @@ def find_existing(active: list[dict], name: str) -> dict | None:
 
 def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    per_box = collections.Counter(i["box"] for i in active)
+    per_box = {}
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active
-                       if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            used.add(b)
+            if i["category"] == category:
+                same_cat.add(b)
+
+    for b in sorted(same_cat):
         if per_box[b] < MAX_BOX_ITEMS:
             return b, f"box {b} already holds {category} parts and has room"
 
@@ -205,7 +213,7 @@ def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     if free:
         return free[0], f"box {free[0]} is free ({[f for f in data['freeBoxes'] if f['box'] == free[0]][0]['reason']})"
 
-    nxt = max((i["box"] for i in active if i["box"] < 400), default=0) + 1
+    nxt = max(used, default=0) + 1
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
