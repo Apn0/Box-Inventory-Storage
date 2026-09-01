@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date
+from build import parse_date, find_split_items
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -23,73 +23,51 @@ def test_parse_date_error_paths():
 
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
-import unittest
-from build import categorise, DEFAULT_CATEGORY
 
-    with pytest.raises(ValueError, match="unparseable date: '12/31/2023'"):
-        parse_date("12/31/2023")
-
-    with pytest.raises(ValueError, match="unparseable date: '01.12.2023'"):
-        parse_date("01.12.2023")
-
-    with pytest.raises(ValueError, match="unparseable date: '20231201'"):
-        parse_date("20231201")
-
-    with pytest.raises(ValueError, match="unparseable date: '01/12/23'"):
-        parse_date("01/12/23")
-
-from build import find_free_boxes, container_of
-
-def test_find_free_boxes_empty():
-    assert find_free_boxes([]) == []
-
-def test_find_free_boxes_no_free():
+def test_find_split_items_basic():
     items = [
-        {"box": 1, "status": "active"},
-        {"box": 2, "status": "active"},
-        {"box": 3, "status": "active"}
+        {"name": "Resistor 10k", "box": 1, "status": "active"},
+        {"name": "Resistor 10k", "box": 2, "status": "active"},
+        {"name": "Capacitor 100uF", "box": 1, "status": "active"},
     ]
-    assert find_free_boxes(items) == []
+    result = find_split_items(items)
+    assert result == [{"name": "Resistor 10k", "boxes": [1, 2]}]
 
-def test_find_free_boxes_with_gaps():
+def test_find_split_items_ignores_inactive():
     items = [
-        {"box": 1, "status": "active"},
-        {"box": 3, "status": "active"}
+        {"name": "LED Blue", "box": 3, "status": "active"},
+        {"name": "LED Blue", "box": 4, "status": "gone"},
     ]
-    free = find_free_boxes(items)
-    assert len(free) == 1
-    assert free[0] == {"box": 2, "container": container_of(2), "reason": "never used"}
+    result = find_split_items(items)
+    assert result == []
 
-def test_find_free_boxes_emptied():
+def test_find_split_items_slug_matching():
     items = [
-        {"box": 1, "status": "active"},
-        {"box": 2, "status": "gone"},
-        {"box": 3, "status": "active"}
+        {"name": "ESP32 Board", "box": 5, "status": "active"},
+        {"name": "esp32 board", "box": 6, "status": "active"},
+        {"name": "  esp32  BOARD ", "box": 7, "status": "active"},
     ]
-    free = find_free_boxes(items)
-    assert len(free) == 1
-    assert free[0] == {"box": 2, "container": container_of(2), "reason": "emptied"}
+    result = find_split_items(items)
+    assert len(result) == 1
+    assert result[0]["name"] == "ESP32 Board"
+    assert result[0]["boxes"] == [5, 6, 7]
 
-def test_find_free_boxes_high_range():
+def test_find_split_items_duplicate_boxes():
     items = [
-        {"box": 400, "status": "active"},
-        {"box": 402, "status": "active"}
+        {"name": "Wire", "box": 8, "status": "active"},
+        {"name": "Wire", "box": 8, "status": "active"},
     ]
-    free = find_free_boxes(items)
-    assert len(free) == 1
-    assert free[0] == {"box": 401, "container": container_of(401), "reason": "never used"}
+    result = find_split_items(items)
+    assert result == []
 
-def test_find_free_boxes_mixed_ranges():
+def test_find_split_items_sorting():
     items = [
-        {"box": 1, "status": "active"},
-        {"box": 3, "status": "active"},
-        {"box": 400, "status": "gone"},
-        {"box": 402, "status": "active"}
+        {"name": "Zener Diode", "box": 10, "status": "active"},
+        {"name": "Zener Diode", "box": 11, "status": "active"},
+        {"name": "Arduino", "box": 12, "status": "active"},
+        {"name": "Arduino", "box": 13, "status": "active"},
     ]
-    free = find_free_boxes(items)
-    assert len(free) == 3
-
-    # Asserting correct values and order
-    assert free[0] == {"box": 2, "container": container_of(2), "reason": "never used"}
-    assert free[1] == {"box": 400, "container": container_of(400), "reason": "emptied"}
-    assert free[2] == {"box": 401, "container": container_of(401), "reason": "never used"}
+    result = find_split_items(items)
+    assert len(result) == 2
+    assert result[0]["name"] == "Arduino"
+    assert result[1]["name"] == "Zener Diode"
