@@ -24,6 +24,18 @@ def test_parse_date_error_paths():
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
 
+    with pytest.raises(ValueError, match="unparseable date: '12/31/2023'"):
+        parse_date("12/31/2023")
+
+    with pytest.raises(ValueError, match="unparseable date: '01.12.2023'"):
+        parse_date("01.12.2023")
+
+    with pytest.raises(ValueError, match="unparseable date: '20231201'"):
+        parse_date("20231201")
+
+    with pytest.raises(ValueError, match="unparseable date: '01/12/23'"):
+        parse_date("01/12/23")
+
 from build import find_free_boxes, container_of
 
 def test_find_free_boxes_empty():
