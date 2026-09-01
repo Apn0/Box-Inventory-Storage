@@ -1,5 +1,63 @@
 import unittest
-from identify import find_existing
+from identify import find_existing, auto_filable
+
+class TestAutoFilable(unittest.TestCase):
+    def setUp(self):
+        self.default_plan = {"existing": True}
+        self.default_result = {
+            "confidence": "high",
+            "name": "resistor",
+            "note": "10k ohm",
+            "quantity": 5
+        }
+
+    def test_confidence_not_high(self):
+        result = self.default_result.copy()
+        result["confidence"] = "medium"
+        self.assertEqual(auto_filable(result, self.default_plan), "medium confidence")
+
+        result["confidence"] = "low"
+        self.assertEqual(auto_filable(result, self.default_plan), "low confidence")
+
+        result.pop("confidence")
+        self.assertEqual(auto_filable(result, self.default_plan), "unknown confidence")
+
+    def test_unsure_name(self):
+        result = self.default_result.copy()
+        result["name"] = "unidentified object"
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
+        result["name"] = "not a component"
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
+    def test_unsure_note(self):
+        result = self.default_result.copy()
+        result["note"] = "too dark to see"
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
+        result["note"] = "blurry image"
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
+    def test_quantity_zero_or_none(self):
+        result = self.default_result.copy()
+        result["quantity"] = 0
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+        result["quantity"] = -1
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+        result["quantity"] = None
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+        result.pop("quantity")
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+    def test_not_existing(self):
+        plan = {"existing": False}
+        self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
+
+    def test_auto_filable_success(self):
+        self.assertIsNone(auto_filable(self.default_result, self.default_plan))
 
 class TestFindExisting(unittest.TestCase):
     def setUp(self):
