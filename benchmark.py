@@ -1,5 +1,5 @@
 import time
-from build import slug
+from utils import slug
 
 # Dummy data generation
 items = []

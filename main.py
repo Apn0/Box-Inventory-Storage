@@ -27,7 +27,8 @@ import google.auth.transport.requests
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, slug
+from build import CATEGORY_LABELS, categorise, parse_date
+from utils import slug
 
 app = Flask(__name__)
 

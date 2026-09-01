@@ -17,7 +17,8 @@ import json
 import pathlib
 import re
 import sys
-import unicodedata
+
+from utils import slug
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
@@ -92,12 +93,6 @@ CATEGORY_LABELS = {
     "material": "Raw material",
     "misc": "Misc",
 }
-
-
-def slug(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
 def categorise(name: str, note: str) -> str:

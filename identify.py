@@ -31,6 +31,8 @@ import shutil
 import subprocess
 import sys
 
+from utils import slug
+
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
 INVENTORY = ROOT / "data" / "inventory.json"
@@ -154,10 +156,6 @@ def context_for_prompt(data: dict) -> str:
     )
 
 
-def _norm(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-
-
 # A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
 # or a bare run of digits (18650). Distinctive enough to identify a part on its
 # own, which plain words like "module" or "sensor" are not.
@@ -165,7 +163,7 @@ PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
 
 
 def _part_numbers(name: str) -> set[str]:
-    return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
+    return {t for t in slug(name).split() if PART_NUMBER.match(t)}
 
 
 def find_existing(active: list[dict], name: str) -> dict | None:
@@ -176,10 +174,10 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     Exact matching alone therefore files a second row for a part already on
     record, and the inventory drifts apart one photo at a time.
     """
-    key = _norm(name)
+    key = slug(name)
 
     for item in active:                                   # exact wins
-        if _norm(item["name"]) == key:
+        if slug(item["name"]) == key:
             return item
 
     wanted = _part_numbers(name)                          # then the part number
