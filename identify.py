@@ -183,12 +183,17 @@ def find_existing(active: list[dict], name: str) -> dict | None:
             return item
 
     wanted = _part_numbers(name)                          # then the part number
-    if wanted:
-        hits = [i for i in active if _part_numbers(i["name"]) & wanted]
-        if len(hits) == 1:
-            return hits[0]
-        # Several boxes carry this part number — too ambiguous to pick one.
-    return None
+    if not wanted:
+        return None
+
+    hit = None
+    for item in active:
+        if not wanted.isdisjoint(_norm(item["name"]).split()):
+            if hit is not None:
+                # Several boxes carry this part number — too ambiguous to pick one.
+                return None
+            hit = item
+    return hit
 
 
 def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:

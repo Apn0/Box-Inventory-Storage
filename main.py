@@ -156,11 +156,16 @@ def find_existing(active: list[dict], name: str) -> dict | None:
         return {t for t in slug(n).split() if PART_NUMBER.match(t)}
 
     wanted = part_numbers(name)
-    if wanted:
-        hits = [i for i in active if part_numbers(i["name"]) & wanted]
-        if len(hits) == 1:
-            return hits[0]
-    return None
+    if not wanted:
+        return None
+
+    hit = None
+    for item in active:
+        if not wanted.isdisjoint(slug(item["name"]).split()):
+            if hit is not None:
+                return None
+            hit = item
+    return hit
 
 
 def suggest_box(active: list[dict], category: str) -> int:
