@@ -424,8 +424,8 @@ def lan_ips() -> list[str]:
             ip = info[4][0]
             if not ip.startswith(("127.", "169.254.")) and ip not in found:
                 found.append(ip)
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"Warning: could not resolve local hostname: {exc}", file=sys.stderr)
     # a private-range address on the same /24 as a typical home router first
     found.sort(key=lambda ip: (not ip.startswith("192.168."), ip))
     return found
