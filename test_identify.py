@@ -257,5 +257,23 @@ class TestDecide(unittest.TestCase):
         self.assertEqual(res["from"], 5)
         self.assertEqual(res["to"], 8)
 
+
+class TestEscapeCSVFormula(unittest.TestCase):
+    def test_escape_csv_formula(self):
+        from identify import escape_csv_formula
+
+        # Test prefixes
+        self.assertEqual(escape_csv_formula("=1+2"), "'=1+2")
+        self.assertEqual(escape_csv_formula("+1+2"), "'+1+2")
+        self.assertEqual(escape_csv_formula("-1+2"), "'-1+2")
+        self.assertEqual(escape_csv_formula("@1+2"), "'@1+2")
+
+        # Test no prefix
+        self.assertEqual(escape_csv_formula("1+2"), "1+2")
+        self.assertEqual(escape_csv_formula("Hello = 1"), "Hello = 1")
+        self.assertEqual(escape_csv_formula(""), "")
+        self.assertEqual(escape_csv_formula(None), "")
+        self.assertEqual(escape_csv_formula(123), "123")
+
 if __name__ == "__main__":
     unittest.main()
