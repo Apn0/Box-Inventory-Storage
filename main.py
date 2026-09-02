@@ -165,15 +165,22 @@ def find_existing(active: list[dict], name: str) -> dict | None:
 
 def suggest_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
-    for i in active:
-        per_box[i["box"]] = per_box.get(i["box"], 0) + 1
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        box = i["box"]
+        per_box[box] = per_box.get(box, 0) + 1
+
+        if box < 400:
+            used.add(box)
+            if i["category"] == category:
+                same_cat.add(box)
+
+    for b in sorted(same_cat):
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
             return b
 
-    used = {i["box"] for i in active if i["box"] < 400}
     b = 1
     while b in used:
         b += 1
