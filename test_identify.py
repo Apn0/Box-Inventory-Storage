@@ -1,5 +1,36 @@
 import unittest
-from identify import find_existing, auto_filable
+from identify import find_existing, auto_filable, suggest_box, _part_numbers
+
+class TestPartNumbers(unittest.TestCase):
+    def test_letters_then_digits(self):
+        # Must have at least 2 letters followed by at least 2 digits
+        self.assertEqual(_part_numbers("tmc2209"), {"tmc2209"})
+        self.assertEqual(_part_numbers("mt3608"), {"mt3608"})
+        self.assertEqual(_part_numbers("esp32"), {"esp32"})
+        self.assertEqual(_part_numbers("ads1115"), {"ads1115"})
+        self.assertEqual(_part_numbers("ch340g"), {"ch340g"})
+
+    def test_bare_digits(self):
+        # Must have at least 4 digits
+        self.assertEqual(_part_numbers("18650"), {"18650"})
+        self.assertEqual(_part_numbers("4000"), {"4000"})
+        self.assertEqual(_part_numbers("104"), set()) # too short
+        self.assertEqual(_part_numbers("220"), set()) # too short
+
+    def test_invalid_part_numbers(self):
+        # Does not match plain words
+        self.assertEqual(_part_numbers("module"), set())
+        self.assertEqual(_part_numbers("sensor"), set())
+        self.assertEqual(_part_numbers("board"), set())
+        self.assertEqual(_part_numbers("a1"), set()) # too short letters and digits
+        self.assertEqual(_part_numbers("ab1"), set()) # too short digits
+        self.assertEqual(_part_numbers("a12"), set()) # too short letters
+
+    def test_extracted_from_name(self):
+        self.assertEqual(_part_numbers("TMC2209-LA stepper driver module"), {"tmc2209"})
+        self.assertEqual(_part_numbers("ESP32 WROOM 32 dev board"), {"esp32"})
+        self.assertEqual(_part_numbers("18650 battery holder"), {"18650"})
+        self.assertEqual(_part_numbers("MT3608 DC-DC step-up (boost) converter module"), {"mt3608"})
 
 class TestAutoFilable(unittest.TestCase):
     def setUp(self):
