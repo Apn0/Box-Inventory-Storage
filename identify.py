@@ -24,6 +24,7 @@ import datetime
 import glob
 import io
 import json
+import logging
 import mimetypes
 import pathlib
 import re
@@ -168,13 +169,13 @@ def find_existing(active: list[dict], name: str) -> dict | None:
         if slug(item["name"]) == key:
             return item
 
-    wanted = _part_numbers(name)                          # then the part number
+    wanted = part_numbers(name)                          # then the part number
     if not wanted:
         return None
 
     hit = None
     for item in active:
-        if not wanted.isdisjoint(_norm(item["name"]).split()):
+        if not wanted.isdisjoint(part_numbers(item["name"])):
             if hit is not None:
                 # Several boxes carry this part number — too ambiguous to pick one.
                 return None
@@ -628,7 +629,7 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             import anthropic
             client = anthropic.Anthropic(api_key=anthropic_key)
         except ImportError:
-            pass
+            logging.warning("anthropic SDK not installed — skipping Claude")
 
     outcomes, rows = [], []
     config = IdentifyConfig(
