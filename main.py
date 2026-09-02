@@ -30,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 from build import CATEGORY_LABELS, categorise, parse_date, slug, part_numbers
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
 BOX_GID = 788564724
