@@ -1,7 +1,7 @@
 {
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
-    "generated": "2026-08-25",
+    "generated": "2026-09-01",
     "rawRows": 266,
     "containerSize": 30,
     "bulkSentinel": 99,

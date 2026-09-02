@@ -31,6 +31,8 @@ import shutil
 import subprocess
 import sys
 
+from build import slug, part_numbers
+
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
 INVENTORY = ROOT / "data" / "inventory.json"
@@ -154,20 +156,6 @@ def context_for_prompt(data: dict) -> str:
     )
 
 
-def _norm(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-
-
-# A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
-# or a bare run of digits (18650). Distinctive enough to identify a part on its
-# own, which plain words like "module" or "sensor" are not.
-PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
-
-
-def _part_numbers(name: str) -> set[str]:
-    return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
-
-
 def find_existing(active: list[dict], name: str) -> dict | None:
     """The active record for this part, tolerating how the model words it.
 
@@ -176,10 +164,10 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     Exact matching alone therefore files a second row for a part already on
     record, and the inventory drifts apart one photo at a time.
     """
-    key = _norm(name)
+    key = slug(name)
 
     for item in active:                                   # exact wins
-        if _norm(item["name"]) == key:
+        if slug(item["name"]) == key:
             return item
 
     wanted = _part_numbers(name)                          # then the part number
@@ -198,11 +186,19 @@ def find_existing(active: list[dict], name: str) -> dict | None:
 
 def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    per_box = collections.Counter(i["box"] for i in active)
+    per_box = {}
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active
-                       if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            used.add(b)
+            if i["category"] == category:
+                same_cat.add(b)
+
+    for b in sorted(same_cat):
         if per_box[b] < MAX_BOX_ITEMS:
             return b, f"box {b} already holds {category} parts and has room"
 
@@ -210,7 +206,7 @@ def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     if free:
         return free[0], f"box {free[0]} is free ({[f for f in data['freeBoxes'] if f['box'] == free[0]][0]['reason']})"
 
-    nxt = max((i["box"] for i in active if i["box"] < 400), default=0) + 1
+    nxt = max(used, default=0) + 1
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
@@ -509,7 +505,7 @@ def auto_filable(result: dict, plan: dict) -> str | None:
     if not plan["existing"]:
         # A new part means a new row and a new box. Worth ten seconds of your
         # eyes; a wrong one is far more annoying to unpick than to confirm.
-        return "a part not already in the inventory"
+        return "new item, requires visual check"
     return None
 
 
