@@ -18,6 +18,7 @@ import csv
 import io
 import json
 import mimetypes
+import os
 import re
 import urllib.error
 import urllib.request
@@ -231,6 +232,11 @@ def health():
 
 @app.route("/identify", methods=["POST"])
 def identify():
+    expected_key = os.environ.get("API_KEY")
+    auth_header = request.headers.get("Authorization", "")
+    if not expected_key or not auth_header.startswith("Bearer ") or auth_header[7:] != expected_key:
+        return jsonify(error="unauthorized"), 401
+
     media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
     if media not in SUPPORTED:
         media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"
