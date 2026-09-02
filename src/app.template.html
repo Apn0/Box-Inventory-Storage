@@ -1104,11 +1104,11 @@ function viewIssues(){
   const html = cards.map((c, idx) => `
     <div class="card ${c.tone}">
       <div class="cardtop">
-        <span class="when">${c.when}</span>
+        <span class="when">${esc(c.when)}</span>
         <span class="effort">${esc(c.effort)}</span>
       </div>
-      <h3>${c.title}</h3>
-      <p class="why">${c.why}</p>
+      <h3>${esc(c.title)}</h3>
+      <p class="why">${esc(c.why)}</p>
       ${c.targets.length ? `<ul class="targets">${c.targets.slice(0, ui.openCard === idx ? 99 : 3)
         .map(t => `<li><a href="#" data-box="${t.box}">${t.label}</a></li>`).join("")}</ul>` : ""}
       ${(c.targets.length > 3 || c.extra)
