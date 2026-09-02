@@ -130,18 +130,16 @@ def read_key(name: str) -> str | None:
 
 
 _inventory_cache = None
-_inventory_mtime = 0.0
 
 def load_inventory() -> dict:
-    global _inventory_cache, _inventory_mtime
+    global _inventory_cache
+    if _inventory_cache is not None:
+        return _inventory_cache
+
     if not INVENTORY.exists():
         sys.exit(f"missing {INVENTORY} — run build.py first")
 
-    mtime = INVENTORY.stat().st_mtime
-    if _inventory_cache is None or mtime > _inventory_mtime:
-        _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
-        _inventory_mtime = mtime
-
+    _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
     return _inventory_cache
 
 
@@ -511,17 +509,26 @@ def auto_filable(result: dict, plan: dict) -> str | None:
 
 PENDING = ROOT / "data" / "pending.json"
 
+_pending_cache = None
 
 def load_pending() -> list[dict]:
+    global _pending_cache
+    if _pending_cache is not None:
+        return _pending_cache
+
     if not PENDING.exists():
-        return []
+        _pending_cache = []
+        return _pending_cache
     try:
-        return json.loads(PENDING.read_text(encoding="utf-8"))
+        _pending_cache = json.loads(PENDING.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _pending_cache = []
+    return _pending_cache
 
 
 def save_pending(entries: list[dict]) -> None:
+    global _pending_cache
+    _pending_cache = entries
     PENDING.parent.mkdir(parents=True, exist_ok=True)
     PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -598,6 +605,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     if not post_to_form(box, name, quantity, note):
         append_rows([{"box": box, "name": name, "quantity": quantity, "note": note}])
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return {"box": box, "name": name, "quantity": qty}
 
 
@@ -677,28 +686,39 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
         append_rows(rows)
         subprocess.run([sys.executable, str(ROOT / "build.py")],
                        capture_output=True, text=True)
+        global _inventory_cache
+        _inventory_cache = None
     return outcomes
 
 
 CHANGES = ROOT / "data" / "changes.json"
 MAX_CHANGES = 200
 
+_changes_cache = None
 
 def load_changes() -> list[dict]:
+    global _changes_cache
+    if _changes_cache is not None:
+        return _changes_cache
+
     if not CHANGES.exists():
-        return []
+        _changes_cache = []
+        return _changes_cache
     try:
-        return json.loads(CHANGES.read_text(encoding="utf-8"))
+        _changes_cache = json.loads(CHANGES.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _changes_cache = []
+    return _changes_cache
 
 
 def record_change(rows: list[dict], lines: list[str]) -> None:
     """Remember exactly what was appended, so it can be taken back off again."""
+    global _changes_cache
     log = load_changes()
     log.append({"at": datetime.datetime.now().isoformat(timespec="seconds"),
                 "rows": rows, "lines": lines})
     del log[:-MAX_CHANGES]
+    _changes_cache = log
     CHANGES.parent.mkdir(parents=True, exist_ok=True)
     CHANGES.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -725,8 +745,12 @@ def undo_last() -> dict | None:
 
     shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
     RAW.write_text(text[:-len(tail)], encoding="utf-8", newline="")
-    CHANGES.write_text(json.dumps(log[:-1], indent=2, ensure_ascii=False), encoding="utf-8")
+    global _changes_cache
+    _changes_cache = log[:-1]
+    CHANGES.write_text(json.dumps(_changes_cache, indent=2, ensure_ascii=False), encoding="utf-8")
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return last
 
 
