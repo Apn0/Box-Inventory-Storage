@@ -424,8 +424,8 @@ def lan_ips() -> list[str]:
             ip = info[4][0]
             if not ip.startswith(("127.", "169.254.")) and ip not in found:
                 found.append(ip)
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"Warning: could not resolve local hostname: {exc}", file=sys.stderr)
     # a private-range address on the same /24 as a typical home router first
     found.sort(key=lambda ip: (not ip.startswith("192.168."), ip))
     return found
@@ -435,7 +435,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8781)
-    ap.add_argument("--host", default="0.0.0.0", help="bind address (default: all interfaces)")
+    ap.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     ap.add_argument("--no-auto", action="store_true",
                     help="just queue photos; do not identify them on arrival")
     args = ap.parse_args()
@@ -464,13 +464,18 @@ def main() -> int:
     except OSError as exc:
         sys.exit(f"cannot listen on port {args.port}: {exc}")
     print(f"Box Inventory server on port {args.port}\n")
-    for ip in lan_ips():
-        print(f"  phone:  http://{ip}:{args.port}")
-    print(f"  here:   http://localhost:{args.port}")
+    if args.host.startswith("127."):
+        print(f"  here:   http://127.0.0.1:{args.port}")
+        print("\n  (Listening on localhost only. To allow phone connections, run with: --host 0.0.0.0)")
+    else:
+        for ip in lan_ips():
+            print(f"  phone:  http://{ip}:{args.port}")
+        print(f"  here:   http://localhost:{args.port}")
     print(f"\n  inbox:  {INBOX}  ({len(inbox_list())} waiting)")
     print(f"  auto:   {'on — photos are identified as they arrive' if AUTO else 'off (--no-auto)'}")
-    print("\n  If the phone cannot connect: check the Windows firewall prompt, and")
-    print("  note that an active VPN can stop the phone reaching this machine.")
+    if not args.host.startswith("127."):
+        print("\n  If the phone cannot connect: check the Windows firewall prompt, and")
+        print("  note that an active VPN can stop the phone reaching this machine.")
     print("\n  Ctrl-C to stop.\n")
     try:
         srv.serve_forever()

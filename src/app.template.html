@@ -2135,16 +2135,33 @@ function setupCamera(){
   const upload = async (input) => {
     const files = [...input.files];
     if(!files.length) return;
+
+    let apiKey = localStorage.getItem("IDENTIFY_API_KEY");
+    if(!apiKey){
+      apiKey = prompt("Please enter the API Key to identify photos:");
+      if(!apiKey) return;
+      localStorage.setItem("IDENTIFY_API_KEY", apiKey);
+    }
+
     btn.dataset.busy = gal.dataset.busy = "1";
     for(const f of files){
       toast("Identifying…");
       try{
+        const headers = {
+          "X-Filename": f.name || "photo.jpg",
+          "Content-Type": f.type || "image/jpeg"
+        };
+        if(apiKey) headers["Authorization"] = "Bearer " + apiKey;
+
         const res = await fetch(IDENTIFY_URL, {
           method: "POST",
-          headers: {"X-Filename": f.name || "photo.jpg",
-                    "Content-Type": f.type || "image/jpeg"},
+          headers: headers,
           body: f,
         });
+
+        if (res.status === 401) {
+          localStorage.removeItem("IDENTIFY_API_KEY");
+        }
         const out = await res.json();
         if(!res.ok) throw new Error(out.error || res.status);
         await new Promise(resolve => askCount(Object.assign({}, out, {then: resolve})));
