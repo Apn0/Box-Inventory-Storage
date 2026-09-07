@@ -32,7 +32,8 @@ import shutil
 import subprocess
 import sys
 
-from build import slug, part_numbers
+from build import part_numbers
+from utils import slug
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
@@ -153,6 +154,8 @@ def context_for_prompt(data: dict) -> str:
         f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
         + "\n".join(f"- {n}" for n in names)
     )
+
+
 
 
 def find_existing(active: list[dict], name: str) -> dict | None:

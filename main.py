@@ -26,7 +26,8 @@ import google.auth.transport.requests
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, slug, part_numbers
+from build import CATEGORY_LABELS, categorise, parse_date, part_numbers
+from utils import slug
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
