@@ -145,10 +145,10 @@ def load_inventory() -> dict:
     return _inventory_cache
 
 
-def context_for_prompt(data: dict) -> str:
+def context_for_prompt(data: dict, active: list[dict]) -> str:
     """A compact view of what already exists, so the model reuses naming and spots duplicates."""
     cats = ", ".join(f"{k} ({v})" for k, v in data["meta"]["categoryLabels"].items())
-    names = sorted({i["name"] for i in data["items"] if i["status"] == "active"})
+    names = sorted({i["name"] for i in active})
     return (
         f"Category keys you must choose from: {cats}.\n\n"
         f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
@@ -158,7 +158,7 @@ def context_for_prompt(data: dict) -> str:
 
 
 
-def find_existing(active: list[dict], name: str) -> dict | None:
+def find_existing_part(active: list[dict], name: str) -> dict | None:
     """The active record for this part, tolerating how the model words it.
 
     Vision models do not name a part identically twice — the same board came
@@ -186,7 +186,7 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
+def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
     per_box = {}
     same_cat = set()
@@ -427,7 +427,7 @@ def _claude(client, data: str, media: str, prompt: str) -> dict | None:
     return json.loads(text)
 
 
-def decide(data: dict, result: dict) -> dict:
+def decide(data: dict, active: list[dict], result: dict) -> dict:
     """Where the identified part goes, and what quantity the appended row carries.
 
     A part already on record must be written as the NEW TOTAL, never the delta:
@@ -436,10 +436,8 @@ def decide(data: dict, result: dict) -> dict:
     """
     qty = max(0, int(result["quantity"]))
 
-    active = [i for i in data["items"] if i["status"] == "active"]
-
-    existing = find_existing(active, result["name"]) or (
-        find_existing(active, result["matches_existing"]) if result["matches_existing"] else None)
+    existing = find_existing_part(active, result["name"]) or (
+        find_existing_part(active, result["matches_existing"]) if result["matches_existing"] else None)
 
     if existing and existing["countType"] == "exact":
         total = int(existing["qty"]) + qty
@@ -451,7 +449,7 @@ def decide(data: dict, result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = suggest_box(data, active, result["category"])
+    box, why = propose_box(data, active, result["category"])
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -589,7 +587,7 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     # If the confirmed name matches something already on record, write against
     # that record's spelling and box so a variant name cannot fork the entry.
     active = [i for i in data["items"] if i["status"] == "active"]
-    existing = find_existing(active, name)
+    existing = find_existing_part(active, name)
     if existing:
         name, box = existing["name"], existing["box"]
 
@@ -624,7 +622,8 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     rather than the caller having to scrape stdout.
     """
     data = load_inventory()
-    context = context_for_prompt(data)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    context = context_for_prompt(data, active)
     client = None
     anthropic_key = read_key("ANTHROPIC_API_KEY")
     if provider in {"auto", "anthropic"} and anthropic_key:
@@ -653,7 +652,7 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             outcomes.append({"photo": path.name, "ok": False, "error": "no answer"})
             continue
 
-        plan = decide(data, result)
+        plan = decide(data, active, result)
         outcome = {"photo": path.name, "ok": True,
                    "name": plan["name"], "box": plan["box"],
                    "confidence": result["confidence"], "note": result["note"],
@@ -670,9 +669,8 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             if INBOX in path.resolve().parents:
                 shutil.move(str(path), str(REVIEW / path.name))
 
-            active = [i for i in data["items"] if i["status"] == "active"]
-            existing = find_existing(active, result["name"]) or (
-                find_existing(active, result["matches_existing"])
+            existing = find_existing_part(active, result["name"]) or (
+                find_existing_part(active, result["matches_existing"])
                 if result["matches_existing"] else None)
             outcome.update(
                 filed=False,
@@ -833,7 +831,8 @@ def main() -> int:
             print("  anthropic SDK not installed — skipping Claude")
 
     data = load_inventory()
-    context = context_for_prompt(data)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    context = context_for_prompt(data, active)
     accepted: list[dict] = []
     config = IdentifyConfig(
         client=client,
@@ -853,7 +852,7 @@ def main() -> int:
         if result is None:
             continue
 
-        plan = decide(data, result)
+        plan = decide(data, active, result)
         print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
         if result["note"]:
             print(f"  note: {result['note']}")

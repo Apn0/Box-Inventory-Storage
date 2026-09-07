@@ -144,7 +144,7 @@ def resolve_items() -> list[dict]:
     return items
 
 
-def find_existing(active: list[dict], name: str) -> dict | None:
+def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
     for item in active:
@@ -164,7 +164,7 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def suggest_box(active: list[dict], category: str) -> int:
+def propose_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
     same_cat = set()
     used = set()
@@ -250,7 +250,8 @@ def identify():
         return jsonify(error=f"could not read the sheet: {exc}"), 502
 
     cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
-    names = sorted({i["name"] for i in items if i["status"] == "active"})
+    active = [i for i in items if i["status"] == "active"]
+    names = sorted({i["name"] for i in active})
     context = (f"Category keys you must choose from: {cats}.\n\n"
               f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
               + "\n".join(f"- {n}" for n in names))
@@ -263,10 +264,8 @@ def identify():
 
     seen = max(0, int(result.get("quantity") or 0))
 
-    active = [i for i in items if i["status"] == "active"]
-
-    existing = find_existing(active, result["name"]) or (
-        find_existing(active, result["matches_existing"]) if result.get("matches_existing") else None)
+    existing = find_existing_part(active, result["name"]) or (
+        find_existing_part(active, result["matches_existing"]) if result.get("matches_existing") else None)
 
     if existing:
         recorded = existing["qty"] if existing["countType"] == "exact" else "many"
@@ -274,7 +273,7 @@ def identify():
                        recorded=recorded, seen=seen, isNew=False,
                        confidence=result.get("confidence"), note=result.get("note", ""))
 
-    box = suggest_box(active, result.get("category", "misc"))
+    box = propose_box(active, result.get("category", "misc"))
     return jsonify(name=result["name"], recordedName=result["name"], box=box,
                    recorded=None, seen=seen, isNew=True,
                    confidence=result.get("confidence"), note=result.get("note", ""))

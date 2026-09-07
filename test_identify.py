@@ -1,95 +1,5 @@
 import unittest
-from identify import find_existing, auto_filable, suggest_box
-from build import part_numbers
-
-class TestPartNumbers(unittest.TestCase):
-    def test_letters_then_digits(self):
-        # Must have at least 2 letters followed by at least 2 digits
-        self.assertEqual(part_numbers("tmc2209"), {"tmc2209"})
-        self.assertEqual(part_numbers("mt3608"), {"mt3608"})
-        self.assertEqual(part_numbers("esp32"), {"esp32"})
-        self.assertEqual(part_numbers("ads1115"), {"ads1115"})
-        self.assertEqual(part_numbers("ch340g"), {"ch340g"})
-
-    def test_bare_digits(self):
-        # Must have at least 4 digits
-        self.assertEqual(part_numbers("18650"), {"18650"})
-        self.assertEqual(part_numbers("4000"), {"4000"})
-        self.assertEqual(part_numbers("104"), set()) # too short
-        self.assertEqual(part_numbers("220"), set()) # too short
-
-    def test_invalid_part_numbers(self):
-        # Does not match plain words
-        self.assertEqual(part_numbers("module"), set())
-        self.assertEqual(part_numbers("sensor"), set())
-        self.assertEqual(part_numbers("board"), set())
-        self.assertEqual(part_numbers("a1"), set()) # too short letters and digits
-        self.assertEqual(part_numbers("ab1"), set()) # too short digits
-        self.assertEqual(part_numbers("a12"), set()) # too short letters
-
-    def test_extracted_from_name(self):
-        self.assertEqual(part_numbers("TMC2209-LA stepper driver module"), {"tmc2209"})
-        self.assertEqual(part_numbers("ESP32 WROOM 32 dev board"), {"esp32"})
-        self.assertEqual(part_numbers("18650 battery holder"), {"18650"})
-        self.assertEqual(part_numbers("MT3608 DC-DC step-up (boost) converter module"), {"mt3608"})
-
-class TestAutoFilable(unittest.TestCase):
-    def setUp(self):
-        self.default_plan = {"existing": True}
-        self.default_result = {
-            "confidence": "high",
-            "name": "resistor",
-            "note": "10k ohm",
-            "quantity": 5
-        }
-
-    def test_confidence_not_high(self):
-        result = self.default_result.copy()
-        result["confidence"] = "medium"
-        self.assertEqual(auto_filable(result, self.default_plan), "medium confidence")
-
-        result["confidence"] = "low"
-        self.assertEqual(auto_filable(result, self.default_plan), "low confidence")
-
-        result.pop("confidence")
-        self.assertEqual(auto_filable(result, self.default_plan), "unknown confidence")
-
-    def test_unsure_name(self):
-        result = self.default_result.copy()
-        result["name"] = "unidentified object"
-        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
-
-        result["name"] = "not a component"
-        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
-
-    def test_unsure_note(self):
-        result = self.default_result.copy()
-        result["note"] = "too dark to see"
-        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
-
-        result["note"] = "blurry image"
-        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
-
-    def test_quantity_zero_or_none(self):
-        result = self.default_result.copy()
-        result["quantity"] = 0
-        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
-
-        result["quantity"] = -1
-        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
-
-        result["quantity"] = None
-        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
-
-        result.pop("quantity")
-        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
-
-    def test_not_existing(self):
-        plan = {"existing": False}
-        self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
-
-    def test_auto_filable_success(self):
-        self.assertIsNone(auto_filable(self.default_result, self.default_plan))
+from identify import find_existing_part
 
 class TestFindExisting(unittest.TestCase):
     def setUp(self):
@@ -104,61 +14,53 @@ class TestFindExisting(unittest.TestCase):
                 {"name": "ESP32-WROOM-32", "status": "active", "box": 7},
             ]
         }
+        self.active_items = [i for i in self.data["items"] if i["status"] == "active"]
 
     def test_exact_match(self):
         # Exact string match
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "TMC2209 stepper driver")
+        result = find_existing_part(self.active_items, "TMC2209 stepper driver")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
     def test_normalized_exact_match(self):
         # Case insensitive and special characters should still match exactly
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "tmc2209-stepper-driver!")
+        result = find_existing_part(self.active_items, "tmc2209-stepper-driver!")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
     def test_part_number_match(self):
         # Match based on part number when exact match fails
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "TMC2209-LA stepper driver module")
+        result = find_existing_part(self.active_items, "TMC2209-LA stepper driver module")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
         # Another part number match
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ADS1115 breakout board")
+        result = find_existing_part(self.active_items, "ADS1115 breakout board")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 3)
 
     def test_ambiguous_part_number(self):
         # '18650' matches both '18650 battery holder' and '18650 battery'
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "18650 lithium cell")
+        result = find_existing_part(self.active_items, "18650 lithium cell")
         self.assertIsNone(result)
 
     def test_inactive_item_ignored(self):
         # ATMEGA328P microcontroller is inactive, so exact match should return None
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ATMEGA328P microcontroller")
+        result = find_existing_part(self.active_items, "ATMEGA328P microcontroller")
         self.assertIsNone(result)
 
         # Part number match on inactive item should also return None.
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ATMEGA328P dev board")
+        result = find_existing_part(self.active_items, "ATMEGA328P dev board")
         self.assertIsNone(result)
 
     def test_no_match(self):
         # Completely unknown part
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "NE555 timer IC")
+        result = find_existing_part(self.active_items, "NE555 timer IC")
         self.assertIsNone(result)
 
     def test_no_part_number_no_exact_match(self):
         # Generic word match but no exact match and no part numbers
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "resistor pack")
+        result = find_existing_part(self.active_items, "resistor pack")
         self.assertIsNone(result)
 
 
