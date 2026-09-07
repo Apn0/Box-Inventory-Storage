@@ -103,61 +103,53 @@ class TestFindExisting(unittest.TestCase):
                 {"name": "ESP32-WROOM-32", "status": "active", "box": 7},
             ]
         }
+        self.active_items = [i for i in self.data["items"] if i["status"] == "active"]
 
     def test_exact_match(self):
         # Exact string match
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "TMC2209 stepper driver")
+        result = find_existing_part(self.active_items, "TMC2209 stepper driver")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
     def test_normalized_exact_match(self):
         # Case insensitive and special characters should still match exactly
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "tmc2209-stepper-driver!")
+        result = find_existing_part(self.active_items, "tmc2209-stepper-driver!")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
     def test_part_number_match(self):
         # Match based on part number when exact match fails
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "TMC2209-LA stepper driver module")
+        result = find_existing_part(self.active_items, "TMC2209-LA stepper driver module")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 1)
 
         # Another part number match
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ADS1115 breakout board")
+        result = find_existing_part(self.active_items, "ADS1115 breakout board")
         self.assertIsNotNone(result)
         self.assertEqual(result["box"], 3)
 
     def test_ambiguous_part_number(self):
         # '18650' matches both '18650 battery holder' and '18650 battery'
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "18650 lithium cell")
+        result = find_existing_part(self.active_items, "18650 lithium cell")
         self.assertIsNone(result)
 
     def test_inactive_item_ignored(self):
         # ATMEGA328P microcontroller is inactive, so exact match should return None
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ATMEGA328P microcontroller")
+        result = find_existing_part(self.active_items, "ATMEGA328P microcontroller")
         self.assertIsNone(result)
 
         # Part number match on inactive item should also return None.
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "ATMEGA328P dev board")
+        result = find_existing_part(self.active_items, "ATMEGA328P dev board")
         self.assertIsNone(result)
 
     def test_no_match(self):
         # Completely unknown part
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "NE555 timer IC")
+        result = find_existing_part(self.active_items, "NE555 timer IC")
         self.assertIsNone(result)
 
     def test_no_part_number_no_exact_match(self):
         # Generic word match but no exact match and no part numbers
-        active = [i for i in self.data["items"] if i["status"] == "active"]
-        result = find_existing(active, "resistor pack")
+        result = find_existing_part(self.active_items, "resistor pack")
         self.assertIsNone(result)
 
 

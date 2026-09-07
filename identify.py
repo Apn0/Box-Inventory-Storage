@@ -24,6 +24,7 @@ import datetime
 import glob
 import io
 import json
+import logging
 import mimetypes
 import pathlib
 import re
@@ -31,7 +32,8 @@ import shutil
 import subprocess
 import sys
 
-from build import slug, part_numbers
+from build import part_numbers
+from utils import slug
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
@@ -130,25 +132,23 @@ def read_key(name: str) -> str | None:
 
 
 _inventory_cache = None
-_inventory_mtime = 0.0
 
 def load_inventory() -> dict:
-    global _inventory_cache, _inventory_mtime
+    global _inventory_cache
+    if _inventory_cache is not None:
+        return _inventory_cache
+
     if not INVENTORY.exists():
         sys.exit(f"missing {INVENTORY} — run build.py first")
 
-    mtime = INVENTORY.stat().st_mtime
-    if _inventory_cache is None or mtime > _inventory_mtime:
-        _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
-        _inventory_mtime = mtime
-
+    _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
     return _inventory_cache
 
 
-def context_for_prompt(data: dict) -> str:
+def context_for_prompt(data: dict, active: list[dict]) -> str:
     """A compact view of what already exists, so the model reuses naming and spots duplicates."""
     cats = ", ".join(f"{k} ({v})" for k, v in data["meta"]["categoryLabels"].items())
-    names = sorted({i["name"] for i in data["items"] if i["status"] == "active"})
+    names = sorted({i["name"] for i in active})
     return (
         f"Category keys you must choose from: {cats}.\n\n"
         f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
@@ -156,7 +156,9 @@ def context_for_prompt(data: dict) -> str:
     )
 
 
-def find_existing(active: list[dict], name: str) -> dict | None:
+
+
+def find_existing_part(active: list[dict], name: str) -> dict | None:
     """The active record for this part, tolerating how the model words it.
 
     Vision models do not name a part identically twice — the same board came
@@ -170,13 +172,13 @@ def find_existing(active: list[dict], name: str) -> dict | None:
         if slug(item["name"]) == key:
             return item
 
-    wanted = _part_numbers(name)                          # then the part number
+    wanted = part_numbers(name)                          # then the part number
     if not wanted:
         return None
 
     hit = None
     for item in active:
-        if not wanted.isdisjoint(_norm(item["name"]).split()):
+        if not wanted.isdisjoint(part_numbers(item["name"])):
             if hit is not None:
                 # Several boxes carry this part number — too ambiguous to pick one.
                 return None
@@ -184,7 +186,7 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def suggest_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
+def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
     per_box = {}
     same_cat = set()
@@ -425,7 +427,7 @@ def _claude(client, data: str, media: str, prompt: str) -> dict | None:
     return json.loads(text)
 
 
-def decide(data: dict, result: dict) -> dict:
+def decide(data: dict, active: list[dict], result: dict) -> dict:
     """Where the identified part goes, and what quantity the appended row carries.
 
     A part already on record must be written as the NEW TOTAL, never the delta:
@@ -434,10 +436,8 @@ def decide(data: dict, result: dict) -> dict:
     """
     qty = max(0, int(result["quantity"]))
 
-    active = [i for i in data["items"] if i["status"] == "active"]
-
-    existing = find_existing(active, result["name"]) or (
-        find_existing(active, result["matches_existing"]) if result["matches_existing"] else None)
+    existing = find_existing_part(active, result["name"]) or (
+        find_existing_part(active, result["matches_existing"]) if result["matches_existing"] else None)
 
     if existing and existing["countType"] == "exact":
         total = int(existing["qty"]) + qty
@@ -449,7 +449,7 @@ def decide(data: dict, result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = suggest_box(data, active, result["category"])
+    box, why = propose_box(data, active, result["category"])
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -511,17 +511,26 @@ def auto_filable(result: dict, plan: dict) -> str | None:
 
 PENDING = ROOT / "data" / "pending.json"
 
+_pending_cache = None
 
 def load_pending() -> list[dict]:
+    global _pending_cache
+    if _pending_cache is not None:
+        return _pending_cache
+
     if not PENDING.exists():
-        return []
+        _pending_cache = []
+        return _pending_cache
     try:
-        return json.loads(PENDING.read_text(encoding="utf-8"))
+        _pending_cache = json.loads(PENDING.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _pending_cache = []
+    return _pending_cache
 
 
 def save_pending(entries: list[dict]) -> None:
+    global _pending_cache
+    _pending_cache = entries
     PENDING.parent.mkdir(parents=True, exist_ok=True)
     PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -578,7 +587,7 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     # If the confirmed name matches something already on record, write against
     # that record's spelling and box so a variant name cannot fork the entry.
     active = [i for i in data["items"] if i["status"] == "active"]
-    existing = find_existing(active, name)
+    existing = find_existing_part(active, name)
     if existing:
         name, box = existing["name"], existing["box"]
 
@@ -598,6 +607,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     if not post_to_form(box, name, quantity, note):
         append_rows([{"box": box, "name": name, "quantity": quantity, "note": note}])
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return {"box": box, "name": name, "quantity": qty}
 
 
@@ -611,7 +622,8 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     rather than the caller having to scrape stdout.
     """
     data = load_inventory()
-    context = context_for_prompt(data)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    context = context_for_prompt(data, active)
     client = None
     anthropic_key = read_key("ANTHROPIC_API_KEY")
     if provider in {"auto", "anthropic"} and anthropic_key:
@@ -619,7 +631,7 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             import anthropic
             client = anthropic.Anthropic(api_key=anthropic_key)
         except ImportError:
-            pass
+            logging.warning("anthropic SDK not installed — skipping Claude")
 
     outcomes, rows = [], []
     config = IdentifyConfig(
@@ -640,7 +652,7 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             outcomes.append({"photo": path.name, "ok": False, "error": "no answer"})
             continue
 
-        plan = decide(data, result)
+        plan = decide(data, active, result)
         outcome = {"photo": path.name, "ok": True,
                    "name": plan["name"], "box": plan["box"],
                    "confidence": result["confidence"], "note": result["note"],
@@ -657,9 +669,8 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             if INBOX in path.resolve().parents:
                 shutil.move(str(path), str(REVIEW / path.name))
 
-            active = [i for i in data["items"] if i["status"] == "active"]
-            existing = find_existing(active, result["name"]) or (
-                find_existing(active, result["matches_existing"])
+            existing = find_existing_part(active, result["name"]) or (
+                find_existing_part(active, result["matches_existing"])
                 if result["matches_existing"] else None)
             outcome.update(
                 filed=False,
@@ -677,28 +688,39 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
         append_rows(rows)
         subprocess.run([sys.executable, str(ROOT / "build.py")],
                        capture_output=True, text=True)
+        global _inventory_cache
+        _inventory_cache = None
     return outcomes
 
 
 CHANGES = ROOT / "data" / "changes.json"
 MAX_CHANGES = 200
 
+_changes_cache = None
 
 def load_changes() -> list[dict]:
+    global _changes_cache
+    if _changes_cache is not None:
+        return _changes_cache
+
     if not CHANGES.exists():
-        return []
+        _changes_cache = []
+        return _changes_cache
     try:
-        return json.loads(CHANGES.read_text(encoding="utf-8"))
+        _changes_cache = json.loads(CHANGES.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _changes_cache = []
+    return _changes_cache
 
 
 def record_change(rows: list[dict], lines: list[str]) -> None:
     """Remember exactly what was appended, so it can be taken back off again."""
+    global _changes_cache
     log = load_changes()
     log.append({"at": datetime.datetime.now().isoformat(timespec="seconds"),
                 "rows": rows, "lines": lines})
     del log[:-MAX_CHANGES]
+    _changes_cache = log
     CHANGES.parent.mkdir(parents=True, exist_ok=True)
     CHANGES.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -725,8 +747,12 @@ def undo_last() -> dict | None:
 
     shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
     RAW.write_text(text[:-len(tail)], encoding="utf-8", newline="")
-    CHANGES.write_text(json.dumps(log[:-1], indent=2, ensure_ascii=False), encoding="utf-8")
+    global _changes_cache
+    _changes_cache = log[:-1]
+    CHANGES.write_text(json.dumps(_changes_cache, indent=2, ensure_ascii=False), encoding="utf-8")
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return last
 
 
@@ -805,7 +831,8 @@ def main() -> int:
             print("  anthropic SDK not installed — skipping Claude")
 
     data = load_inventory()
-    context = context_for_prompt(data)
+    active = [i for i in data["items"] if i["status"] == "active"]
+    context = context_for_prompt(data, active)
     accepted: list[dict] = []
     config = IdentifyConfig(
         client=client,
@@ -825,7 +852,7 @@ def main() -> int:
         if result is None:
             continue
 
-        plan = decide(data, result)
+        plan = decide(data, active, result)
         print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
         if result["note"]:
             print(f"  note: {result['note']}")

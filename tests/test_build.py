@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items
+from build import parse_date, find_split_items, container_of
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -71,3 +71,24 @@ def test_find_split_items_sorting():
     assert len(result) == 2
     assert result[0]["name"] == "Arduino"
     assert result[1]["name"] == "Zener Diode"
+
+@pytest.mark.parametrize("box, expected", [
+    (1, "1"),
+    (2, "1"),
+    (30, "1"),
+    (31, "2"),
+    (60, "2"),
+    (61, "3"),
+    (399, "14"),
+    (400, "H0"),
+    (401, "H1"),
+    (430, "H1"),
+    (431, "H2"),
+    (460, "H2"),
+    (461, "H3"),
+])
+def test_container_of(box, expected):
+    """Boxes are grouped into containers of size 30.
+    The 400-series starts a new physical set of containers with an 'H' prefix.
+    """
+    assert container_of(box) == expected

@@ -2,10 +2,7 @@ import timeit
 
 setup_code = """
 import random
-
-def slug(text: str) -> str:
-    import re
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+from utils import slug
 
 
 from build import part_numbers

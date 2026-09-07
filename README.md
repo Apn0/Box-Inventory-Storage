@@ -153,8 +153,9 @@ Rebuild manually with `gh workflow run android.yml`.
 ## On the phone — `server.py`
 
 ```powershell
-cd V:\_Claude\box-inventory; python server.py
+cd V:\_Claude\box-inventory; python server.py --host 0.0.0.0
 ```
+*(By default, the server binds to localhost for security, so the `--host 0.0.0.0` flag is required for the phone to reach it over the network).*
 
 It prints the addresses to use. On the phone, on the same WiFi, open
 `http://192.168.1.140:8781` → Chrome menu → **Add to Home screen**. That gives an

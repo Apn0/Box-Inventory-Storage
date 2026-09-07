@@ -18,7 +18,6 @@ import csv
 import io
 import json
 import mimetypes
-import re
 import urllib.error
 import urllib.request
 
@@ -27,9 +26,11 @@ import google.auth.transport.requests
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, slug, part_numbers
+from build import CATEGORY_LABELS, categorise, parse_date, part_numbers
+from utils import slug
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
 BOX_GID = 788564724
@@ -143,7 +144,7 @@ def resolve_items() -> list[dict]:
     return items
 
 
-def find_existing(active: list[dict], name: str) -> dict | None:
+def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
     for item in active:
@@ -163,17 +164,24 @@ def find_existing(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def suggest_box(active: list[dict], category: str) -> int:
+def propose_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
-    for i in active:
-        per_box[i["box"]] = per_box.get(i["box"], 0) + 1
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        box = i["box"]
+        per_box[box] = per_box.get(box, 0) + 1
+
+        if box < 400:
+            used.add(box)
+            if i["category"] == category:
+                same_cat.add(box)
+
+    for b in sorted(same_cat):
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
             return b
 
-    used = {i["box"] for i in active if i["box"] < 400}
     b = 1
     while b in used:
         b += 1
@@ -223,6 +231,11 @@ def health():
 
 @app.route("/identify", methods=["POST"])
 def identify():
+    expected_key = os.environ.get("API_KEY")
+    auth_header = request.headers.get("Authorization", "")
+    if not expected_key or not auth_header.startswith("Bearer ") or auth_header[7:] != expected_key:
+        return jsonify(error="unauthorized"), 401
+
     media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
     if media not in SUPPORTED:
         media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"
@@ -237,7 +250,8 @@ def identify():
         return jsonify(error=f"could not read the sheet: {exc}"), 502
 
     cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
-    names = sorted({i["name"] for i in items if i["status"] == "active"})
+    active = [i for i in items if i["status"] == "active"]
+    names = sorted({i["name"] for i in active})
     context = (f"Category keys you must choose from: {cats}.\n\n"
               f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
               + "\n".join(f"- {n}" for n in names))
@@ -250,10 +264,8 @@ def identify():
 
     seen = max(0, int(result.get("quantity") or 0))
 
-    active = [i for i in items if i["status"] == "active"]
-
-    existing = find_existing(active, result["name"]) or (
-        find_existing(active, result["matches_existing"]) if result.get("matches_existing") else None)
+    existing = find_existing_part(active, result["name"]) or (
+        find_existing_part(active, result["matches_existing"]) if result.get("matches_existing") else None)
 
     if existing:
         recorded = existing["qty"] if existing["countType"] == "exact" else "many"
@@ -261,7 +273,7 @@ def identify():
                        recorded=recorded, seen=seen, isNew=False,
                        confidence=result.get("confidence"), note=result.get("note", ""))
 
-    box = suggest_box(active, result.get("category", "misc"))
+    box = propose_box(active, result.get("category", "misc"))
     return jsonify(name=result["name"], recordedName=result["name"], box=box,
                    recorded=None, seen=seen, isNew=True,
                    confidence=result.get("confidence"), note=result.get("note", ""))
