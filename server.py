@@ -289,6 +289,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         import identify
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if length > MAX_UPLOAD:
+                return self._json(413, {"error": f"too large ({length} bytes)"})
             body = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad body"})
@@ -317,6 +319,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         import identify
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if length > MAX_UPLOAD:
+                return self._json(413, {"error": f"too large ({length} bytes)"})
             body = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad body"})
