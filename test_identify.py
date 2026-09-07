@@ -1,5 +1,5 @@
 import unittest
-from identify import find_existing, auto_filable, suggest_box, _part_numbers
+from identify import find_existing, auto_filable, suggest_box, _part_numbers, _recoverable
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -256,6 +256,31 @@ class TestDecide(unittest.TestCase):
         self.assertEqual(res["quantity"], 8) # 5 + 3
         self.assertEqual(res["from"], 5)
         self.assertEqual(res["to"], 8)
+
+class TestRecoverable(unittest.TestCase):
+    def test_recoverable_exceptions(self):
+        # Should return True for these exceptions
+        self.assertTrue(_recoverable(Exception("Your credit balance is too low.")))
+        self.assertTrue(_recoverable(Exception("The credits are depleted.")))
+        self.assertTrue(_recoverable(Exception("Insufficient_quota error.")))
+        self.assertTrue(_recoverable(Exception("Quota exceeded.")))
+        self.assertTrue(_recoverable(Exception("Authentication failed.")))
+        self.assertTrue(_recoverable(Exception("Permission denied.")))
+        self.assertTrue(_recoverable(Exception("Unauthorized access.")))
+        self.assertTrue(_recoverable(Exception("Billing issue.")))
+        self.assertTrue(_recoverable(Exception("HTTP Error 401: Unauthorized")))
+        self.assertTrue(_recoverable(Exception("Error 403 Forbidden")))
+        self.assertTrue(_recoverable(Exception("Too Many Requests 429")))
+
+    def test_non_recoverable_exceptions(self):
+        # Should return False for these
+        self.assertFalse(_recoverable(Exception("SyntaxError: invalid syntax")))
+        self.assertFalse(_recoverable(Exception("ValueError: missing value")))
+        self.assertFalse(_recoverable(Exception("Network timeout")))
+        self.assertFalse(_recoverable(Exception("Unknown error occurred")))
+        self.assertFalse(_recoverable(Exception("500 Internal Server Error")))
+        self.assertFalse(_recoverable(Exception("404 Not Found")))
+        self.assertFalse(_recoverable(Exception("Bad request 400")))
 
 if __name__ == "__main__":
     unittest.main()
