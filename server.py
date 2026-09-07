@@ -23,6 +23,7 @@ import json
 import mimetypes
 import pathlib
 import queue
+import urllib.parse
 import re
 import shutil
 import socket
@@ -231,7 +232,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            import urllib.parse
             import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
@@ -256,126 +256,145 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                name = pathlib.PurePosixPath(path).name
+                name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
                 target = folder / name
-                if target.is_file() and target.parent.resolve() == folder.resolve():
+                if target.is_file() and folder.resolve() in target.resolve().parents:
                     ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
                     return self._send(Response(200, target.read_bytes(), ctype))
                 return self._json(404, {"error": "not found"})
 
         return self._json(404, {"error": "not found"})
 
+    def _handle_upload(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self._json(400, {"error": "bad length"})
+        if length <= 0:
+            return self._json(400, {"error": "empty upload"})
+        if length > MAX_UPLOAD:
+            return self._json(413, {"error": f"too large ({length} bytes)"})
+
+        data = self.rfile.read(length)
+        INBOX.mkdir(parents=True, exist_ok=True)
+        name = safe_name(self.headers.get("X-Filename", "photo.jpg"))
+        (INBOX / name).write_bytes(data)
+        print(f"  photo received: {name} ({len(data)//1024} KB)")
+        if AUTO:
+            _work.put(INBOX / name)
+        return self._json(200, {"ok": True, "saved": name,
+                                "queued": AUTO, "pending": len(inbox_list())})
+
+    def _handle_quickadd(self) -> None:
+        import identify
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length > MAX_UPLOAD:
+                return self._json(413, {"error": f"too large ({length} bytes)"})
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "bad body"})
+
+        name = (body.get("name") or "").strip()
+        if not name:
+            return self._json(400, {"error": "name is required"})
+        try:
+            box = int(body.get("box"))
+        except (TypeError, ValueError):
+            return self._json(400, {"error": "box must be a number"})
+
+        with _build_lock:
+            try:
+                done = identify.commit({"photo": None, "name": name, "box": box,
+                                        "note": body.get("note", "")},
+                                       body.get("qty"), box, name)
+            except Exception as exc:               # noqa: BLE001
+                return self._json(500, {"error": str(exc)[:200]})
+        record({"photo": None, "state": "done", "ok": True,
+                "name": done["name"], "box": done["box"], "to": done["quantity"]})
+        print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
+        return self._json(200, {"ok": True, **done})
+
+    def _handle_confirm_dismiss(self, path: str) -> None:
+        import identify
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length > MAX_UPLOAD:
+                return self._json(413, {"error": f"too large ({length} bytes)"})
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self._json(400, {"error": "bad body"})
+
+        entries = identify.load_pending()
+        entry = next((e for e in entries if e["id"] == body.get("id")), None)
+        if entry is None:
+            return self._json(404, {"error": "no such pending photo"})
+
+        entries = [e for e in entries if e["id"] != entry["id"]]
+        if path == "/dismiss":
+            src = REVIEW / entry["photo"]
+            if src.exists():                       # keep the photo, file nothing
+                (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
+            identify.save_pending(entries)
+            record({"photo": entry["photo"], "state": "dismissed", "ok": True,
+                    "name": entry.get("name")})
+            return self._json(200, {"ok": True, "dismissed": entry["id"]})
+
+        with _build_lock:
+            try:
+                done = identify.commit(entry, body.get("qty"),
+                                       body.get("box"), body.get("name"))
+            except Exception as exc:               # noqa: BLE001
+                return self._json(500, {"error": str(exc)[:200]})
+            identify.save_pending(entries)
+        record({"photo": entry["photo"], "state": "done", "ok": True,
+                "name": done["name"], "box": done["box"], "to": done["quantity"]})
+        print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
+        return self._json(200, {"ok": True, **done})
+
+    def _handle_undo(self) -> None:
+        import identify
+        with _build_lock:
+            try:
+                undone = identify.undo_last()
+            except Exception as exc:               # noqa: BLE001
+                return self._json(409, {"error": str(exc)[:200]})
+        if not undone:
+            return self._json(200, {"ok": False, "message": "nothing to undo"})
+        names = ", ".join(r["name"] for r in undone["rows"])
+        record({"state": "undone", "ok": True, "name": names})
+        print(f"  undone: {names}")
+        return self._json(200, {"ok": True, "undone": undone["rows"]})
+
+    def _handle_identify(self) -> None:
+        pending = inbox_list()
+        if not pending:
+            return self._json(200, {"ok": True, "message": "inbox empty"})
+        for entry in pending:
+            _work.put(INBOX / entry["name"])
+        return self._json(202, {"ok": True, "started": len(pending)})
+
     # ----------------------------------------------------------------- POST
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
 
         if path == "/upload":
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                return self._json(400, {"error": "bad length"})
-            if length <= 0:
-                return self._json(400, {"error": "empty upload"})
-            if length > MAX_UPLOAD:
-                return self._json(413, {"error": f"too large ({length} bytes)"})
-
-            data = self.rfile.read(length)
-            INBOX.mkdir(parents=True, exist_ok=True)
-            name = safe_name(self.headers.get("X-Filename", "photo.jpg"))
-            (INBOX / name).write_bytes(data)
-            print(f"  photo received: {name} ({len(data)//1024} KB)")
-            if AUTO:
-                _work.put(INBOX / name)
-            return self._json(200, {"ok": True, "saved": name,
-                                    "queued": AUTO, "pending": len(inbox_list())})
+            return self._handle_upload()
 
         # Typed or spoken entry: no photo, no vision call, nothing to identify.
         # For a part you can name, this is the whole pipeline.
         if path == "/quickadd":
-            import identify
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length) or b"{}")
-            except (ValueError, json.JSONDecodeError):
-                return self._json(400, {"error": "bad body"})
-
-            name = (body.get("name") or "").strip()
-            if not name:
-                return self._json(400, {"error": "name is required"})
-            try:
-                box = int(body.get("box"))
-            except (TypeError, ValueError):
-                return self._json(400, {"error": "box must be a number"})
-
-            with _build_lock:
-                try:
-                    done = identify.commit({"photo": None, "name": name, "box": box,
-                                            "note": body.get("note", "")},
-                                           body.get("qty"), box, name)
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(500, {"error": str(exc)[:200]})
-            record({"photo": None, "state": "done", "ok": True,
-                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
-            print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
-            return self._json(200, {"ok": True, **done})
+            return self._handle_quickadd()
 
         if path in ("/confirm", "/dismiss"):
-            import identify
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length) or b"{}")
-            except (ValueError, json.JSONDecodeError):
-                return self._json(400, {"error": "bad body"})
-
-            entries = identify.load_pending()
-            entry = next((e for e in entries if e["id"] == body.get("id")), None)
-            if entry is None:
-                return self._json(404, {"error": "no such pending photo"})
-
-            entries = [e for e in entries if e["id"] != entry["id"]]
-            if path == "/dismiss":
-                src = REVIEW / entry["photo"]
-                if src.exists():                       # keep the photo, file nothing
-                    (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
-                identify.save_pending(entries)
-                record({"photo": entry["photo"], "state": "dismissed", "ok": True,
-                        "name": entry.get("name")})
-                return self._json(200, {"ok": True, "dismissed": entry["id"]})
-
-            with _build_lock:
-                try:
-                    done = identify.commit(entry, body.get("qty"),
-                                           body.get("box"), body.get("name"))
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(500, {"error": str(exc)[:200]})
-                identify.save_pending(entries)
-            record({"photo": entry["photo"], "state": "done", "ok": True,
-                    "name": done["name"], "box": done["box"], "to": done["quantity"]})
-            print(f"  confirmed: {done['name']} -> box {done['box']} = {done['quantity']}")
-            return self._json(200, {"ok": True, **done})
+            return self._handle_confirm_dismiss(path)
 
         if path == "/undo":
-            import identify
-            with _build_lock:
-                try:
-                    undone = identify.undo_last()
-                except Exception as exc:               # noqa: BLE001
-                    return self._json(409, {"error": str(exc)[:200]})
-            if not undone:
-                return self._json(200, {"ok": False, "message": "nothing to undo"})
-            names = ", ".join(r["name"] for r in undone["rows"])
-            record({"state": "undone", "ok": True, "name": names})
-            print(f"  undone: {names}")
-            return self._json(200, {"ok": True, "undone": undone["rows"]})
+            return self._handle_undo()
 
         if path == "/identify":
-            pending = inbox_list()
-            if not pending:
-                return self._json(200, {"ok": True, "message": "inbox empty"})
-            for entry in pending:
-                _work.put(INBOX / entry["name"])
-            return self._json(202, {"ok": True, "started": len(pending)})
+            return self._handle_identify()
 
         return self._json(404, {"error": "not found"})
 
@@ -409,8 +428,8 @@ def lan_ips() -> list[str]:
             ip = info[4][0]
             if not ip.startswith(("127.", "169.254.")) and ip not in found:
                 found.append(ip)
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"Warning: could not resolve local hostname: {exc}", file=sys.stderr)
     # a private-range address on the same /24 as a typical home router first
     found.sort(key=lambda ip: (not ip.startswith("192.168."), ip))
     return found
@@ -420,7 +439,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8781)
-    ap.add_argument("--host", default="0.0.0.0", help="bind address (default: all interfaces)")
+    ap.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     ap.add_argument("--no-auto", action="store_true",
                     help="just queue photos; do not identify them on arrival")
     args = ap.parse_args()
@@ -449,13 +468,18 @@ def main() -> int:
     except OSError as exc:
         sys.exit(f"cannot listen on port {args.port}: {exc}")
     print(f"Box Inventory server on port {args.port}\n")
-    for ip in lan_ips():
-        print(f"  phone:  http://{ip}:{args.port}")
-    print(f"  here:   http://localhost:{args.port}")
+    if args.host.startswith("127."):
+        print(f"  here:   http://127.0.0.1:{args.port}")
+        print("\n  (Listening on localhost only. To allow phone connections, run with: --host 0.0.0.0)")
+    else:
+        for ip in lan_ips():
+            print(f"  phone:  http://{ip}:{args.port}")
+        print(f"  here:   http://localhost:{args.port}")
     print(f"\n  inbox:  {INBOX}  ({len(inbox_list())} waiting)")
     print(f"  auto:   {'on — photos are identified as they arrive' if AUTO else 'off (--no-auto)'}")
-    print("\n  If the phone cannot connect: check the Windows firewall prompt, and")
-    print("  note that an active VPN can stop the phone reaching this machine.")
+    if not args.host.startswith("127."):
+        print("\n  If the phone cannot connect: check the Windows firewall prompt, and")
+        print("  note that an active VPN can stop the phone reaching this machine.")
     print("\n  Ctrl-C to stop.\n")
     try:
         srv.serve_forever()

@@ -63,5 +63,120 @@ class TestFindExisting(unittest.TestCase):
         result = find_existing_part(self.active_items, "resistor pack")
         self.assertIsNone(result)
 
+
+class TestDecide(unittest.TestCase):
+    def setUp(self):
+        from identify import decide
+        self.decide = decide
+        self.data = {
+            "items": [
+                {"name": "TMC2209 stepper driver", "status": "active", "box": 1, "countType": "exact", "qty": 5, "category": "ic"},
+                {"name": "18650 battery holder", "status": "active", "box": 4, "countType": "bulk", "qty": "many", "category": "misc"},
+                {"name": "Inactive Item", "status": "inactive", "box": 5, "countType": "exact", "qty": 2, "category": "misc"},
+            ],
+            "freeBoxes": [
+                {"box": 2, "reason": "empty"},
+                {"box": 3, "reason": "empty"}
+            ]
+        }
+
+    def test_appended_row_exact(self):
+        result = {
+            "name": "TMC2209 stepper driver",
+            "quantity": 2,
+            "category": "ic",
+            "matches_existing": ""
+        }
+        res = self.decide(self.data, result)
+        self.assertTrue(res["existing"])
+        self.assertEqual(res["box"], 1)
+        self.assertEqual(res["name"], "TMC2209 stepper driver")
+        self.assertEqual(res["quantity"], 7)  # 5 + 2
+        self.assertEqual(res["from"], 5)
+        self.assertEqual(res["to"], 7)
+        self.assertIn("already in box 1", res["why"])
+
+    def test_appended_row_bulk(self):
+        result = {
+            "name": "18650 battery holder",
+            "quantity": 10,
+            "category": "misc",
+            "matches_existing": ""
+        }
+        res = self.decide(self.data, result)
+        self.assertTrue(res["existing"])
+        self.assertEqual(res["box"], 4)
+        self.assertEqual(res["name"], "18650 battery holder")
+        self.assertEqual(res["quantity"], "many")
+        self.assertIsNone(res["from"])
+        self.assertIsNone(res["to"])
+        self.assertIn("already in box 4", res["why"])
+
+    def test_new_row_same_category_existing_box(self):
+        # Category "ic" already in box 1, which has room (<6 items)
+        result = {
+            "name": "New IC",
+            "quantity": 3,
+            "category": "ic",
+            "matches_existing": ""
+        }
+        res = self.decide(self.data, result)
+        self.assertFalse(res["existing"])
+        self.assertEqual(res["box"], 1) # suggest_box picks box 1 due to same category
+        self.assertEqual(res["name"], "New IC")
+        self.assertEqual(res["quantity"], 3)
+        self.assertIsNone(res["from"])
+        self.assertEqual(res["to"], 3)
+        self.assertIn("already holds ic parts and has room", res["why"])
+
+    def test_new_row_free_box(self):
+        result = {
+            "name": "New Resistor",
+            "quantity": 100,
+            "category": "resistor",
+            "matches_existing": ""
+        }
+        res = self.decide(self.data, result)
+        self.assertFalse(res["existing"])
+        self.assertEqual(res["box"], 2) # suggest_box picks first free box
+        self.assertEqual(res["name"], "New Resistor")
+        self.assertEqual(res["quantity"], 100)
+        self.assertIsNone(res["from"])
+        self.assertEqual(res["to"], 100)
+        self.assertIn("box 2 is free", res["why"])
+
+    def test_matches_existing(self):
+        result = {
+            "name": "Different name for TMC",
+            "quantity": 3,
+            "category": "ic",
+            "matches_existing": "TMC2209 stepper driver"
+        }
+        res = self.decide(self.data, result)
+        self.assertTrue(res["existing"])
+        self.assertEqual(res["box"], 1)
+        self.assertEqual(res["name"], "TMC2209 stepper driver")
+        self.assertEqual(res["quantity"], 8) # 5 + 3
+        self.assertEqual(res["from"], 5)
+        self.assertEqual(res["to"], 8)
+
+
+class TestEscapeCSVFormula(unittest.TestCase):
+    def test_escape_csv_formula(self):
+        from identify import escape_csv_formula
+
+        # Test prefixes
+        self.assertEqual(escape_csv_formula("=1+2"), "'=1+2")
+        self.assertEqual(escape_csv_formula("+1+2"), "'+1+2")
+        self.assertEqual(escape_csv_formula("-1+2"), "'-1+2")
+        self.assertEqual(escape_csv_formula("@1+2"), "'@1+2")
+
+        # Test no prefix
+        self.assertEqual(escape_csv_formula("1+2"), "1+2")
+        self.assertEqual(escape_csv_formula("Hello = 1"), "Hello = 1")
+        self.assertEqual(escape_csv_formula(""), "")
+        self.assertEqual(escape_csv_formula(None), "")
+        self.assertEqual(escape_csv_formula(123), "123")
+
 if __name__ == "__main__":
     unittest.main()

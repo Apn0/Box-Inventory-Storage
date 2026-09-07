@@ -18,16 +18,22 @@ import argparse
 import base64
 import collections
 import csv
+import typing
+import dataclasses
 import datetime
 import glob
 import io
 import json
+import logging
 import mimetypes
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+
+from build import part_numbers
+from utils import slug
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
@@ -104,19 +110,39 @@ GEMINI_SCHEMA = {
 }
 
 
+_env_cache = None
+_env_mtime = 0.0
+
 def read_key(name: str) -> str | None:
+    global _env_cache, _env_mtime
     if not ENV.exists():
         return None
-    for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.strip().startswith(f"{name}="):
-            return line.split("=", 1)[1].strip() or None
-    return None
 
+    mtime = ENV.stat().st_mtime
+    if _env_cache is None or mtime > _env_mtime:
+        _env_cache = {}
+        for line in ENV.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                _env_cache[k.strip()] = v.strip() or None
+        _env_mtime = mtime
+
+    return _env_cache.get(name)
+
+
+_inventory_cache = None
 
 def load_inventory() -> dict:
+    global _inventory_cache
+    if _inventory_cache is not None:
+        return _inventory_cache
+
     if not INVENTORY.exists():
         sys.exit(f"missing {INVENTORY} — run build.py first")
-    return json.loads(INVENTORY.read_text(encoding="utf-8"))
+
+    _inventory_cache = json.loads(INVENTORY.read_text(encoding="utf-8"))
+    return _inventory_cache
 
 
 def context_for_prompt(data: dict, active: list[dict]) -> str:
@@ -130,18 +156,6 @@ def context_for_prompt(data: dict, active: list[dict]) -> str:
     )
 
 
-def _norm(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-
-
-# A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
-# or a bare run of digits (18650). Distinctive enough to identify a part on its
-# own, which plain words like "module" or "sensor" are not.
-PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
-
-
-def _part_numbers(name: str) -> set[str]:
-    return {t for t in _norm(name).split() if PART_NUMBER.match(t)}
 
 
 def find_existing_part(active: list[dict], name: str) -> dict | None:
@@ -152,28 +166,41 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     Exact matching alone therefore files a second row for a part already on
     record, and the inventory drifts apart one photo at a time.
     """
-    key = _norm(name)
+    key = slug(name)
 
     for item in active:                                   # exact wins
-        if _norm(item["name"]) == key:
+        if slug(item["name"]) == key:
             return item
 
-    wanted = _part_numbers(name)                          # then the part number
-    if wanted:
-        hits = [i for i in active if _part_numbers(i["name"]) & wanted]
-        if len(hits) == 1:
-            return hits[0]
-        # Several boxes carry this part number — too ambiguous to pick one.
-    return None
+    wanted = part_numbers(name)                          # then the part number
+    if not wanted:
+        return None
+
+    hit = None
+    for item in active:
+        if not wanted.isdisjoint(part_numbers(item["name"])):
+            if hit is not None:
+                # Several boxes carry this part number — too ambiguous to pick one.
+                return None
+            hit = item
+    return hit
 
 
 def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    per_box = collections.Counter(i["box"] for i in active)
+    per_box = {}
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active
-                       if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            used.add(b)
+            if i["category"] == category:
+                same_cat.add(b)
+
+    for b in sorted(same_cat):
         if per_box[b] < MAX_BOX_ITEMS:
             return b, f"box {b} already holds {category} parts and has room"
 
@@ -181,7 +208,7 @@ def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     if free:
         return free[0], f"box {free[0]} is free ({[f for f in data['freeBoxes'] if f['box'] == free[0]][0]['reason']})"
 
-    nxt = max((i["box"] for i in active if i["box"] < 400), default=0) + 1
+    nxt = max(used, default=0) + 1
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
@@ -302,21 +329,29 @@ def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
     return json.loads(choices[0]["message"]["content"])
 
 
-def identify(client, path: pathlib.Path, context: str, provider: str,
-             gemini_key: str | None, openai_key: str | None = None) -> dict | None:
+@dataclasses.dataclass
+class IdentifyConfig:
+    client: typing.Any
+    context: str
+    provider: str
+    gemini_key: str | None
+    openai_key: str | None = None
+
+
+def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
         print(f"  skipped — {path.suffix} is not a supported image type")
         return None
 
     data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-    prompt = f"Identify this part.\n\n{context}"
+    prompt = f"Identify this part.\n\n{config.context}"
 
-    if provider == "gemini":
-        return _gemini(data, media, prompt, gemini_key)
-    if provider == "openai":
-        return _openai(data, media, prompt, openai_key)
-    if provider == "vertex":
+    if config.provider == "gemini":
+        return _gemini(data, media, prompt, config.gemini_key)
+    if config.provider == "openai":
+        return _openai(data, media, prompt, config.openai_key)
+    if config.provider == "vertex":
         return _vertex(data, media, prompt, vertex_token())
 
     # provider == "auto": Vertex first — it spends the credits on the separate
@@ -325,9 +360,9 @@ def identify(client, path: pathlib.Path, context: str, provider: str,
     # a key being usable are different things.
     chain = [(f"vertex/{VERTEX_MODEL}",
               lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
-    chain.append(("claude", lambda: _claude(client, data, media, prompt), client))
-    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, gemini_key), gemini_key))
-    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, openai_key), openai_key))
+    chain.append(("claude", lambda: _claude(config.client, data, media, prompt), config.client))
+    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, config.gemini_key), config.gemini_key))
+    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, config.openai_key), config.openai_key))
 
     last: Exception | None = None
     for name, call, available in chain:
@@ -470,23 +505,32 @@ def auto_filable(result: dict, plan: dict) -> str | None:
     if not plan["existing"]:
         # A new part means a new row and a new box. Worth ten seconds of your
         # eyes; a wrong one is far more annoying to unpick than to confirm.
-        return "a part not already in the inventory"
+        return "new item, requires visual check"
     return None
 
 
 PENDING = ROOT / "data" / "pending.json"
 
+_pending_cache = None
 
 def load_pending() -> list[dict]:
+    global _pending_cache
+    if _pending_cache is not None:
+        return _pending_cache
+
     if not PENDING.exists():
-        return []
+        _pending_cache = []
+        return _pending_cache
     try:
-        return json.loads(PENDING.read_text(encoding="utf-8"))
+        _pending_cache = json.loads(PENDING.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _pending_cache = []
+    return _pending_cache
 
 
 def save_pending(entries: list[dict]) -> None:
+    global _pending_cache
+    _pending_cache = entries
     PENDING.parent.mkdir(parents=True, exist_ok=True)
     PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -563,6 +607,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     if not post_to_form(box, name, quantity, note):
         append_rows([{"box": box, "name": name, "quantity": quantity, "note": note}])
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return {"box": box, "name": name, "quantity": qty}
 
 
@@ -585,14 +631,20 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
             import anthropic
             client = anthropic.Anthropic(api_key=anthropic_key)
         except ImportError:
-            pass
+            logging.warning("anthropic SDK not installed — skipping Claude")
 
     outcomes, rows = [], []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=provider,
+        gemini_key=read_key("GOOGLE_API_KEY"),
+        openai_key=read_key("OPENAI_API_KEY")
+    )
     for path in paths:
         path = pathlib.Path(path)
         try:
-            result = identify(client, path, context, provider,
-                              read_key("GOOGLE_API_KEY"), read_key("OPENAI_API_KEY"))
+            result = identify(path, config)
         except Exception as exc:                          # noqa: BLE001
             outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
             continue
@@ -636,28 +688,39 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
         append_rows(rows)
         subprocess.run([sys.executable, str(ROOT / "build.py")],
                        capture_output=True, text=True)
+        global _inventory_cache
+        _inventory_cache = None
     return outcomes
 
 
 CHANGES = ROOT / "data" / "changes.json"
 MAX_CHANGES = 200
 
+_changes_cache = None
 
 def load_changes() -> list[dict]:
+    global _changes_cache
+    if _changes_cache is not None:
+        return _changes_cache
+
     if not CHANGES.exists():
-        return []
+        _changes_cache = []
+        return _changes_cache
     try:
-        return json.loads(CHANGES.read_text(encoding="utf-8"))
+        _changes_cache = json.loads(CHANGES.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return []
+        _changes_cache = []
+    return _changes_cache
 
 
 def record_change(rows: list[dict], lines: list[str]) -> None:
     """Remember exactly what was appended, so it can be taken back off again."""
+    global _changes_cache
     log = load_changes()
     log.append({"at": datetime.datetime.now().isoformat(timespec="seconds"),
                 "rows": rows, "lines": lines})
     del log[:-MAX_CHANGES]
+    _changes_cache = log
     CHANGES.parent.mkdir(parents=True, exist_ok=True)
     CHANGES.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -684,8 +747,12 @@ def undo_last() -> dict | None:
 
     shutil.copy2(RAW, RAW.with_suffix(".csv.bak"))
     RAW.write_text(text[:-len(tail)], encoding="utf-8", newline="")
-    CHANGES.write_text(json.dumps(log[:-1], indent=2, ensure_ascii=False), encoding="utf-8")
+    global _changes_cache
+    _changes_cache = log[:-1]
+    CHANGES.write_text(json.dumps(_changes_cache, indent=2, ensure_ascii=False), encoding="utf-8")
     subprocess.run([sys.executable, str(ROOT / "build.py")], capture_output=True, text=True)
+    global _inventory_cache
+    _inventory_cache = None
     return last
 
 
@@ -767,11 +834,18 @@ def main() -> int:
     active = [i for i in data["items"] if i["status"] == "active"]
     context = context_for_prompt(data, active)
     accepted: list[dict] = []
+    config = IdentifyConfig(
+        client=client,
+        context=context,
+        provider=args.provider,
+        gemini_key=gemini_key,
+        openai_key=openai_key
+    )
 
     for path in paths:
         print(f"\n{path.name}")
         try:
-            result = identify(client, path, context, args.provider, gemini_key, openai_key)
+            result = identify(path, config)
         except Exception as exc:                     # noqa: BLE001 - report and continue
             print(f"  failed: {exc}")
             continue

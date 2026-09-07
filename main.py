@@ -18,17 +18,19 @@ import csv
 import io
 import json
 import mimetypes
-import re
 import urllib.error
 import urllib.request
 
 import google.auth
 import google.auth.transport.requests
 from flask import Flask, jsonify, request
+from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, slug
+from build import CATEGORY_LABELS, categorise, parse_date, part_numbers
+from utils import slug
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
 BOX_GID = 788564724
@@ -67,8 +69,6 @@ GEMINI_SCHEMA = {
     "propertyOrdering": ["name", "quantity", "category", "note", "confidence", "matches_existing"],
 }
 
-PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
-
 
 def _fetch(url: str) -> str:
     with urllib.request.urlopen(url, timeout=30) as r:
@@ -82,8 +82,8 @@ def resolve_items() -> list[dict]:
     category), not the full app.template.html item shape. If build.py's
     resolver logic changes, mirror it here too.
     """
-    raw_text = _fetch(BOX_CSV_URL)
-    form_text = _fetch(FORM_CSV_URL)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
 
     raw_rows = []
     for line_no, row in enumerate(csv.DictReader(io.StringIO(raw_text)), start=2):
@@ -151,28 +151,37 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
         if slug(item["name"]) == key:
             return item
 
-    def part_numbers(n: str) -> set[str]:
-        return {t for t in slug(n).split() if PART_NUMBER.match(t)}
-
     wanted = part_numbers(name)
-    if wanted:
-        hits = [i for i in active if part_numbers(i["name"]) & wanted]
-        if len(hits) == 1:
-            return hits[0]
-    return None
+    if not wanted:
+        return None
+
+    hit = None
+    for item in active:
+        if not wanted.isdisjoint(slug(item["name"]).split()):
+            if hit is not None:
+                return None
+            hit = item
+    return hit
 
 
 def propose_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
-    for i in active:
-        per_box[i["box"]] = per_box.get(i["box"], 0) + 1
+    same_cat = set()
+    used = set()
 
-    same_cat = sorted({i["box"] for i in active if i["category"] == category and i["box"] < 400})
-    for b in same_cat:
+    for i in active:
+        box = i["box"]
+        per_box[box] = per_box.get(box, 0) + 1
+
+        if box < 400:
+            used.add(box)
+            if i["category"] == category:
+                same_cat.add(box)
+
+    for b in sorted(same_cat):
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
             return b
 
-    used = {i["box"] for i in active if i["box"] < 400}
     b = 1
     while b in used:
         b += 1
@@ -222,6 +231,11 @@ def health():
 
 @app.route("/identify", methods=["POST"])
 def identify():
+    expected_key = os.environ.get("API_KEY")
+    auth_header = request.headers.get("Authorization", "")
+    if not expected_key or not auth_header.startswith("Bearer ") or auth_header[7:] != expected_key:
+        return jsonify(error="unauthorized"), 401
+
     media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
     if media not in SUPPORTED:
         media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"
