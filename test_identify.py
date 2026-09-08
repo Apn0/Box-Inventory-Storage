@@ -1,5 +1,6 @@
 import unittest
-from identify import find_existing, auto_filable, _part_numbers, _recoverable
+from identify import find_existing_part, auto_filable, _recoverable
+from build import part_numbers as _part_numbers
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -176,7 +177,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, self.data["items"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
@@ -192,7 +193,7 @@ class TestDecide(unittest.TestCase):
             "category": "misc",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, self.data["items"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 4)
         self.assertEqual(res["name"], "18650 battery holder")
@@ -209,7 +210,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, self.data["items"], result)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 1) # suggest_box picks box 1 due to same category
         self.assertEqual(res["name"], "New IC")
@@ -225,7 +226,7 @@ class TestDecide(unittest.TestCase):
             "category": "resistor",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, self.data["items"], result)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 2) # suggest_box picks first free box
         self.assertEqual(res["name"], "New Resistor")
@@ -241,7 +242,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": "TMC2209 stepper driver"
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, self.data["items"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
