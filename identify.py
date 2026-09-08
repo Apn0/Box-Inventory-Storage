@@ -190,15 +190,12 @@ def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     """An existing box of this category with room, else the lowest free number."""
     per_box = {}
     same_cat = set()
-    used = set()
 
     for i in active:
         b = i["box"]
         per_box[b] = per_box.get(b, 0) + 1
-        if b < 400:
-            used.add(b)
-            if i["category"] == category:
-                same_cat.add(b)
+        if b < 400 and i.get("category") == category:
+            same_cat.add(b)
 
     for b in sorted(same_cat):
         if per_box[b] < MAX_BOX_ITEMS:
@@ -208,7 +205,7 @@ def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     if free:
         return free[0], f"box {free[0]} is free ({[f for f in data['freeBoxes'] if f['box'] == free[0]][0]['reason']})"
 
-    nxt = max(used, default=0) + 1
+    nxt = max((b for b in per_box if b < 400), default=0) + 1
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
@@ -612,6 +609,71 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
+def _create_config(provider: str, context: str) -> IdentifyConfig:
+    client = None
+    anthropic_key = read_key("ANTHROPIC_API_KEY")
+    if provider in {"auto", "anthropic"} and anthropic_key:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_key)
+        except ImportError:
+            logging.warning("anthropic SDK not installed — skipping Claude")
+
+    return IdentifyConfig(
+        client=client,
+        context=context,
+        provider=provider,
+        gemini_key=read_key("GOOGLE_API_KEY"),
+        openai_key=read_key("OPENAI_API_KEY")
+    )
+
+
+def _process_single_photo(
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool
+) -> tuple[dict, dict | None]:
+    try:
+        result = identify(path, config)
+    except Exception as exc:                          # noqa: BLE001
+        return {"photo": path.name, "ok": False, "error": str(exc)[:200]}, None
+
+    if result is None:
+        return {"photo": path.name, "ok": False, "error": "no answer"}, None
+
+    plan = decide(data, active, result)
+    outcome = {"photo": path.name, "ok": True,
+               "name": plan["name"], "box": plan["box"],
+               "confidence": result["confidence"], "note": result["note"],
+               "existing": plan["existing"],
+               "from": plan["from"], "to": plan["to"],
+               "why": plan["why"]}
+
+    row = None
+    if unattended:
+        # Never write a count unattended. What is actually in the box is
+        # something only you can see — you may have taken parts out without
+        # logging it, so an increment would quietly drift from reality.
+        # The photo becomes a question with the recorded number filled in.
+        REVIEW.mkdir(parents=True, exist_ok=True)
+        if INBOX in path.resolve().parents:
+            shutil.move(str(path), str(REVIEW / path.name))
+
+        existing = find_existing_part(active, result["name"]) or (
+            find_existing_part(active, result["matches_existing"])
+            if result["matches_existing"] else None)
+        outcome.update(
+            filed=False,
+            recorded=(existing["qty"] if existing and existing["countType"] == "exact"
+                      else ("many" if existing else None)),
+            recordedName=existing["name"] if existing else None,
+            seen=int(result["quantity"] or 0),
+            category=result.get("category", "misc"))
+    else:
+        row = file_one(path, result, plan)
+        outcome.update(filed=True)
+
+    return outcome, row
+
+
 def process(paths, provider: str = "auto", unattended: bool = False) -> list[dict]:
     """Identify and file every photo, no prompting. Used by server.py.
 
@@ -624,65 +686,15 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     data = load_inventory()
     active = [i for i in data["items"] if i["status"] == "active"]
     context = context_for_prompt(data, active)
-    client = None
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    if provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            logging.warning("anthropic SDK not installed — skipping Claude")
+    config = _create_config(provider, context)
 
     outcomes, rows = [], []
-    config = IdentifyConfig(
-        client=client,
-        context=context,
-        provider=provider,
-        gemini_key=read_key("GOOGLE_API_KEY"),
-        openai_key=read_key("OPENAI_API_KEY")
-    )
     for path in paths:
         path = pathlib.Path(path)
-        try:
-            result = identify(path, config)
-        except Exception as exc:                          # noqa: BLE001
-            outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
-            continue
-        if result is None:
-            outcomes.append({"photo": path.name, "ok": False, "error": "no answer"})
-            continue
-
-        plan = decide(data, active, result)
-        outcome = {"photo": path.name, "ok": True,
-                   "name": plan["name"], "box": plan["box"],
-                   "confidence": result["confidence"], "note": result["note"],
-                   "existing": plan["existing"],
-                   "from": plan["from"], "to": plan["to"],
-                   "why": plan["why"]}
-
-        if unattended:
-            # Never write a count unattended. What is actually in the box is
-            # something only you can see — you may have taken parts out without
-            # logging it, so an increment would quietly drift from reality.
-            # The photo becomes a question with the recorded number filled in.
-            REVIEW.mkdir(parents=True, exist_ok=True)
-            if INBOX in path.resolve().parents:
-                shutil.move(str(path), str(REVIEW / path.name))
-
-            existing = find_existing_part(active, result["name"]) or (
-                find_existing_part(active, result["matches_existing"])
-                if result["matches_existing"] else None)
-            outcome.update(
-                filed=False,
-                recorded=(existing["qty"] if existing and existing["countType"] == "exact"
-                          else ("many" if existing else None)),
-                recordedName=existing["name"] if existing else None,
-                seen=int(result["quantity"] or 0),
-                category=result.get("category", "misc"))
-        else:
-            rows.append(file_one(path, result, plan))
-            outcome.update(filed=True)
+        outcome, row = _process_single_photo(path, data, active, config, unattended)
         outcomes.append(outcome)
+        if row is not None:
+            rows.append(row)
 
     if rows:
         append_rows(rows)
@@ -781,7 +793,7 @@ def append_rows(rows: list[dict]) -> None:
     print(f"\nappended {len(rows)} row(s) to {RAW.name} (previous kept as inventory_raw.csv.bak)")
 
 
-def main() -> int:
+def parse_args(args_list: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("images", nargs="+", help="image files or globs")
@@ -794,8 +806,10 @@ def main() -> int:
                          "on the separate Google account instead of a personal API "
                          "key — then Claude, Gemini, OpenAI, skipping any that is "
                          "out of credit")
-    args = ap.parse_args()
+    return ap.parse_args(args_list)
 
+
+def run(args: argparse.Namespace) -> int:
     paths = [pathlib.Path(p) for pattern in args.images for p in glob.glob(pattern)]
     if not paths:
         sys.exit("no files matched")
@@ -875,6 +889,11 @@ def main() -> int:
 
     append_rows(accepted)
     return subprocess.call([sys.executable, str(ROOT / "build.py")])
+
+
+def main() -> int:
+    args = parse_args()
+    return run(args)
 
 
 if __name__ == "__main__":

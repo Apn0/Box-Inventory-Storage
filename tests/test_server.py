@@ -1,8 +1,8 @@
 import pytest
 import datetime
-from unittest.mock import patch
-from server import safe_name
-from server import port_in_use
+import json
+from unittest.mock import patch, MagicMock
+from server import safe_name, Handler, BOX_GID, FORM_GID
 
 @pytest.fixture
 def mock_datetime():
@@ -41,49 +41,50 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
-# Note: The actual server.py implementation is more robust than the simplified snippet in the task description.
-# It tests both IPv4 ("127.0.0.1") and IPv6 ("::1") and returns the address string, not a formatted string.
-def test_port_in_use_ipv4():
-    with patch('socket.socket') as mock_sock_cls:
-        mock_sock = mock_sock_cls.return_value.__enter__.return_value
-        mock_sock.connect_ex.return_value = 0 # 0 means success
+from server import Handler, BOX_GID, FORM_GID
+from unittest.mock import MagicMock
+import json
 
-        assert port_in_use(8080) == "127.0.0.1"
+def test_proxy_invalid_gid(mocker):
+    handler = Handler.__new__(Handler)
+    handler.path = "/proxy?gid=12345"
+    handler._json = MagicMock(return_value="mocked_json_response")
 
-        # Verify it was called with IPv4 first
-        mock_sock.connect_ex.assert_called_once_with(("127.0.0.1", 8080))
+    result = handler.do_GET()
 
-def test_port_in_use_ipv6():
-    with patch('socket.socket') as mock_sock_cls:
-        mock_sock = mock_sock_cls.return_value.__enter__.return_value
-        # First call for IPv4 fails (returns 1), second call for IPv6 succeeds (returns 0)
-        mock_sock.connect_ex.side_effect = [1, 0]
+    handler._json.assert_called_once_with(403, {"error": "forbidden gid"})
+    assert result == "mocked_json_response"
 
-        assert port_in_use(8080) == "::1"
+def test_proxy_valid_box_gid(mocker):
+    handler = Handler.__new__(Handler)
+    handler.path = f"/proxy?gid={BOX_GID}"
+    handler._send = MagicMock(return_value="mocked_send_response")
 
-        # Verify both were called
-        assert mock_sock.connect_ex.call_count == 2
+    mock_urlopen = mocker.patch("urllib.request.urlopen")
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"csv data"
+    mock_urlopen.return_value.__enter__.return_value = mock_response
 
-def test_port_in_use_none():
-    with patch('socket.socket') as mock_sock_cls:
-        mock_sock = mock_sock_cls.return_value.__enter__.return_value
-        # Both calls fail
-        mock_sock.connect_ex.side_effect = [1, 1]
+    result = handler.do_GET()
 
-        assert port_in_use(8080) is None
+    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_args[0][0].endswith(f"gid={BOX_GID}")
+    handler._send.assert_called_once()
+    assert result == "mocked_send_response"
 
-def test_port_in_use_oserror():
-    with patch('socket.socket') as mock_sock_cls:
-        mock_sock = mock_sock_cls.return_value.__enter__.return_value
-        # First call raises OSError, second call fails normally
-        mock_sock.connect_ex.side_effect = [OSError("Network down"), 1]
+def test_proxy_valid_form_gid(mocker):
+    handler = Handler.__new__(Handler)
+    handler.path = f"/proxy?gid={FORM_GID}"
+    handler._send = MagicMock(return_value="mocked_send_response")
 
-        assert port_in_use(8080) is None
+    mock_urlopen = mocker.patch("urllib.request.urlopen")
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"csv data"
+    mock_urlopen.return_value.__enter__.return_value = mock_response
 
-def test_port_in_use_oserror_success():
-    with patch('socket.socket') as mock_sock_cls:
-        mock_sock = mock_sock_cls.return_value.__enter__.return_value
-        # First call raises OSError, second call succeeds
-        mock_sock.connect_ex.side_effect = [OSError("Network down"), 0]
+    result = handler.do_GET()
 
-        assert port_in_use(8080) == "::1"
+    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_args[0][0].endswith(f"gid={FORM_GID}")
+    handler._send.assert_called_once()
+    assert result == "mocked_send_response"
