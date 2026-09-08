@@ -256,9 +256,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+                import urllib.parse
+                name = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
                 target = folder / name
-                if target.is_file() and folder.resolve() in target.resolve().parents:
+                if target.is_file() and target.absolute().is_relative_to(folder.absolute()):
                     ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
                     return self._send(Response(200, target.read_bytes(), ctype))
                 return self._json(404, {"error": "not found"})

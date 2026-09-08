@@ -39,3 +39,35 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name("!!!.jpg") == "20231024-153045-123__.jpg"
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
+
+def test_handler_path_sanitization(mocker):
+    from server import Handler
+    import pathlib
+
+    handler = Handler.__new__(Handler)
+    handler.path = "/data/photos/C:\\Windows\\System32\\cmd.exe"
+    handler._json = mocker.MagicMock()
+    handler._send = mocker.MagicMock()
+
+    with patch('server.PHOTOS', pathlib.Path('/app/data/photos')):
+        handler.do_GET()
+
+    # It should not try to serve C:\Windows\System32\cmd.exe, but rather a file inside PHOTOS called cmd.exe
+    # Since it likely does not exist, it will return 404
+    handler._json.assert_called_with(404, {"error": "not found"})
+
+def test_handler_path_sanitization_traversal(mocker):
+    from server import Handler
+    import pathlib
+
+    handler = Handler.__new__(Handler)
+    handler.path = "/data/photos/../%2E%2E/%2E%2E/etc/passwd"
+    handler._json = mocker.MagicMock()
+    handler._send = mocker.MagicMock()
+
+    with patch('server.PHOTOS', pathlib.Path('/app/data/photos')):
+        handler.do_GET()
+
+    # The file passwd should be queried inside PHOTOS, not at /etc/passwd
+    # Because it is queried inside PHOTOS, it is not found
+    handler._json.assert_called_with(404, {"error": "not found"})
