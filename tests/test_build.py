@@ -110,6 +110,10 @@ def test_container_of(box, expected):
     # Bare runs of digits (4+ digits)
     ("18650 battery", {"18650"}),
     ("sku7810", {"sku7810"}),
+    # Part numbers with trailing letters/digits
+    ("esp32c3 board", {"esp32c3"}),
+    ("ch340g chip", {"ch340g"}),
+    ("lm2596s module", {"lm2596s"}),
     # Negatives - should not match
     ("module", set()), # no digits
     ("sensor", set()), # no digits
