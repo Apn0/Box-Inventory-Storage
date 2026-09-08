@@ -40,6 +40,8 @@ REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+BOX_GID = "788564724"
+FORM_GID = "677102738"
 
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
@@ -235,8 +237,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
-            if not gid.isdigit():
-                return self._json(400, {"error": "gid must be a number"})
+            if gid not in {BOX_GID, FORM_GID}:
+                return self._json(403, {"error": "forbidden gid"})
             url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
                    f"/export?format=csv&gid={gid}")
             try:
