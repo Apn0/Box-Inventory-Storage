@@ -196,80 +196,89 @@ def load_raw_rows() -> list[dict] | None:
     return raw_rows
 
 
-def build_items(raw_rows: list[dict]) -> list[dict]:
-    # ---- group into one record per (box, item), newest row wins -------------
+def resolve_item(box: int, key_slug: str, history: list[dict]) -> dict | None:
+    history_sort_key = lambda r: (r["date"] or "", r["time"], r["src"], r["line"])
+    history.sort(key=history_sort_key)
+    latest = history[-1]
+
+    if not latest["name"]:
+        # Box 81: a placeholder row with no item at all.
+        return None
+
+    qty_values = [r["qty_txt"] for r in history]
+    distinct = {q for q in qty_values}
+    restated = len(history) > 1 and len(distinct) == 1
+    # Differing quantities normally mean the sheet contradicts itself. A row
+    # identify.py wrote is a deliberate recount, not an ambiguity — it says
+    # so in its Note, so it must not raise a false flag on every photo filed.
+    deliberate = (latest.get("src", 0) == 1
+                  or COUNTED_MARK in (latest["note"] or "").lower())
+    conflict = len(history) > 1 and len(distinct) > 1 and not deliberate
+
+    qty_txt = latest["qty_txt"]
+    if qty_txt == "":
+        count_type, qty = "unknown", None
+    elif int(qty_txt) == BULK_SENTINEL:
+        count_type, qty = "bulk", None
+    else:
+        count_type, qty = "exact", int(qty_txt)
+
+    status = "gone" if (count_type == "exact" and qty == 0) else "active"
+
+    # The highest count ever recorded. Without it "running low" fires on
+    # every part you simply own one of, which was 128 of 242 items — noise
+    # that hides the handful actually being used up.
+    peak = qty if count_type == "exact" else None
+    for r in history:
+        if r["qty_txt"].isdigit() and int(r["qty_txt"]) != BULK_SENTINEL:
+            peak = max(peak or 0, int(r["qty_txt"]))
+
+    note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
+
+    return {
+        "id": f"{box}-{key_slug}" or f"{box}-item",
+        "box": box,
+        "container": container_of(box),
+        "name": latest["name"],
+        "qty": qty,
+        "peak": peak,
+        "countType": count_type,
+        "status": status,
+        "note": note,
+        "category": categorise(latest["name"], note),
+        "updated": latest["date"],
+        "conflict": conflict,
+        "restated": restated,
+        "history": [
+            {"qty": r["qty_txt"], "date": r["date"], "note": r["note"]}
+            for r in history
+        ]
+        if len(history) > 1
+        else [],
+    }
+
+
+def group_rows(raw_rows: list[dict]) -> dict[tuple[int, str], list[dict]]:
+    """Group into one record per (box, item), newest row wins."""
     groups: dict[tuple[int, str], list[dict]] = {}
     for row in raw_rows:
         key = (row["box"], slug(row["name"]))
         groups.setdefault(key, []).append(row)
+    return groups
+
+
+def build_items(raw_rows: list[dict]) -> list[dict]:
+    groups = group_rows(raw_rows)
 
     items = []
-
     # Sort keys for performance
     group_sort_key = operator.itemgetter(0)
-    history_sort_key = lambda r: (r["date"] or "", r["time"], r["src"], r["line"])
 
     for (box, key_slug), history in sorted(groups.items(), key=group_sort_key):
-        history.sort(key=history_sort_key)
-        latest = history[-1]
+        item = resolve_item(box, key_slug, history)
+        if item is not None:
+            items.append(item)
 
-        if not latest["name"]:
-            # Box 81: a placeholder row with no item at all.
-            continue
-
-        qty_values = [r["qty_txt"] for r in history]
-        distinct = {q for q in qty_values}
-        restated = len(history) > 1 and len(distinct) == 1
-        # Differing quantities normally mean the sheet contradicts itself. A row
-        # identify.py wrote is a deliberate recount, not an ambiguity — it says
-        # so in its Note, so it must not raise a false flag on every photo filed.
-        deliberate = (latest.get("src", 0) == 1
-                      or COUNTED_MARK in (latest["note"] or "").lower())
-        conflict = len(history) > 1 and len(distinct) > 1 and not deliberate
-
-        qty_txt = latest["qty_txt"]
-        if qty_txt == "":
-            count_type, qty = "unknown", None
-        elif int(qty_txt) == BULK_SENTINEL:
-            count_type, qty = "bulk", None
-        else:
-            count_type, qty = "exact", int(qty_txt)
-
-        status = "gone" if (count_type == "exact" and qty == 0) else "active"
-
-        # The highest count ever recorded. Without it "running low" fires on
-        # every part you simply own one of, which was 128 of 242 items — noise
-        # that hides the handful actually being used up.
-        peak = qty if count_type == "exact" else None
-        for r in history:
-            if r["qty_txt"].isdigit() and int(r["qty_txt"]) != BULK_SENTINEL:
-                peak = max(peak or 0, int(r["qty_txt"]))
-
-        note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
-
-        items.append(
-            {
-                "id": f"{box}-{key_slug}" or f"{box}-item",
-                "box": box,
-                "container": container_of(box),
-                "name": latest["name"],
-                "qty": qty,
-                "peak": peak,
-                "countType": count_type,
-                "status": status,
-                "note": note,
-                "category": categorise(latest["name"], note),
-                "updated": latest["date"],
-                "conflict": conflict,
-                "restated": restated,
-                "history": [
-                    {"qty": r["qty_txt"], "date": r["date"], "note": r["note"]}
-                    for r in history
-                ]
-                if len(history) > 1
-                else [],
-            }
-        )
     return items
 
 
