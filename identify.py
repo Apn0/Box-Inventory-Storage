@@ -781,7 +781,7 @@ def append_rows(rows: list[dict]) -> None:
     print(f"\nappended {len(rows)} row(s) to {RAW.name} (previous kept as inventory_raw.csv.bak)")
 
 
-def main() -> int:
+def parse_args(args_list: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("images", nargs="+", help="image files or globs")
@@ -794,8 +794,10 @@ def main() -> int:
                          "on the separate Google account instead of a personal API "
                          "key — then Claude, Gemini, OpenAI, skipping any that is "
                          "out of credit")
-    args = ap.parse_args()
+    return ap.parse_args(args_list)
 
+
+def run(args: argparse.Namespace) -> int:
     paths = [pathlib.Path(p) for pattern in args.images for p in glob.glob(pattern)]
     if not paths:
         sys.exit("no files matched")
@@ -875,6 +877,11 @@ def main() -> int:
 
     append_rows(accepted)
     return subprocess.call([sys.executable, str(ROOT / "build.py")])
+
+
+def main() -> int:
+    args = parse_args()
+    return run(args)
 
 
 if __name__ == "__main__":
