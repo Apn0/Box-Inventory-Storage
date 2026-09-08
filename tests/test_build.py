@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers
+from build import parse_date, find_split_items, container_of, part_numbers, categorise
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -110,6 +110,10 @@ def test_container_of(box, expected):
     # Bare runs of digits (4+ digits)
     ("18650 battery", {"18650"}),
     ("sku7810", {"sku7810"}),
+    # Part numbers with trailing letters/digits
+    ("esp32c3 board", {"esp32c3"}),
+    ("ch340g chip", {"ch340g"}),
+    ("lm2596s module", {"lm2596s"}),
     # Negatives - should not match
     ("module", set()), # no digits
     ("sensor", set()), # no digits
@@ -126,3 +130,37 @@ def test_part_numbers(name, expected):
     Expects 2+ letters followed by 2+ digits, or a bare run of 4+ digits.
     """
     assert part_numbers(name) == expected
+
+@pytest.mark.parametrize("name, note, expected", [
+    # Basic matches
+    ("ESP32", "", "mcu"),
+    ("Capacitor", "10uF", "misc"), # Default category
+    ("LED", "Red", "display"), # Case insensitive match
+
+    # Matching in note vs name
+    ("Unknown item", "Use as an mcu", "mcu"),
+    ("stepper motor", "broken", "motor"),
+    ("broken item", "stepper motor", "motor"),
+
+    # Word boundaries (\b)
+    ("mcu", "", "mcu"),
+    ("mcus", "", "misc"), # Should not match \bmcu\b
+    ("fan", "", "motor"), # \bfan\b
+    ("fancy", "", "misc"), # Should not match
+    ("adc", "", "interface"), # \badc\b
+    ("adcs", "", "misc"),
+
+    # Precedence (first matching rule wins)
+    ("esp32", "with gps", "mcu"), # "mcu" comes before "sensor" (gps)
+    ("gps", "with esp32", "mcu"), # even if gps is in name, esp32 matches the 'mcu' rule which is checked first
+
+    # Complex names
+    ("esp8266 node mcu", "", "mcu"),
+    ("18650 battery holder", "", "power"),
+    ("M3 screw", "10mm", "fastener"),
+    ("Wire connector", "2-pin", "connector"),
+    ("Arduino", "Breakout board", "interface"),
+])
+def test_categorise(name, note, expected):
+    """Test the categorise function for assigning categories to items based on regex patterns."""
+    assert categorise(name, note) == expected
