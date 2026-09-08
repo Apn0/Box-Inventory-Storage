@@ -256,8 +256,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
-            if gid not in {BOX_GID, FORM_GID}:
-                return self._json(403, {"error": "forbidden gid"})
+            if gid not in (BOX_GID, FORM_GID):
+                return self._json(403, {"error": "gid not allowed"})
             url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
                    f"/export?format=csv&gid={gid}")
             try:

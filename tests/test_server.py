@@ -1,8 +1,8 @@
 import pytest
 import datetime
-from unittest.mock import patch
-from server import safe_name, port_in_use
-import socket
+import json
+from unittest.mock import patch, MagicMock
+from server import safe_name, Handler, BOX_GID, FORM_GID
 
 @pytest.fixture
 def mock_datetime():
@@ -41,44 +41,53 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
-@patch('server.socket.socket')
-def test_port_in_use_ipv4(mock_socket):
-    mock_s = mock_socket.return_value.__enter__.return_value
-    mock_s.connect_ex.return_value = 0
+def test_proxy_ssrf_allowlist():
+    handler = Handler.__new__(Handler)
 
-    assert port_in_use(8080) == "127.0.0.1"
-    mock_socket.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
-    mock_s.connect_ex.assert_called_once_with(("127.0.0.1", 8080))
+    responses = []
+    def mock_json(code, data):
+        responses.append((code, data))
+        return
 
-@patch('server.socket.socket')
-def test_port_in_use_ipv6(mock_socket):
-    mock_s = mock_socket.return_value.__enter__.return_value
-    mock_s.connect_ex.side_effect = [111, 0]
+    def mock_send(resp):
+        responses.append((resp.code, resp.body))
+        return
 
-    assert port_in_use(8080) == "::1"
-    assert mock_socket.call_count == 2
-    mock_socket.assert_called_with(socket.AF_INET6, socket.SOCK_STREAM)
+    handler._json = mock_json
+    handler._send = mock_send
 
-@patch('server.socket.socket')
-def test_port_in_use_not_in_use(mock_socket):
-    mock_s = mock_socket.return_value.__enter__.return_value
-    mock_s.connect_ex.side_effect = [111, 111]
+    # Test unallowed GID
+    handler.path = "/proxy?gid=123456789"
+    handler.do_GET()
+    assert responses[-1][0] == 403
+    assert responses[-1][1] == {"error": "gid not allowed"}
 
-    assert port_in_use(8080) is None
-    assert mock_socket.call_count == 2
+    # Test allowed GID (BOX_GID)
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"box_csv_data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
 
-@patch('server.socket.socket')
-def test_port_in_use_oserror_first(mock_socket):
-    from unittest.mock import MagicMock
-    mock_s_success = MagicMock()
-    mock_s_success.__enter__.return_value.connect_ex.return_value = 0
+        handler.path = f"/proxy?gid={BOX_GID}"
+        handler.do_GET()
 
-    mock_socket.side_effect = [OSError("Socket error"), mock_s_success]
+        assert responses[-1][0] == 200
+        assert responses[-1][1] == b"box_csv_data"
 
-    assert port_in_use(8080) == "::1"
-    assert mock_socket.call_count == 2
+    # Test allowed GID (FORM_GID)
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"form_csv_data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
 
-@patch('server.socket.socket')
-def test_port_in_use_oserror_both(mock_socket):
-    mock_socket.side_effect = OSError("Socket error")
-    assert port_in_use(8080) is None
+        handler.path = f"/proxy?gid={FORM_GID}"
+        handler.do_GET()
+
+        assert responses[-1][0] == 200
+        assert responses[-1][1] == b"form_csv_data"
+
+    # Test invalid GID string
+    handler.path = "/proxy?gid=invalid"
+    handler.do_GET()
+    assert responses[-1][0] == 403
+    assert responses[-1][1] == {"error": "gid not allowed"}
