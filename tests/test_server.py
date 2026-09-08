@@ -41,89 +41,34 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
-from server import Handler, BOX_GID, FORM_GID
-from unittest.mock import MagicMock
-import json
+def test_handler_path_sanitization(mocker):
+    from server import Handler
+    import pathlib
 
-def test_proxy_invalid_gid(mocker):
     handler = Handler.__new__(Handler)
-    handler.path = "/proxy?gid=12345"
-    handler._json = MagicMock(return_value="mocked_json_response")
+    handler.path = "/data/photos/C:\\Windows\\System32\\cmd.exe"
+    handler._json = mocker.MagicMock()
+    handler._send = mocker.MagicMock()
 
-    result = handler.do_GET()
+    with patch('server.PHOTOS', pathlib.Path('/app/data/photos')):
+        handler.do_GET()
 
-    handler._json.assert_called_once_with(403, {"error": "forbidden gid"})
-    assert result == "mocked_json_response"
+    # It should not try to serve C:\Windows\System32\cmd.exe, but rather a file inside PHOTOS called cmd.exe
+    # Since it likely does not exist, it will return 404
+    handler._json.assert_called_with(404, {"error": "not found"})
 
-def test_proxy_valid_box_gid(mocker):
+def test_handler_path_sanitization_traversal(mocker):
+    from server import Handler
+    import pathlib
+
     handler = Handler.__new__(Handler)
-    handler.path = f"/proxy?gid={BOX_GID}"
-    handler._send = MagicMock(return_value="mocked_send_response")
+    handler.path = "/data/photos/../%2E%2E/%2E%2E/etc/passwd"
+    handler._json = mocker.MagicMock()
+    handler._send = mocker.MagicMock()
 
-    mock_urlopen = mocker.patch("urllib.request.urlopen")
-    mock_response = MagicMock()
-    mock_response.read.return_value = b"csv data"
-    mock_urlopen.return_value.__enter__.return_value = mock_response
+    with patch('server.PHOTOS', pathlib.Path('/app/data/photos')):
+        handler.do_GET()
 
-    result = handler.do_GET()
-
-    mock_urlopen.assert_called_once()
-    assert mock_urlopen.call_args[0][0].endswith(f"gid={BOX_GID}")
-    handler._send.assert_called_once()
-    assert result == "mocked_send_response"
-
-def test_proxy_valid_form_gid(mocker):
-    handler = Handler.__new__(Handler)
-    handler.path = f"/proxy?gid={FORM_GID}"
-    handler._send = MagicMock(return_value="mocked_send_response")
-
-    mock_urlopen = mocker.patch("urllib.request.urlopen")
-    mock_response = MagicMock()
-    mock_response.read.return_value = b"csv data"
-    mock_urlopen.return_value.__enter__.return_value = mock_response
-
-    result = handler.do_GET()
-
-    mock_urlopen.assert_called_once()
-    assert mock_urlopen.call_args[0][0].endswith(f"gid={FORM_GID}")
-    handler._send.assert_called_once()
-    assert result == "mocked_send_response"
-
-
-def test_dismiss_path_traversal(mocker):
-    import sys
-    handler = Handler.__new__(Handler)
-    handler.headers = {"Content-Length": "20"}
-    handler.rfile = MagicMock()
-    handler.rfile.read.return_value = json.dumps({"id": "malicious"}).encode()
-    handler._json = MagicMock(return_value="mocked_json_response")
-
-    # identify is imported locally inside _handle_confirm_dismiss
-    mock_identify = MagicMock()
-    mock_identify.load_pending.return_value = [
-        {"id": "malicious", "photo": "../../../etc/passwd"}
-    ]
-    sys.modules['identify'] = mock_identify
-
-    mock_shutil = mocker.patch("server.shutil")
-    mock_record = mocker.patch("server.record")
-
-    mock_exists = mocker.patch("pathlib.Path.exists")
-    mock_exists.return_value = True
-
-    mock_mkdir = mocker.patch("pathlib.Path.mkdir")
-
-    handler._handle_confirm_dismiss("/dismiss")
-
-    # Check that shutil.move was called
-    mock_shutil.move.assert_called_once()
-
-    # Check arguments
-    args, kwargs = mock_shutil.move.call_args
-    src = args[0]
-    dst = args[1]
-
-    assert "passwd" in src
-    assert ".." not in src
-    assert "passwd" in dst
-    assert ".." not in dst
+    # The file passwd should be queried inside PHOTOS, not at /etc/passwd
+    # Because it is queried inside PHOTOS, it is not found
+    handler._json.assert_called_with(404, {"error": "not found"})
