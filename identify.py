@@ -168,8 +168,9 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     """
     key = slug(name)
     wanted = part_numbers(name)
+
     hit = None
-    ambiguous = False
+    hit_ambiguous = False
 
     for item in active:
         item_name = item["name"]
@@ -179,16 +180,17 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
             return item
 
         # then the part number
-        if wanted and not ambiguous and not wanted.isdisjoint(part_numbers(item_name)):
-            if hit is not None:
-                # Several boxes carry this part number — too ambiguous to pick one.
-                ambiguous = True
-                hit = None
-            else:
-                hit = item
+        if wanted and not hit_ambiguous:
+            if not wanted.isdisjoint(part_numbers(item_name)):
+                if hit is not None:
+                    # Several boxes carry this part number — too ambiguous to pick one.
+                    hit_ambiguous = True
+                else:
+                    hit = item
 
-    if ambiguous:
+    if hit_ambiguous:
         return None
+
     return hit
 
 
