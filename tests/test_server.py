@@ -1,7 +1,8 @@
 import pytest
 import datetime
-from unittest.mock import patch
-from server import safe_name
+import socket
+from unittest.mock import patch, MagicMock
+from server import safe_name, port_in_use
 
 @pytest.fixture
 def mock_datetime():
@@ -39,3 +40,53 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name("!!!.jpg") == "20231024-153045-123__.jpg"
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
+
+def test_port_in_use_free():
+    with patch("server.socket.socket") as mock_socket_cls:
+        mock_instance = MagicMock()
+        mock_socket_cls.return_value.__enter__.return_value = mock_instance
+        mock_instance.connect_ex.return_value = 1  # non-zero means not in use
+
+        assert port_in_use(8080) is None
+
+def test_port_in_use_ipv4():
+    with patch("server.socket.socket") as mock_socket_cls:
+        mock_instance = MagicMock()
+        mock_socket_cls.return_value.__enter__.return_value = mock_instance
+
+        def connect_ex_side_effect(address):
+            if address == ("127.0.0.1", 8080):
+                return 0
+            return 1
+
+        mock_instance.connect_ex.side_effect = connect_ex_side_effect
+
+        assert port_in_use(8080) == "127.0.0.1"
+
+def test_port_in_use_ipv6():
+    with patch("server.socket.socket") as mock_socket_cls:
+        mock_instance = MagicMock()
+        mock_socket_cls.return_value.__enter__.return_value = mock_instance
+
+        def connect_ex_side_effect(address):
+            if address == ("::1", 8080):
+                return 0
+            return 1
+
+        mock_instance.connect_ex.side_effect = connect_ex_side_effect
+
+        assert port_in_use(8080) == "::1"
+
+def test_port_in_use_oserror():
+    with patch("server.socket.socket") as mock_socket_cls:
+        def side_effect(family, type):
+            if family == socket.AF_INET:
+                raise OSError("simulated")
+            mock_sock = MagicMock()
+            mock_sock.__enter__.return_value = mock_sock
+            mock_sock.connect_ex.return_value = 0
+            return mock_sock
+
+        mock_socket_cls.side_effect = side_effect
+
+        assert port_in_use(8080) == "::1"
