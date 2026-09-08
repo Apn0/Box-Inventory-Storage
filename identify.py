@@ -167,22 +167,28 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     record, and the inventory drifts apart one photo at a time.
     """
     key = slug(name)
+    wanted = part_numbers(name)
+    hit = None
+    ambiguous = False
 
-    for item in active:                                   # exact wins
-        if slug(item["name"]) == key:
+    for item in active:
+        item_name = item["name"]
+
+        # exact wins
+        if slug(item_name) == key:
             return item
 
-    wanted = part_numbers(name)                          # then the part number
-    if not wanted:
-        return None
-
-    hit = None
-    for item in active:
-        if not wanted.isdisjoint(part_numbers(item["name"])):
+        # then the part number
+        if wanted and not ambiguous and not wanted.isdisjoint(part_numbers(item_name)):
             if hit is not None:
                 # Several boxes carry this part number — too ambiguous to pick one.
-                return None
-            hit = item
+                ambiguous = True
+                hit = None
+            else:
+                hit = item
+
+    if ambiguous:
+        return None
     return hit
 
 
