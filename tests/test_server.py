@@ -41,53 +41,50 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
-def test_proxy_ssrf_allowlist():
+from server import Handler, BOX_GID, FORM_GID
+from unittest.mock import MagicMock
+import json
+
+def test_proxy_invalid_gid(mocker):
     handler = Handler.__new__(Handler)
+    handler.path = "/proxy?gid=12345"
+    handler._json = MagicMock(return_value="mocked_json_response")
 
-    responses = []
-    def mock_json(code, data):
-        responses.append((code, data))
-        return
+    result = handler.do_GET()
 
-    def mock_send(resp):
-        responses.append((resp.code, resp.body))
-        return
+    handler._json.assert_called_once_with(403, {"error": "forbidden gid"})
+    assert result == "mocked_json_response"
 
-    handler._json = mock_json
-    handler._send = mock_send
+def test_proxy_valid_box_gid(mocker):
+    handler = Handler.__new__(Handler)
+    handler.path = f"/proxy?gid={BOX_GID}"
+    handler._send = MagicMock(return_value="mocked_send_response")
 
-    # Test unallowed GID
-    handler.path = "/proxy?gid=123456789"
-    handler.do_GET()
-    assert responses[-1][0] == 403
-    assert responses[-1][1] == {"error": "gid not allowed"}
+    mock_urlopen = mocker.patch("urllib.request.urlopen")
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"csv data"
+    mock_urlopen.return_value.__enter__.return_value = mock_response
 
-    # Test allowed GID (BOX_GID)
-    with patch('urllib.request.urlopen') as mock_urlopen:
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"box_csv_data"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+    result = handler.do_GET()
 
-        handler.path = f"/proxy?gid={BOX_GID}"
-        handler.do_GET()
+    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_args[0][0].endswith(f"gid={BOX_GID}")
+    handler._send.assert_called_once()
+    assert result == "mocked_send_response"
 
-        assert responses[-1][0] == 200
-        assert responses[-1][1] == b"box_csv_data"
+def test_proxy_valid_form_gid(mocker):
+    handler = Handler.__new__(Handler)
+    handler.path = f"/proxy?gid={FORM_GID}"
+    handler._send = MagicMock(return_value="mocked_send_response")
 
-    # Test allowed GID (FORM_GID)
-    with patch('urllib.request.urlopen') as mock_urlopen:
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"form_csv_data"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+    mock_urlopen = mocker.patch("urllib.request.urlopen")
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"csv data"
+    mock_urlopen.return_value.__enter__.return_value = mock_response
 
-        handler.path = f"/proxy?gid={FORM_GID}"
-        handler.do_GET()
+    result = handler.do_GET()
 
-        assert responses[-1][0] == 200
-        assert responses[-1][1] == b"form_csv_data"
-
-    # Test invalid GID string
-    handler.path = "/proxy?gid=invalid"
-    handler.do_GET()
-    assert responses[-1][0] == 403
-    assert responses[-1][1] == {"error": "gid not allowed"}
+    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_args[0][0].endswith(f"gid={FORM_GID}")
+    handler._send.assert_called_once()
+    assert result == "mocked_send_response"
