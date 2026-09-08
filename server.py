@@ -40,6 +40,8 @@ REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+BOX_GID = "788564724"
+FORM_GID = "677102738"
 
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
@@ -104,14 +106,33 @@ def png(size: int) -> bytes:
     r, g, b = ACCENT
     pad, thick = size // 5, max(2, size // 24)
     rows = []
+
+    edge_pixel = b'\xff\xff\xff'
+    bg_pixel = bytes((r, g, b))
+
+    bg_row_data = [bg_pixel for _ in range(size)]
+    bg_row_bytes = b'\x00' + b''.join(bg_row_data)
+
+    thick_row_data = [
+        edge_pixel if (pad <= x < size - pad) else bg_pixel
+        for x in range(size)
+    ]
+    thick_row_bytes = b'\x00' + b''.join(thick_row_data)
+
+    inner_row_data = [
+        edge_pixel if (pad <= x < size - pad and (x - pad < thick or size - pad - x <= thick))
+        else bg_pixel
+        for x in range(size)
+    ]
+    inner_row_bytes = b'\x00' + b''.join(inner_row_data)
+
     for y in range(size):
-        row = bytearray([0])                      # filter byte: none
-        for x in range(size):
-            edge = (pad <= x < size - pad and pad <= y < size - pad and
-                    (x - pad < thick or size - pad - x <= thick or
-                     y - pad < thick or size - pad - y <= thick))
-            row += bytes((255, 255, 255) if edge else (r, g, b))
-        rows.append(bytes(row))
+        if y < pad or y >= size - pad:
+            rows.append(bg_row_bytes)
+        elif y - pad < thick or size - pad - y <= thick:
+            rows.append(thick_row_bytes)
+        else:
+            rows.append(inner_row_bytes)
 
     def chunk(tag: bytes, data: bytes) -> bytes:
         return (struct.pack(">I", len(data)) + tag + data
@@ -198,35 +219,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(Response(code, json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8"))
 
     # ------------------------------------------------------------------ GET
+    def _handle_get_index(self) -> None:
+        if not INDEX.exists():
+            return self._json(500, {"error": "index.html missing — run build.py"})
+        # Let the phone keep a copy: when this machine is off, the app falls
+        # back to it and you can still read the inventory in a shop. Short
+        # max-age so a running server always wins.
+        return self._send(Response(200, INDEX.read_bytes(), "text/html; charset=utf-8",
+                          cache="max-age=30, stale-if-error=604800"))
+
+    def _handle_get_manifest(self) -> None:
+        return self._send(Response(200, json.dumps(MANIFEST).encode("utf-8"), "application/manifest+json"))
+
+    def _handle_get_icon(self, path: str) -> None:
+        return self._send(Response(200, png(192 if "192" in path else 512), "image/png"))
+
+    def _handle_get_inbox(self) -> None:
+        with _activity_lock:
+            recent = list(_activity)
+        import identify
+        changes = identify.load_changes()
+        return self._json(200, {"pending": inbox_list(), "auto": AUTO,
+                                "working": _work.unfinished_tasks,
+                                "review": len(review_list()),
+                                "confirm": identify.load_pending(),
+                                "changes": changes[-12:][::-1],
+                                "activity": recent})
+
+    def _handle_get_proxy(self) -> None:
+        import urllib.request
+        qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        gid = (qs.get("gid") or [""])[0]
+        if not gid.isdigit():
+            return self._json(400, {"error": "gid must be a number"})
+        url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+               f"/export?format=csv&gid={gid}")
+        try:
+            with urllib.request.urlopen(url, timeout=20) as r:
+                body = r.read()
+        except Exception as exc:                   # noqa: BLE001
+            return self._json(502, {"error": str(exc)[:200]})
+        return self._send(Response(200, body, "text/csv; charset=utf-8"))
+
+    def _handle_get_inventory(self) -> None:
+        target = ROOT / "data" / "inventory.json"
+        if target.is_file():
+            return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
+        return self._json(404, {"error": "not built yet"})
+
+    def _handle_get_media(self, path: str, folder: pathlib.Path) -> None:
+        name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+        target = folder / name
+        if target.is_file() and folder.resolve() in target.resolve().parents:
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            return self._send(Response(200, target.read_bytes(), ctype))
+        return self._json(404, {"error": "not found"})
+
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
 
         if path in ("/", "/index.html"):
-            if not INDEX.exists():
-                return self._json(500, {"error": "index.html missing — run build.py"})
-            # Let the phone keep a copy: when this machine is off, the app falls
-            # back to it and you can still read the inventory in a shop. Short
-            # max-age so a running server always wins.
-            return self._send(Response(200, INDEX.read_bytes(), "text/html; charset=utf-8",
-                              cache="max-age=30, stale-if-error=604800"))
+            return self._handle_get_index()
 
         if path == "/manifest.webmanifest":
-            return self._send(Response(200, json.dumps(MANIFEST).encode("utf-8"), "application/manifest+json"))
+            return self._handle_get_manifest()
 
         if path in ("/icon-192.png", "/icon-512.png"):
-            return self._send(Response(200, png(192 if "192" in path else 512), "image/png"))
+            return self._handle_get_icon(path)
 
         if path == "/inbox":
-            with _activity_lock:
-                recent = list(_activity)
-            import identify
-            changes = identify.load_changes()
-            return self._json(200, {"pending": inbox_list(), "auto": AUTO,
-                                    "working": _work.unfinished_tasks,
-                                    "review": len(review_list()),
-                                    "confirm": identify.load_pending(),
-                                    "changes": changes[-12:][::-1],
-                                    "activity": recent})
+            return self._handle_get_inbox()
 
         # CSV of one sheet tab, fetched server-side. docs.google.com sends no
         # CORS headers, so a served page cannot read it directly — this makes
@@ -235,8 +297,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
-            if not gid.isdigit():
-                return self._json(400, {"error": "gid must be a number"})
+            if gid not in {BOX_GID, FORM_GID}:
+                return self._json(403, {"error": "forbidden gid"})
             url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
                    f"/export?format=csv&gid={gid}")
             try:
@@ -248,10 +310,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         # the freshly built inventory, so the page can update without a reload
         if path == "/data/inventory.json":
-            target = ROOT / "data" / "inventory.json"
-            if target.is_file():
-                return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
-            return self._json(404, {"error": "not built yet"})
+            return self._handle_get_inventory()
 
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
@@ -333,10 +392,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         entries = [e for e in entries if e["id"] != entry["id"]]
         if path == "/dismiss":
-            src = REVIEW / entry["photo"]
+            photo_filename = pathlib.Path(entry["photo"]).name
+            src = REVIEW / photo_filename
             if src.exists():                       # keep the photo, file nothing
                 (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
-                shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
+                shutil.move(str(src), str(ROOT / "data" / "ignored" / photo_filename))
             identify.save_pending(entries)
             record({"photo": entry["photo"], "state": "dismissed", "ok": True,
                     "name": entry.get("name")})
