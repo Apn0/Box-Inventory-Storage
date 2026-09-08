@@ -198,70 +198,91 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(Response(code, json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8"))
 
     # ------------------------------------------------------------------ GET
+    def _handle_get_index(self) -> None:
+        if not INDEX.exists():
+            return self._json(500, {"error": "index.html missing — run build.py"})
+        # Let the phone keep a copy: when this machine is off, the app falls
+        # back to it and you can still read the inventory in a shop. Short
+        # max-age so a running server always wins.
+        return self._send(Response(200, INDEX.read_bytes(), "text/html; charset=utf-8",
+                          cache="max-age=30, stale-if-error=604800"))
+
+    def _handle_get_manifest(self) -> None:
+        return self._send(Response(200, json.dumps(MANIFEST).encode("utf-8"), "application/manifest+json"))
+
+    def _handle_get_icon(self, path: str) -> None:
+        return self._send(Response(200, png(192 if "192" in path else 512), "image/png"))
+
+    def _handle_get_inbox(self) -> None:
+        with _activity_lock:
+            recent = list(_activity)
+        import identify
+        changes = identify.load_changes()
+        return self._json(200, {"pending": inbox_list(), "auto": AUTO,
+                                "working": _work.unfinished_tasks,
+                                "review": len(review_list()),
+                                "confirm": identify.load_pending(),
+                                "changes": changes[-12:][::-1],
+                                "activity": recent})
+
+    def _handle_get_proxy(self) -> None:
+        import urllib.request
+        qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        gid = (qs.get("gid") or [""])[0]
+        if not gid.isdigit():
+            return self._json(400, {"error": "gid must be a number"})
+        url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+               f"/export?format=csv&gid={gid}")
+        try:
+            with urllib.request.urlopen(url, timeout=20) as r:
+                body = r.read()
+        except Exception as exc:                   # noqa: BLE001
+            return self._json(502, {"error": str(exc)[:200]})
+        return self._send(Response(200, body, "text/csv; charset=utf-8"))
+
+    def _handle_get_inventory(self) -> None:
+        target = ROOT / "data" / "inventory.json"
+        if target.is_file():
+            return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
+        return self._json(404, {"error": "not built yet"})
+
+    def _handle_get_media(self, path: str, folder: pathlib.Path) -> None:
+        name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+        target = folder / name
+        if target.is_file() and folder.resolve() in target.resolve().parents:
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            return self._send(Response(200, target.read_bytes(), ctype))
+        return self._json(404, {"error": "not found"})
+
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
 
         if path in ("/", "/index.html"):
-            if not INDEX.exists():
-                return self._json(500, {"error": "index.html missing — run build.py"})
-            # Let the phone keep a copy: when this machine is off, the app falls
-            # back to it and you can still read the inventory in a shop. Short
-            # max-age so a running server always wins.
-            return self._send(Response(200, INDEX.read_bytes(), "text/html; charset=utf-8",
-                              cache="max-age=30, stale-if-error=604800"))
+            return self._handle_get_index()
 
         if path == "/manifest.webmanifest":
-            return self._send(Response(200, json.dumps(MANIFEST).encode("utf-8"), "application/manifest+json"))
+            return self._handle_get_manifest()
 
         if path in ("/icon-192.png", "/icon-512.png"):
-            return self._send(Response(200, png(192 if "192" in path else 512), "image/png"))
+            return self._handle_get_icon(path)
 
         if path == "/inbox":
-            with _activity_lock:
-                recent = list(_activity)
-            import identify
-            changes = identify.load_changes()
-            return self._json(200, {"pending": inbox_list(), "auto": AUTO,
-                                    "working": _work.unfinished_tasks,
-                                    "review": len(review_list()),
-                                    "confirm": identify.load_pending(),
-                                    "changes": changes[-12:][::-1],
-                                    "activity": recent})
+            return self._handle_get_inbox()
 
         # CSV of one sheet tab, fetched server-side. docs.google.com sends no
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            import urllib.request
-            qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-            gid = (qs.get("gid") or [""])[0]
-            if not gid.isdigit():
-                return self._json(400, {"error": "gid must be a number"})
-            url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-                   f"/export?format=csv&gid={gid}")
-            try:
-                with urllib.request.urlopen(url, timeout=20) as r:
-                    body = r.read()
-            except Exception as exc:                   # noqa: BLE001
-                return self._json(502, {"error": str(exc)[:200]})
-            return self._send(Response(200, body, "text/csv; charset=utf-8"))
+            return self._handle_get_proxy()
 
         # the freshly built inventory, so the page can update without a reload
         if path == "/data/inventory.json":
-            target = ROOT / "data" / "inventory.json"
-            if target.is_file():
-                return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
-            return self._json(404, {"error": "not built yet"})
+            return self._handle_get_inventory()
 
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
-                target = folder / name
-                if target.is_file() and folder.resolve() in target.resolve().parents:
-                    ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-                    return self._send(Response(200, target.read_bytes(), ctype))
-                return self._json(404, {"error": "not found"})
+                return self._handle_get_media(path, folder)
 
         return self._json(404, {"error": "not found"})
 
