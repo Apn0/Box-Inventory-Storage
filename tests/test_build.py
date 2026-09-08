@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of
+from build import parse_date, find_split_items, container_of, part_numbers
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -92,3 +92,37 @@ def test_container_of(box, expected):
     The 400-series starts a new physical set of containers with an 'H' prefix.
     """
     assert container_of(box) == expected
+
+@pytest.mark.parametrize("name, expected", [
+    # Happy paths - typical part numbers
+    ("tmc2209", {"tmc2209"}),
+    ("mt3608 module", {"mt3608"}),
+    ("esp32 board", {"esp32"}),
+    ("ads1115 adc", {"ads1115"}),
+    # Case insensitivity (slug converts to lower)
+    ("ESP32", {"esp32"}),
+    ("LM393 Sensor", {"lm393"}),
+    # Special characters and separators
+    ("hc-sr04", {"sr04"}), # 'hc' is discarded, 'sr04' matches
+    ("neo-6m gps", set()), # slug turns it into 'neo 6m gps'. 'neo' has no digits, '6m' lacks 2+ letters
+    # Multiple parts
+    ("esp32 with mt3608", {"esp32", "mt3608"}),
+    # Bare runs of digits (4+ digits)
+    ("18650 battery", {"18650"}),
+    ("sku7810", {"sku7810"}),
+    # Negatives - should not match
+    ("module", set()), # no digits
+    ("sensor", set()), # no digits
+    ("v2", set()), # only 1 letter
+    ("m3", set()), # only 1 letter
+    ("42", set()), # bare run of digits but less than 4 digits
+    ("123", set()), # bare run of digits but less than 4 digits
+    ("esp3", set()), # only 1 digit, requires 2+ digits according to actual regex
+    ("", set()), # empty string
+    ("   ", set()), # whitespace
+])
+def test_part_numbers(name, expected):
+    """Test extracting part numbers from a string.
+    Expects 2+ letters followed by 2+ digits, or a bare run of 4+ digits.
+    """
+    assert part_numbers(name) == expected
