@@ -75,16 +75,7 @@ def _fetch(url: str) -> str:
         return r.read().decode("utf-8-sig", errors="replace")
 
 
-def resolve_items() -> list[dict]:
-    """The same newest-row-wins resolver as build.py, against the live sheet.
-
-    A slimmed-down copy: only the fields identify needs (box/name/qty/status/
-    category), not the full app.template.html item shape. If build.py's
-    resolver logic changes, mirror it here too.
-    """
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
-
+def _parse_box_csv(raw_text: str) -> list[dict]:
     raw_rows = []
     for line_no, row in enumerate(csv.DictReader(io.StringIO(raw_text)), start=2):
         box_txt = (row.get("Box") or "").strip()
@@ -98,7 +89,11 @@ def resolve_items() -> list[dict]:
             "date": parse_date(row.get("UpdatedAt") or ""),
             "time": "00:00:00", "src": 0,
         })
+    return raw_rows
 
+
+def _parse_form_csv(form_text: str) -> list[dict]:
+    raw_rows = []
     if form_text.startswith("Timestamp"):
         for line_no, row in enumerate(csv.DictReader(io.StringIO(form_text)), start=2):
             box_txt = (row.get("Box") or "").strip()
@@ -117,7 +112,10 @@ def resolve_items() -> list[dict]:
                 "note": (row.get("Note") or "").strip(),
                 "date": date, "time": time_part or "00:00:01", "src": 1,
             })
+    return raw_rows
 
+
+def _group_and_resolve(raw_rows: list[dict]) -> list[dict]:
     groups: dict[tuple[int, str], list[dict]] = {}
     for row in raw_rows:
         groups.setdefault((row["box"], slug(row["name"])), []).append(row)
@@ -142,6 +140,21 @@ def resolve_items() -> list[dict]:
                       "countType": count_type, "status": status, "note": note,
                       "category": categorise(latest["name"], note)})
     return items
+
+
+def resolve_items() -> list[dict]:
+    """The same newest-row-wins resolver as build.py, against the live sheet.
+
+    A slimmed-down copy: only the fields identify needs (box/name/qty/status/
+    category), not the full app.template.html item shape. If build.py's
+    resolver logic changes, mirror it here too.
+    """
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
+
+    raw_rows = _parse_box_csv(raw_text)
+    raw_rows.extend(_parse_form_csv(form_text))
+    return _group_and_resolve(raw_rows)
 
 
 def find_existing_part(active: list[dict], name: str) -> dict | None:

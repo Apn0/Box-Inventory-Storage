@@ -17,7 +17,7 @@ class TestPartNumbers(unittest.TestCase):
         self.assertEqual(part_numbers("104"), set()) # too short
         self.assertEqual(part_numbers("220"), set()) # too short
 
-    def test_invalid_part_numbers(self):
+    def test_invalidpart_numbers(self):
         # Does not match plain words
         self.assertEqual(part_numbers("module"), set())
         self.assertEqual(part_numbers("sensor"), set())
@@ -211,7 +211,7 @@ class TestDecide(unittest.TestCase):
         }
         res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertFalse(res["existing"])
-        self.assertEqual(res["box"], 1) # suggest_box picks box 1 due to same category
+        self.assertEqual(res["box"], 1) # propose_box picks box 1 due to same category
         self.assertEqual(res["name"], "New IC")
         self.assertEqual(res["quantity"], 3)
         self.assertIsNone(res["from"])
@@ -227,7 +227,7 @@ class TestDecide(unittest.TestCase):
         }
         res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertFalse(res["existing"])
-        self.assertEqual(res["box"], 2) # suggest_box picks first free box
+        self.assertEqual(res["box"], 2) # propose_box picks first free box
         self.assertEqual(res["name"], "New Resistor")
         self.assertEqual(res["quantity"], 100)
         self.assertIsNone(res["from"])
