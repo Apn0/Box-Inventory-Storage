@@ -612,6 +612,71 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
+def _create_config(provider: str, context: str) -> IdentifyConfig:
+    client = None
+    anthropic_key = read_key("ANTHROPIC_API_KEY")
+    if provider in {"auto", "anthropic"} and anthropic_key:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_key)
+        except ImportError:
+            logging.warning("anthropic SDK not installed — skipping Claude")
+
+    return IdentifyConfig(
+        client=client,
+        context=context,
+        provider=provider,
+        gemini_key=read_key("GOOGLE_API_KEY"),
+        openai_key=read_key("OPENAI_API_KEY")
+    )
+
+
+def _process_single_photo(
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool
+) -> tuple[dict, dict | None]:
+    try:
+        result = identify(path, config)
+    except Exception as exc:                          # noqa: BLE001
+        return {"photo": path.name, "ok": False, "error": str(exc)[:200]}, None
+
+    if result is None:
+        return {"photo": path.name, "ok": False, "error": "no answer"}, None
+
+    plan = decide(data, active, result)
+    outcome = {"photo": path.name, "ok": True,
+               "name": plan["name"], "box": plan["box"],
+               "confidence": result["confidence"], "note": result["note"],
+               "existing": plan["existing"],
+               "from": plan["from"], "to": plan["to"],
+               "why": plan["why"]}
+
+    row = None
+    if unattended:
+        # Never write a count unattended. What is actually in the box is
+        # something only you can see — you may have taken parts out without
+        # logging it, so an increment would quietly drift from reality.
+        # The photo becomes a question with the recorded number filled in.
+        REVIEW.mkdir(parents=True, exist_ok=True)
+        if INBOX in path.resolve().parents:
+            shutil.move(str(path), str(REVIEW / path.name))
+
+        existing = find_existing_part(active, result["name"]) or (
+            find_existing_part(active, result["matches_existing"])
+            if result["matches_existing"] else None)
+        outcome.update(
+            filed=False,
+            recorded=(existing["qty"] if existing and existing["countType"] == "exact"
+                      else ("many" if existing else None)),
+            recordedName=existing["name"] if existing else None,
+            seen=int(result["quantity"] or 0),
+            category=result.get("category", "misc"))
+    else:
+        row = file_one(path, result, plan)
+        outcome.update(filed=True)
+
+    return outcome, row
+
+
 def process(paths, provider: str = "auto", unattended: bool = False) -> list[dict]:
     """Identify and file every photo, no prompting. Used by server.py.
 
@@ -624,65 +689,15 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     data = load_inventory()
     active = [i for i in data["items"] if i["status"] == "active"]
     context = context_for_prompt(data, active)
-    client = None
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    if provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            logging.warning("anthropic SDK not installed — skipping Claude")
+    config = _create_config(provider, context)
 
     outcomes, rows = [], []
-    config = IdentifyConfig(
-        client=client,
-        context=context,
-        provider=provider,
-        gemini_key=read_key("GOOGLE_API_KEY"),
-        openai_key=read_key("OPENAI_API_KEY")
-    )
     for path in paths:
         path = pathlib.Path(path)
-        try:
-            result = identify(path, config)
-        except Exception as exc:                          # noqa: BLE001
-            outcomes.append({"photo": path.name, "ok": False, "error": str(exc)[:200]})
-            continue
-        if result is None:
-            outcomes.append({"photo": path.name, "ok": False, "error": "no answer"})
-            continue
-
-        plan = decide(data, active, result)
-        outcome = {"photo": path.name, "ok": True,
-                   "name": plan["name"], "box": plan["box"],
-                   "confidence": result["confidence"], "note": result["note"],
-                   "existing": plan["existing"],
-                   "from": plan["from"], "to": plan["to"],
-                   "why": plan["why"]}
-
-        if unattended:
-            # Never write a count unattended. What is actually in the box is
-            # something only you can see — you may have taken parts out without
-            # logging it, so an increment would quietly drift from reality.
-            # The photo becomes a question with the recorded number filled in.
-            REVIEW.mkdir(parents=True, exist_ok=True)
-            if INBOX in path.resolve().parents:
-                shutil.move(str(path), str(REVIEW / path.name))
-
-            existing = find_existing_part(active, result["name"]) or (
-                find_existing_part(active, result["matches_existing"])
-                if result["matches_existing"] else None)
-            outcome.update(
-                filed=False,
-                recorded=(existing["qty"] if existing and existing["countType"] == "exact"
-                          else ("many" if existing else None)),
-                recordedName=existing["name"] if existing else None,
-                seen=int(result["quantity"] or 0),
-                category=result.get("category", "misc"))
-        else:
-            rows.append(file_one(path, result, plan))
-            outcome.update(filed=True)
+        outcome, row = _process_single_photo(path, data, active, config, unattended)
         outcomes.append(outcome)
+        if row is not None:
+            rows.append(row)
 
     if rows:
         append_rows(rows)
