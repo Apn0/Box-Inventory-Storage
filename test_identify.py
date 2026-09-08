@@ -1,6 +1,5 @@
 import unittest
-from identify import find_existing_part, auto_filable, _recoverable
-from build import part_numbers as _part_numbers
+from identify import find_existing, auto_filable, _part_numbers, _recoverable
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
