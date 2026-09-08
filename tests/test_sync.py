@@ -1,7 +1,6 @@
 import sys
 import urllib.request
 import urllib.error
-import pytest
 
 # Add root to sys.path so we can import sync
 from pathlib import Path

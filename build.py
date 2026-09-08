@@ -39,7 +39,7 @@ CONTAINER_SIZE = 30
 # ---------------------------------------------------------------- categories
 # Ordered: first matching rule wins. Patterns are matched against the
 # lower-cased item name plus its note.
-CATEGORY_RULES: list[tuple[str, str]] = [
+_CATEGORY_RULES_RAW: list[tuple[str, str]] = [
     ("mcu",        r"esp32|esp8266|xiao|microcontroller|\bmcu\b"),
     ("sensor",     r"\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|"
                    r"mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |"
@@ -75,6 +75,7 @@ CATEGORY_RULES: list[tuple[str, str]] = [
     ("material",   r"scrap|shavings|sawdust|flakes|granules|seeds|salts|foam|earplug|"
                    r"popsicle|hot-glue|shoelace|gemstone|coil|sticker|label"),
 ]
+CATEGORY_RULES = [(cat, re.compile(pattern)) for cat, pattern in _CATEGORY_RULES_RAW]
 DEFAULT_CATEGORY = "misc"
 
 CATEGORY_LABELS = {
@@ -110,7 +111,7 @@ def part_numbers(name: str) -> set[str]:
 def categorise(name: str, note: str) -> str:
     hay = f"{name} {note}".lower()
     for cat, pattern in CATEGORY_RULES:
-        if re.search(pattern, hay):
+        if pattern.search(hay):
             return cat
     return DEFAULT_CATEGORY
 
