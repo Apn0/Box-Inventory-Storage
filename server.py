@@ -386,10 +386,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         entries = [e for e in entries if e["id"] != entry["id"]]
         if path == "/dismiss":
-            src = REVIEW / entry["photo"]
+            photo_filename = pathlib.Path(entry["photo"]).name
+            src = REVIEW / photo_filename
             if src.exists():                       # keep the photo, file nothing
                 (ROOT / "data" / "ignored").mkdir(parents=True, exist_ok=True)
-                shutil.move(str(src), str(ROOT / "data" / "ignored" / entry["photo"]))
+                shutil.move(str(src), str(ROOT / "data" / "ignored" / photo_filename))
             identify.save_pending(entries)
             record({"photo": entry["photo"], "state": "dismissed", "ok": True,
                     "name": entry.get("name")})
