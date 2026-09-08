@@ -1,7 +1,8 @@
 import pytest
 import datetime
-from unittest.mock import patch
-from server import safe_name
+import json
+from unittest.mock import patch, MagicMock
+from server import safe_name, Handler, BOX_GID, FORM_GID
 
 @pytest.fixture
 def mock_datetime():
@@ -39,3 +40,57 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name("!!!.jpg") == "20231024-153045-123__.jpg"
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
+
+def test_proxy_ssrf_protection():
+    # Instantiate Handler without invoking its superclass __init__ which tries to run handle()
+    handler = Handler.__new__(Handler)
+    handler.wfile = MagicMock()
+    handler._send = MagicMock()
+
+    # Test valid BOX_GID
+    handler.path = f"/proxy?gid={BOX_GID}"
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"csv data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        handler.do_GET()
+
+        mock_urlopen.assert_called_once()
+        args = mock_urlopen.call_args[0][0]
+        assert BOX_GID in args
+        assert "docs.google.com" in args
+
+    # Test valid FORM_GID
+    handler.path = f"/proxy?gid={FORM_GID}"
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"csv data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        handler.do_GET()
+
+        mock_urlopen.assert_called_once()
+        args = mock_urlopen.call_args[0][0]
+        assert FORM_GID in args
+        assert "docs.google.com" in args
+
+    # Test invalid gid (digits)
+    handler.path = "/proxy?gid=123456789"
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        handler.do_GET()
+        mock_urlopen.assert_not_called()
+
+        args = handler._send.call_args[0][0]
+        assert args.code == 403
+        assert json.loads(args.body)["error"] == "forbidden gid"
+
+    # Test invalid gid (letters/malicious)
+    handler.path = "/proxy?gid=evil"
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        handler.do_GET()
+        mock_urlopen.assert_not_called()
+
+        args = handler._send.call_args[0][0]
+        assert args.code == 403
+        assert json.loads(args.body)["error"] == "forbidden gid"
