@@ -22,23 +22,19 @@ def suggest_box_old(active: list[dict], category: str) -> int:
 def suggest_box_new(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
     same_cat = set()
-    used = set()
 
     for i in active:
-        box = i["box"]
-        per_box[box] = per_box.get(box, 0) + 1
-
-        if box < 400:
-            used.add(box)
-            if i["category"] == category:
-                same_cat.add(box)
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400 and i.get("category") == category:
+            same_cat.add(b)
 
     for b in sorted(same_cat):
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
             return b
 
     b = 1
-    while b in used:
+    while b in per_box and b < 400:
         b += 1
     return b
 

@@ -1,8 +1,8 @@
 import pytest
 import datetime
-import socket
+import json
 from unittest.mock import patch, MagicMock
-from server import safe_name, port_in_use
+from server import safe_name, Handler, BOX_GID, FORM_GID
 
 @pytest.fixture
 def mock_datetime():
@@ -41,52 +41,53 @@ def test_safe_name_empty_or_invalid_stem(mock_datetime):
     assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
-def test_port_in_use_free():
-    with patch("server.socket.socket") as mock_socket_cls:
-        mock_instance = MagicMock()
-        mock_socket_cls.return_value.__enter__.return_value = mock_instance
-        mock_instance.connect_ex.return_value = 1  # non-zero means not in use
+def test_proxy_ssrf_allowlist():
+    handler = Handler.__new__(Handler)
 
-        assert port_in_use(8080) is None
+    responses = []
+    def mock_json(code, data):
+        responses.append((code, data))
+        return
 
-def test_port_in_use_ipv4():
-    with patch("server.socket.socket") as mock_socket_cls:
-        mock_instance = MagicMock()
-        mock_socket_cls.return_value.__enter__.return_value = mock_instance
+    def mock_send(resp):
+        responses.append((resp.code, resp.body))
+        return
 
-        def connect_ex_side_effect(address):
-            if address == ("127.0.0.1", 8080):
-                return 0
-            return 1
+    handler._json = mock_json
+    handler._send = mock_send
 
-        mock_instance.connect_ex.side_effect = connect_ex_side_effect
+    # Test unallowed GID
+    handler.path = "/proxy?gid=123456789"
+    handler.do_GET()
+    assert responses[-1][0] == 403
+    assert responses[-1][1] == {"error": "gid not allowed"}
 
-        assert port_in_use(8080) == "127.0.0.1"
+    # Test allowed GID (BOX_GID)
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"box_csv_data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
 
-def test_port_in_use_ipv6():
-    with patch("server.socket.socket") as mock_socket_cls:
-        mock_instance = MagicMock()
-        mock_socket_cls.return_value.__enter__.return_value = mock_instance
+        handler.path = f"/proxy?gid={BOX_GID}"
+        handler.do_GET()
 
-        def connect_ex_side_effect(address):
-            if address == ("::1", 8080):
-                return 0
-            return 1
+        assert responses[-1][0] == 200
+        assert responses[-1][1] == b"box_csv_data"
 
-        mock_instance.connect_ex.side_effect = connect_ex_side_effect
+    # Test allowed GID (FORM_GID)
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"form_csv_data"
+        mock_urlopen.return_value.__enter__.return_value = mock_response
 
-        assert port_in_use(8080) == "::1"
+        handler.path = f"/proxy?gid={FORM_GID}"
+        handler.do_GET()
 
-def test_port_in_use_oserror():
-    with patch("server.socket.socket") as mock_socket_cls:
-        def side_effect(family, type):
-            if family == socket.AF_INET:
-                raise OSError("simulated")
-            mock_sock = MagicMock()
-            mock_sock.__enter__.return_value = mock_sock
-            mock_sock.connect_ex.return_value = 0
-            return mock_sock
+        assert responses[-1][0] == 200
+        assert responses[-1][1] == b"form_csv_data"
 
-        mock_socket_cls.side_effect = side_effect
-
-        assert port_in_use(8080) == "::1"
+    # Test invalid GID string
+    handler.path = "/proxy?gid=invalid"
+    handler.do_GET()
+    assert responses[-1][0] == 403
+    assert responses[-1][1] == {"error": "gid not allowed"}
