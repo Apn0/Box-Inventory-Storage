@@ -106,14 +106,33 @@ def png(size: int) -> bytes:
     r, g, b = ACCENT
     pad, thick = size // 5, max(2, size // 24)
     rows = []
+
+    edge_pixel = b'\xff\xff\xff'
+    bg_pixel = bytes((r, g, b))
+
+    bg_row_data = [bg_pixel for _ in range(size)]
+    bg_row_bytes = b'\x00' + b''.join(bg_row_data)
+
+    thick_row_data = [
+        edge_pixel if (pad <= x < size - pad) else bg_pixel
+        for x in range(size)
+    ]
+    thick_row_bytes = b'\x00' + b''.join(thick_row_data)
+
+    inner_row_data = [
+        edge_pixel if (pad <= x < size - pad and (x - pad < thick or size - pad - x <= thick))
+        else bg_pixel
+        for x in range(size)
+    ]
+    inner_row_bytes = b'\x00' + b''.join(inner_row_data)
+
     for y in range(size):
-        row = bytearray([0])                      # filter byte: none
-        for x in range(size):
-            edge = (pad <= x < size - pad and pad <= y < size - pad and
-                    (x - pad < thick or size - pad - x <= thick or
-                     y - pad < thick or size - pad - y <= thick))
-            row += bytes((255, 255, 255) if edge else (r, g, b))
-        rows.append(bytes(row))
+        if y < pad or y >= size - pad:
+            rows.append(bg_row_bytes)
+        elif y - pad < thick or size - pad - y <= thick:
+            rows.append(thick_row_bytes)
+        else:
+            rows.append(inner_row_bytes)
 
     def chunk(tag: bytes, data: bytes) -> bytes:
         return (struct.pack(">I", len(data)) + tag + data
