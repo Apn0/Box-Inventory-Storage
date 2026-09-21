@@ -223,3 +223,37 @@ def test_build_items_sorting_by_box_and_slug():
 
     assert items[2]["box"] == 2
     assert items[2]["name"] == "Zener Diode"
+
+def test_build_items_empty():
+    items = build_items([])
+    assert items == []
+
+def test_build_items_skips_none_resolved():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        # Simulate a placeholder/gone item that resolves to None
+        {"line": 3, "box": 81, "name": "", "qty_txt": "", "note": "Empty Box", "date": "2023-01-01", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 1
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Resistor"
+
+def test_build_items_sorting_logic():
+    raw_rows = [
+        {"line": 1, "box": 2, "name": "Zebra", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 2, "box": 2, "name": "Apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "Banana", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 4, "box": 1, "name": "apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 4
+    # Order should be Box 1 Apple, Box 1 Banana, Box 2 Apple, Box 2 Zebra (since group_rows sorts by box and slug)
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "apple"
+    assert items[1]["box"] == 1
+    assert items[1]["name"] == "Banana"
+    assert items[2]["box"] == 2
+    assert items[2]["name"] == "Apple"
+    assert items[3]["box"] == 2
+    assert items[3]["name"] == "Zebra"
