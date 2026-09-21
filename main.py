@@ -18,6 +18,7 @@ import csv
 import io
 import json
 import mimetypes
+import os
 import urllib.error
 import urllib.request
 
@@ -259,7 +260,7 @@ def identify():
 
     try:
         items = resolve_items()
-    except Exception as exc:                              # noqa: BLE001
+    except (urllib.error.URLError, ValueError, csv.Error) as exc:
         return jsonify(error=f"could not read the sheet: {exc}"), 502
 
     cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
