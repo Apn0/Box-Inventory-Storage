@@ -1,10 +1,12 @@
 import base64
 import pytest
 from main import app
+import os
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    os.environ['API_KEY'] = 'test-key'
     with app.test_client() as client:
         yield client
 
@@ -14,7 +16,7 @@ def test_health(client):
     assert response.data == b"ok"
 
 def test_identify_missing_image(client):
-    response = client.post("/identify", data=b"")
+    response = client.post("/identify", headers={"Authorization": "Bearer test-key"}, data=b"")
     assert response.status_code == 400
     assert b"no image" in response.data
 
@@ -28,5 +30,5 @@ def test_identify_too_large(client):
 
     # Let's see what happens if we pass 26MB of 'a's
     large_data = b"a" * (25 * 1024 * 1024 + 100)
-    response = client.post("/identify", data=large_data)
+    response = client.post("/identify", headers={"Authorization": "Bearer test-key"}, data=large_data)
     assert response.status_code == 413

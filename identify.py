@@ -113,8 +113,11 @@ GEMINI_SCHEMA = {
 _env_cache = None
 _env_mtime = 0.0
 
+import os
 def read_key(name: str) -> str | None:
     global _env_cache, _env_mtime
+    if name in os.environ:
+        return os.environ[name]
     if not ENV.exists():
         return None
 
