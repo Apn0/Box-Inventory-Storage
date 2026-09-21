@@ -379,5 +379,37 @@ class TestContextForPrompt(unittest.TestCase):
         expected_parts = "- IC-123!@#\n- µController"
         self.assertIn(expected_parts, result)
 
+class TestContextForPromptAdditional(unittest.TestCase):
+    def test_unicode_category_labels(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "μcu": "Microcontrollers 🚀",
+                    "led": "LEDs & Lights ✨"
+                }
+            }
+        }
+        active = [
+            {"name": "ESP32 🧠"}
+        ]
+        result = context_for_prompt(data, active)
+        self.assertIn("μcu (Microcontrollers 🚀)", result)
+        self.assertIn("led (LEDs & Lights ✨)", result)
+        self.assertIn("- ESP32 🧠", result)
+
+    def test_missing_name_in_active(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "misc": "Misc"
+                }
+            }
+        }
+        active = [
+            {"not_name": "Something"}
+        ]
+        with self.assertRaises(KeyError):
+            context_for_prompt(data, active)
+
 if __name__ == "__main__":
     unittest.main()
