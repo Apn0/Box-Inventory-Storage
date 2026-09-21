@@ -390,3 +390,35 @@ def test_build_items_mocked(mocker):
     assert len(items) == 2
     assert items[0] == {"box": 1, "name": "a-slug", "slug": "a-slug", "resolved": True}
     assert items[1] == {"box": 2, "name": "b-slug", "slug": "b-slug", "resolved": True}
+
+def test_resolve_item_id_fallback():
+    history = [
+        {"name": "NamelessItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}
+    ]
+    res = resolve_item(1, "", history)
+    assert res["id"] == "1-item"
+
+def test_resolve_item_complex_history():
+    history = [
+        {"name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "Resistor", "qty_txt": "5", "note": "used 5", "date": "2023-01-02", "time": "11:00:00", "src": 0, "line": 2},
+        {"name": "Resistor", "qty_txt": "20", "note": COUNTED_MARK, "date": "2023-01-03", "time": "12:00:00", "src": 0, "line": 3},
+        {"name": "Resistor", "qty_txt": "15", "note": "used 5", "date": "2023-01-04", "time": "13:00:00", "src": 0, "line": 4},
+    ]
+    # Scramble the order to test sorting logic
+    history = [history[2], history[0], history[3], history[1]]
+
+    result = resolve_item(1, "resistor", history)
+
+    assert result["name"] == "Resistor"
+    assert result["qty"] == 15
+    assert result["peak"] == 20
+    assert result["countType"] == "exact"
+    assert result["status"] == "active"
+    assert result["conflict"] is True # distinct qtys > 1 and last is not deliberate
+    assert len(result["history"]) == 4
+    # ensure sorted properly by dates
+    assert result["history"][0]["qty"] == "10"
+    assert result["history"][1]["qty"] == "5"
+    assert result["history"][2]["qty"] == "20"
+    assert result["history"][3]["qty"] == "15"
