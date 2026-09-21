@@ -13,12 +13,14 @@ def test_health(client):
     assert response.status_code == 200
     assert response.data == b"ok"
 
-def test_identify_missing_image(client):
-    response = client.post("/identify", data=b"")
+def test_identify_missing_image(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
+    response = client.post("/identify", data=b"", headers={"Authorization": "Bearer test-key"})
     assert response.status_code == 400
     assert b"no image" in response.data
 
-def test_identify_too_large(client):
+def test_identify_too_large(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
     # The limit is 25MB. We'll generate a payload slightly larger than that.
     # To keep the test fast and avoid allocating a huge string in memory, we can just use
     # a mocked request or simulate large data.
@@ -28,5 +30,5 @@ def test_identify_too_large(client):
 
     # Let's see what happens if we pass 26MB of 'a's
     large_data = b"a" * (25 * 1024 * 1024 + 100)
-    response = client.post("/identify", data=large_data)
+    response = client.post("/identify", data=large_data, headers={"Authorization": "Bearer test-key"})
     assert response.status_code == 413
