@@ -161,24 +161,29 @@ def resolve_items() -> list[dict]:
 def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
+    wanted = part_numbers(name)
+
+    hit = None
+    hit_ambiguous = False
+
     for item in active:
-        item_slug = item.get("_slug")
-        if item_slug is None:
-            item_slug = slug(item["name"])
-            item["_slug"] = item_slug
+        item_slug = slug(item["name"])
+
+        # exact wins
         if item_slug == key:
             return item
 
-    wanted = part_numbers(name)
-    if not wanted:
-        return None
+        # then the part number
+        if wanted and not hit_ambiguous:
+            if not wanted.isdisjoint(item_slug.split()):
+                if hit is not None:
+                    # Several active records match this part number
+                    hit_ambiguous = True
+                else:
+                    hit = item
 
-    hit = None
-    for item in active:
-        if not wanted.isdisjoint(slug(item["name"]).split()):
-            if hit is not None:
-                return None
-            hit = item
+    if hit_ambiguous:
+        return None
     return hit
 
 
