@@ -170,23 +170,25 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     wanted = part_numbers(name)
 
     hit = None
-    ambiguous = False
+    hit_ambiguous = False
 
     for item in active:
         item_name = item["name"]
 
-        if slug(item_name) == key:                        # exact wins
+        # exact wins
+        if slug(item_name) == key:
             return item
 
-        if wanted and not ambiguous:                      # then the part number
+        # then the part number
+        if wanted and not hit_ambiguous:
             if not wanted.isdisjoint(part_numbers(item_name)):
                 if hit is not None:
                     # Several boxes carry this part number — too ambiguous to pick one.
-                    ambiguous = True
+                    hit_ambiguous = True
                 else:
                     hit = item
 
-    if ambiguous or not wanted:
+    if hit_ambiguous:
         return None
 
     return hit
