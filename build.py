@@ -295,11 +295,12 @@ def find_free_boxes(items: list[dict]) -> list[dict]:
             active_by_box[i["box"]] = active_by_box.get(i["box"], 0) + 1
 
     free_boxes = []
+    active_keys = set(active_by_box.keys())
+    used_boxes_set = set(used_boxes)
     for lo, hi in ((1, max(low) if low else 0), (400, max(high) if high else 0)):
-        for b in range(lo, hi + 1):
-            if active_by_box.get(b, 0) == 0:
-                reason = "emptied" if b in used_boxes else "never used"
-                free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
+        for b in sorted(set(range(lo, hi + 1)) - active_keys):
+            reason = "emptied" if b in used_boxes_set else "never used"
+            free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
     return free_boxes
 
 

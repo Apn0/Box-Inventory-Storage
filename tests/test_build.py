@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, resolve_item, BULK_SENTINEL, COUNTED_MARK
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
