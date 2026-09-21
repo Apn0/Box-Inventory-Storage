@@ -161,20 +161,29 @@ def resolve_items() -> list[dict]:
 def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
-    for item in active:
-        if slug(item["name"]) == key:
-            return item
-
     wanted = part_numbers(name)
-    if not wanted:
-        return None
 
     hit = None
+    hit_ambiguous = False
+
     for item in active:
-        if not wanted.isdisjoint(slug(item["name"]).split()):
-            if hit is not None:
-                return None
-            hit = item
+        item_slug = slug(item["name"])
+
+        # exact wins
+        if item_slug == key:
+            return item
+
+        # then the part number
+        if wanted and not hit_ambiguous:
+            if not wanted.isdisjoint(item_slug.split()):
+                if hit is not None:
+                    # Several active records match this part number
+                    hit_ambiguous = True
+                else:
+                    hit = item
+
+    if hit_ambiguous:
+        return None
     return hit
 
 
@@ -260,7 +269,7 @@ def identify():
 
     try:
         items = resolve_items()
-    except Exception as exc:                              # noqa: BLE001
+    except (urllib.error.URLError, ValueError, csv.Error) as exc:
         return jsonify(error=f"could not read the sheet: {exc}"), 502
 
     cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
