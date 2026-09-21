@@ -1,5 +1,5 @@
 import unittest
-from identify import find_existing_part, auto_filable, propose_box
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -273,6 +273,79 @@ class TestRecoverable(unittest.TestCase):
         self.assertFalse(_recoverable(Exception("500 Internal Server Error")))
         self.assertFalse(_recoverable(Exception("404 Not Found")))
         self.assertFalse(_recoverable(Exception("Bad request 400")))
+
+
+class TestContextForPrompt(unittest.TestCase):
+    def test_typical_case(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "ic": "Integrated Circuits",
+                    "resistor": "Resistors"
+                }
+            }
+        }
+        active = [
+            {"name": "TMC2209 stepper driver"},
+            {"name": "10k resistor"}
+        ]
+        result = context_for_prompt(data, active)
+
+        self.assertIn("Category keys you must choose from: ic (Integrated Circuits), resistor (Resistors).", result)
+        self.assertIn("- 10k resistor", result)
+        self.assertIn("- TMC2209 stepper driver", result)
+        # Checking sort order
+        expected_parts = "- 10k resistor\n- TMC2209 stepper driver"
+        self.assertIn(expected_parts, result)
+
+    def test_duplicates_deduplicated_and_sorted(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "misc": "Miscellaneous"
+                }
+            }
+        }
+        active = [
+            {"name": "Z-diode"},
+            {"name": "Z-diode"},
+            {"name": "A-diode"},
+            {"name": "A-diode"}
+        ]
+        result = context_for_prompt(data, active)
+
+        expected_parts = "- A-diode\n- Z-diode"
+        self.assertIn(expected_parts, result)
+        self.assertEqual(result.count("A-diode"), 1)
+        self.assertEqual(result.count("Z-diode"), 1)
+
+    def test_empty_active_list(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "misc": "Miscellaneous"
+                }
+            }
+        }
+        active = []
+        result = context_for_prompt(data, active)
+
+        self.assertIn("Category keys you must choose from: misc (Miscellaneous).", result)
+        self.assertTrue(result.endswith("Parts already in the inventory (reuse the exact name if it is the same part):\n"))
+
+    def test_empty_categories(self):
+        data = {
+            "meta": {
+                "categoryLabels": {}
+            }
+        }
+        active = [
+            {"name": "Part A"}
+        ]
+        result = context_for_prompt(data, active)
+
+        self.assertIn("Category keys you must choose from: .", result)
+        self.assertIn("- Part A", result)
 
 if __name__ == "__main__":
     unittest.main()
