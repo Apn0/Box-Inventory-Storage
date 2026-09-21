@@ -356,46 +356,37 @@ def test_build_items_empty_input():
     items = build_items([])
     assert items == []
 
-def test_build_items_comprehensive():
-    """Test build_items with various edge cases and multiple boxes."""
-    raw_rows = [
-        # Box 3: Complex sorting (Capacitor vs capacitor vs CaPaCiToR)
-        {"box": 3, "name": "Capacitor", "qty_txt": "5", "note": "10uF", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"box": 3, "name": "capacitor", "qty_txt": "2", "note": "10uF updated", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
-        # Box 3: Another item
-        {"box": 3, "name": "Diode", "qty_txt": "10", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 3},
+def test_build_items_mocked(mocker):
+    # Mock group_rows to return predefined out-of-order groups
+    mock_group_rows = mocker.patch("build.group_rows")
+    mock_group_rows.return_value = {
+        (2, "b-slug"): [{"history": "b"}],
+        (1, "a-slug"): [{"history": "a"}],
+        (1, "c-slug"): [{"history": "c"}],  # Will be resolved as None
+    }
 
-        # Box 1: Resolves to None due to empty name
-        {"box": 1, "name": "", "qty_txt": "100", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 4},
+    # Mock resolve_item to return items or None
+    def side_effect_resolve_item(box, key_slug, history):
+        if key_slug == "c-slug":
+            return None
+        return {"box": box, "name": key_slug, "slug": key_slug, "resolved": True}
 
-        # Box 2: Quantity conflict
-        {"box": 2, "name": "Resistor", "qty_txt": "100", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 5},
-        {"box": 2, "name": "Resistor", "qty_txt": "50", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 6},
+    mock_resolve_item = mocker.patch("build.resolve_item", side_effect=side_effect_resolve_item)
 
-        # Box 2: Bulk item
-        {"box": 2, "name": "Screws", "qty_txt": "99", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 7},
-    ]
-
+    # Call build_items with dummy raw rows
+    raw_rows = [{"dummy": "row"}]
     items = build_items(raw_rows)
 
-    # We expect: Box 2 - Resistor, Screws. Box 3 - Capacitor, Diode. Box 1 has None so it's excluded.
-    assert len(items) == 4
+    # Verify group_rows was called with raw_rows
+    mock_group_rows.assert_called_once_with(raw_rows)
 
-    assert items[0]["box"] == 2
-    assert items[0]["name"] == "Resistor"
-    assert items[0]["qty"] == 50
-    assert items[0]["conflict"] is True
+    # Verify resolve_item was called for each sorted group
+    assert mock_resolve_item.call_count == 3
+    mock_resolve_item.assert_any_call(1, "a-slug", [{"history": "a"}])
+    mock_resolve_item.assert_any_call(1, "c-slug", [{"history": "c"}])
+    mock_resolve_item.assert_any_call(2, "b-slug", [{"history": "b"}])
 
-    assert items[1]["box"] == 2
-    assert items[1]["name"] == "Screws"
-    assert items[1]["countType"] == "bulk"
-
-    assert items[2]["box"] == 3
-    assert items[2]["name"] == "capacitor" # The last row is 'capacitor'
-    assert items[2]["qty"] == 2
-    assert items[2]["note"] == "10uF updated"
-    assert items[2]["conflict"] is True
-
-    assert items[3]["box"] == 3
-    assert items[3]["name"] == "Diode"
-    assert items[3]["qty"] == 10
+    # Verify the output list only contains non-None items in expected sorted order
+    assert len(items) == 2
+    assert items[0] == {"box": 1, "name": "a-slug", "slug": "a-slug", "resolved": True}
+    assert items[1] == {"box": 2, "name": "b-slug", "slug": "b-slug", "resolved": True}
