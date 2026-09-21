@@ -165,131 +165,61 @@ def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
 
-def test_resolve_item_empty_name():
-    history = [
-        {"name": "", "qty_txt": "5", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""}
-    ]
-    assert resolve_item(81, "empty-item", history) is None
+from build import build_items
 
-def test_resolve_item_exact_quantity():
-    history = [
-        {"name": "Resistor", "qty_txt": "5", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""}
+def test_build_items_happy_path():
+    raw_rows = [
+        {"line": 2, "box": 2, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "Capacitor", "qty_txt": "5", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0},
     ]
-    res = resolve_item(1, "resistor", history)
-    assert res is not None
-    assert res["countType"] == "exact"
-    assert res["qty"] == 5
-    assert res["peak"] == 5
-    assert res["status"] == "active"
-    assert res["conflict"] is False
-    assert res["restated"] is False
-    assert res["id"] == "1-resistor"
+    items = build_items(raw_rows)
+    assert len(items) == 2
+    # Should be sorted by box, then slug (1: Capacitor, then 2: Resistor)
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Capacitor"
+    assert items[1]["box"] == 2
+    assert items[1]["name"] == "Resistor"
 
-def test_resolve_item_zero_quantity():
-    history = [
-        {"name": "Capacitor", "qty_txt": "0", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""}
+def test_build_items_grouping():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "Old", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "resistor", "qty_txt": "15", "note": "New", "date": "2023-01-02", "time": "12:00", "src": 0},
+        {"line": 4, "box": 2, "name": "Capacitor", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
     ]
-    res = resolve_item(1, "capacitor", history)
-    assert res is not None
-    assert res["countType"] == "exact"
-    assert res["qty"] == 0
-    assert res["peak"] == 0
-    assert res["status"] == "gone"
+    items = build_items(raw_rows)
+    assert len(items) == 2
 
-def test_resolve_item_unknown_quantity():
-    history = [
-        {"name": "Inductor", "qty_txt": "", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""}
-    ]
-    res = resolve_item(1, "inductor", history)
-    assert res is not None
-    assert res["countType"] == "unknown"
-    assert res["qty"] is None
-    assert res["peak"] is None
-    assert res["status"] == "active"
+    resistors = [i for i in items if i["box"] == 1]
+    assert len(resistors) == 1
+    assert resistors[0]["qty"] == 15
+    assert resistors[0]["note"] == "New"
+    assert len(resistors[0]["history"]) == 2
 
-def test_resolve_item_bulk_quantity():
-    history = [
-        {"name": "LEDs", "qty_txt": str(BULK_SENTINEL), "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""}
+def test_build_items_resolving_returns_none():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 81, "name": "", "qty_txt": "", "note": "Empty Box", "date": "2023-01-01", "time": "12:00", "src": 0},
     ]
-    res = resolve_item(1, "leds", history)
-    assert res is not None
-    assert res["countType"] == "bulk"
-    assert res["qty"] is None
-    assert res["peak"] is None
-    assert res["status"] == "active"
+    items = build_items(raw_rows)
+    # Box 81 with no name should be filtered out
+    assert len(items) == 1
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Resistor"
 
-def test_resolve_item_multiple_history_restated():
-    history = [
-        {"name": "Wire", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""},
-        {"name": "Wire", "qty_txt": "10", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": ""}
+def test_build_items_sorting_by_box_and_slug():
+    raw_rows = [
+        {"line": 2, "box": 2, "name": "Zener Diode", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 2, "name": "Apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 4, "box": 1, "name": "Banana", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
     ]
-    res = resolve_item(1, "wire", history)
-    assert res is not None
-    assert res["restated"] is True
-    assert res["conflict"] is False
-    assert len(res["history"]) == 2
+    items = build_items(raw_rows)
+    assert len(items) == 3
+    # Order should be Box 1 Banana, Box 2 Apple, Box 2 Zener Diode
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Banana"
 
-def test_resolve_item_multiple_history_conflict():
-    history = [
-        {"name": "Wire", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""},
-        {"name": "Wire", "qty_txt": "5", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": ""}
-    ]
-    res = resolve_item(1, "wire", history)
-    assert res is not None
-    assert res["restated"] is False
-    assert res["conflict"] is True
-    assert len(res["history"]) == 2
-    assert res["qty"] == 5
+    assert items[1]["box"] == 2
+    assert items[1]["name"] == "Apple"
 
-def test_resolve_item_multiple_history_deliberate_src():
-    history = [
-        {"name": "Wire", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""},
-        {"name": "Wire", "qty_txt": "5", "date": "2023-01-02", "time": "12:00:00", "src": 1, "line": 2, "note": ""}
-    ]
-    res = resolve_item(1, "wire", history)
-    assert res is not None
-    assert res["conflict"] is False
-    assert res["qty"] == 5
-
-def test_resolve_item_multiple_history_deliberate_note():
-    history = [
-        {"name": "Wire", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""},
-        {"name": "Wire", "qty_txt": "5", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": COUNTED_MARK}
-    ]
-    res = resolve_item(1, "wire", history)
-    assert res is not None
-    assert res["conflict"] is False
-    assert res["qty"] == 5
-
-def test_resolve_item_peak_calculation():
-    history = [
-        {"name": "Screws", "qty_txt": "2", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": ""},
-        {"name": "Screws", "qty_txt": "10", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": ""},
-        {"name": "Screws", "qty_txt": "5", "date": "2023-01-03", "time": "12:00:00", "src": 0, "line": 3, "note": ""}
-    ]
-    res = resolve_item(1, "screws", history)
-    assert res is not None
-    assert res["qty"] == 5
-    assert res["peak"] == 10
-
-def test_resolve_item_note_fallback():
-    history = [
-        {"name": "Nuts", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": "Original note"},
-        {"name": "Nuts", "qty_txt": "5", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": ""}
-    ]
-    res = resolve_item(1, "nuts", history)
-    assert res is not None
-    assert res["note"] == "Original note"
-
-def test_resolve_item_sorting():
-    history = [
-        {"name": "Nuts", "qty_txt": "5", "date": "2023-01-02", "time": "12:00:00", "src": 0, "line": 2, "note": ""},
-        {"name": "Nuts", "qty_txt": "10", "date": "2023-01-01", "time": "12:00:00", "src": 0, "line": 1, "note": "Original note"}
-    ]
-    # resolve_item sorts the input list in-place
-    res = resolve_item(1, "nuts", history)
-    assert res is not None
-    assert res["qty"] == 5
-    assert res["note"] == "Original note"
-    assert history[0]["qty_txt"] == "10"
-    assert history[-1]["qty_txt"] == "5"
+    assert items[2]["box"] == 2
+    assert items[2]["name"] == "Zener Diode"
