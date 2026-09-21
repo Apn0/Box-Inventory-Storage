@@ -311,3 +311,47 @@ def test_resolve_item_note_resolution():
     ]
     res = resolve_item(1, "noteitem", history)
     assert res["note"] == "Old Note"
+
+def test_build_items_basic():
+    raw_rows = [
+        # Box 2: "Arduino" (only 1 row)
+        {"box": 2, "name": "Arduino", "qty_txt": "1", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 3},
+        # Box 1: "Zener Diode" (will be sorted after "Resistor" in the same box)
+        {"box": 1, "name": "Zener Diode", "qty_txt": "20", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 4},
+        # Box 1: "Resistor" (duplicate - newest wins)
+        {"box": 1, "name": "Resistor", "qty_txt": "10", "note": "Old", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"box": 1, "name": "Resistor", "qty_txt": "5", "note": "New", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
+    ]
+
+    items = build_items(raw_rows)
+
+    # Should sort by box then name: 1-Resistor, 1-Zener Diode, 2-Arduino
+    assert len(items) == 3
+
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Resistor"
+    assert items[0]["qty"] == 5
+    assert items[0]["note"] == "New"
+
+    assert items[1]["box"] == 1
+    assert items[1]["name"] == "Zener Diode"
+    assert items[1]["qty"] == 20
+
+    assert items[2]["box"] == 2
+    assert items[2]["name"] == "Arduino"
+    assert items[2]["qty"] == 1
+
+def test_build_items_empty_ignored():
+    raw_rows = [
+        {"box": 1, "name": "Valid Item", "qty_txt": "1", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"box": 1, "name": "", "qty_txt": "5", "note": "Empty placeholder", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 2},
+    ]
+
+    items = build_items(raw_rows)
+
+    assert len(items) == 1
+    assert items[0]["name"] == "Valid Item"
+
+def test_build_items_empty_input():
+    items = build_items([])
+    assert items == []
