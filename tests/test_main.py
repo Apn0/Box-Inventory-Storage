@@ -1,10 +1,12 @@
 import base64
 import pytest
 from main import app
+import os
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
+    os.environ['API_KEY'] = 'test-key'
     with app.test_client() as client:
         yield client
 
