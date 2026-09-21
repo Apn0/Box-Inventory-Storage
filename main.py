@@ -162,7 +162,11 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
     for item in active:
-        if slug(item["name"]) == key:
+        item_slug = item.get("_slug")
+        if item_slug is None:
+            item_slug = slug(item["name"])
+            item["_slug"] = item_slug
+        if item_slug == key:
             return item
 
     wanted = part_numbers(name)

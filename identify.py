@@ -175,13 +175,23 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     for item in active:
         item_name = item["name"]
 
+        item_slug = item.get("_slug")
+        if item_slug is None:
+            item_slug = slug(item_name)
+            item["_slug"] = item_slug
+
         # exact wins
-        if slug(item_name) == key:
+        if item_slug == key:
             return item
 
         # then the part number
         if wanted and not hit_ambiguous:
-            if not wanted.isdisjoint(part_numbers(item_name)):
+            item_part_numbers = item.get("_part_numbers")
+            if item_part_numbers is None:
+                item_part_numbers = part_numbers(item_name)
+                item["_part_numbers"] = item_part_numbers
+
+            if not wanted.isdisjoint(item_part_numbers):
                 if hit is not None:
                     # Several boxes carry this part number — too ambiguous to pick one.
                     hit_ambiguous = True
