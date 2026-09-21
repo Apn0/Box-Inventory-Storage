@@ -72,3 +72,81 @@ def test_handler_path_sanitization_traversal(mocker):
     # The file passwd should be queried inside PHOTOS, not at /etc/passwd
     # Because it is queried inside PHOTOS, it is not found
     handler._json.assert_called_with(404, {"error": "not found"})
+
+
+def test_is_relative_to_symlink_outside_folder(tmp_path):
+    import pathlib
+    import urllib.parse
+
+    folder = tmp_path / "photos"
+    folder.mkdir()
+
+    # create a symlink inside the folder pointing outside
+    symlink_target = folder / "passwd_link"
+    if not symlink_target.exists():
+        # we can't reliably point to /etc/passwd in all environments, so let's point to a file outside the folder
+        outside_file = tmp_path / "outside.txt"
+        outside_file.write_text("secret")
+        symlink_target.symlink_to(outside_file)
+
+    path = "/data/photos/passwd_link"
+    name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+    target = folder / name
+
+    # resolve() in parents is what was originally used and might be unsafe with symlinks
+    original_check = folder.resolve() in target.resolve().parents
+
+    # is_relative_to() on resolved target checks if the final path is still inside the folder
+    safe_check = target.resolve().is_relative_to(folder.resolve())
+
+    assert original_check == False
+    assert safe_check == False
+
+
+def test_windows_path_extraction():
+    import pathlib
+    import urllib.parse
+
+    # Simulate a path coming from a Windows system with backslashes
+    path = "/data/photos/C:\\Windows\\System32\\cmd.exe"
+
+    # What happens if we don't replace backslashes (vulnerable on Linux where \ is a valid filename character)
+    name_unsafe = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+    assert name_unsafe == "C:\\Windows\\System32\\cmd.exe"
+
+    # What the server actually does to protect against this (safe_name logic)
+    # The pure unquote is what was originally done but now replaced backslashes before getting name
+    name_safe = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
+    assert name_safe == "cmd.exe"
+
+
+def test_symlink_path_access(tmp_path):
+    import pathlib
+    import urllib.parse
+
+    base_dir = tmp_path / "test_server_vuln"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    photos_dir = base_dir / "data/photos"
+    photos_dir.mkdir(parents=True, exist_ok=True)
+
+    secret_file = base_dir / "secret.txt"
+    secret_file.write_text("I am a secret")
+
+    # Simulate an attacker trying to access a symlink they somehow placed in the photos dir
+    malicious_symlink = photos_dir / "foo.jpg"
+    if not malicious_symlink.exists():
+        malicious_symlink.symlink_to(secret_file)
+
+    folder = photos_dir
+    target = malicious_symlink
+
+    # Original symlink_test.py check logic
+    # Server accesses "/data/photos/{name}". name is the last component of the URL.
+    path = "/data/photos/foo.jpg"
+    name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+    target = folder / name
+
+    # Should not be allowed since the target resolves outside the folder
+    is_allowed = target.is_file() and folder.resolve() in target.resolve().parents
+    assert is_allowed == False
