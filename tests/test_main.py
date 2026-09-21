@@ -20,7 +20,8 @@ def test_identify_missing_image(client):
     assert response.status_code == 400
     assert b"no image" in response.data
 
-def test_identify_too_large(client):
+def test_identify_too_large(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-key")
     # The limit is 25MB. We'll generate a payload slightly larger than that.
     # To keep the test fast and avoid allocating a huge string in memory, we can just use
     # a mocked request or simulate large data.
