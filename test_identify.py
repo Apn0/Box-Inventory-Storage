@@ -1,5 +1,6 @@
 import unittest
-from identify import find_existing_part, auto_filable, propose_box
+from identify import find_existing_part, auto_filable, propose_box, _recoverable
+from build import part_numbers
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -273,6 +274,45 @@ class TestRecoverable(unittest.TestCase):
         self.assertFalse(_recoverable(Exception("500 Internal Server Error")))
         self.assertFalse(_recoverable(Exception("404 Not Found")))
         self.assertFalse(_recoverable(Exception("Bad request 400")))
+
+class TestContextForPrompt(unittest.TestCase):
+    def setUp(self):
+        from identify import context_for_prompt
+        self.context_for_prompt = context_for_prompt
+        self.data = {
+            "meta": {
+                "categoryLabels": {
+                    "ic": "Integrated Circuits",
+                    "misc": "Miscellaneous"
+                }
+            }
+        }
+
+    def test_populated_active_list(self):
+        active = [
+            {"name": "TMC2209 stepper driver"},
+            {"name": "18650 battery holder"},
+            {"name": "TMC2209 stepper driver"}, # Duplicate should be removed by set()
+            {"name": "ADS1115 ADC"}
+        ]
+        expected = (
+            "Category keys you must choose from: ic (Integrated Circuits), misc (Miscellaneous).\n\n"
+            "Parts already in the inventory (reuse the exact name if it is the same part):\n"
+            "- 18650 battery holder\n"
+            "- ADS1115 ADC\n"
+            "- TMC2209 stepper driver"
+        )
+        result = self.context_for_prompt(self.data, active)
+        self.assertEqual(result, expected)
+
+    def test_empty_active_list(self):
+        active = []
+        expected = (
+            "Category keys you must choose from: ic (Integrated Circuits), misc (Miscellaneous).\n\n"
+            "Parts already in the inventory (reuse the exact name if it is the same part):\n"
+        )
+        result = self.context_for_prompt(self.data, active)
+        self.assertEqual(result, expected)
 
 if __name__ == "__main__":
     unittest.main()
