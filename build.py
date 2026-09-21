@@ -237,7 +237,7 @@ def resolve_item(box: int, key_slug: str, history: list[dict]) -> dict | None:
     note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
 
     return {
-        "id": f"{box}-{key_slug}" or f"{box}-item",
+        "id": f"{box}-{key_slug}" if key_slug else f"{box}-item",
         "box": box,
         "container": container_of(box),
         "name": latest["name"],
