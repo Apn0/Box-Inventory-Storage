@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
-import functools
 import http.server
 import json
 import mimetypes
@@ -102,7 +101,6 @@ def worker() -> None:
 
 
 # ----------------------------------------------------------------- tiny PNG
-@functools.lru_cache(maxsize=16)
 def png(size: int) -> bytes:
     """A solid accent square with a lighter box outline — enough for a launcher icon."""
     r, g, b = ACCENT

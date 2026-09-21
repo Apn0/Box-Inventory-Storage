@@ -39,47 +39,62 @@ CONTAINER_SIZE = 30
 # ---------------------------------------------------------------- categories
 # Ordered: first matching rule wins. Patterns are matched against the
 # lower-cased item name plus its note.
-CATEGORIES: list[tuple[str, str, str | None]] = [
-    ("mcu",        "MCU / boards",          r"esp32|esp8266|xiao|microcontroller|\bmcu\b"),
-    ("sensor",     "Sensors",               r"\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|"
-                                            r"mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |"
-                                            r"vibration (sensor|switch)|pressure sensor|load cell|current sensor|"
-                                            r"current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|"
-                                            r"capacitive touch|ir receiver|laser sensor|mps20n|voltage sensor|"
-                                            r"coil-type vibration|pressure-sensitive"),
-    ("power",      "Power",                 r"charger|converter|buck|boost|step-up|step-down|mt3608|mini-360|hw-187|"
-                                            r"mp1584|cr6030|pd trigger|fast-charge|solar charge|18650|battery|"
-                                            r"batteries|lr44|\bac/dc\b|power module|power meter|v meter|"
-                                            r"level indicator|usb-a power"),
-    ("driver",     "Drivers / switching",   r"tmc2209|uln2003|motor driver|h-bridge|tc1508|mosfet|relay|\bssr\b|"
-                                            r"pwm controller|speed controller|stepper driver|xy-mos|lr7843"),
-    ("motor",      "Motors",                r"stepper motor|servo|dc motor|gear motor|brushed dc|vibration motor|"
-                                            r"\bfan\b|micro dc"),
-    ("display",    "LED / display",         r"oled|7-seg|\bled\b|leds|cob|rgb|traffic-light|candle|flasher|display"),
-    ("comms",      "Comms / RF / optical",  r"wi-fi|wifi|uart|ir transmitter|nfc|sim card|rj-45|tracker tag|"
-                                            r"walkie|receiver \(dongle\)|wireless mouse|laser diode"),
-    ("interface",  "ADC / interface",       r"ads1115|\badc\b|hx711|pcm1808|i2s|555 timer|breakout|serial adapter|"
-                                            r"usb-to-ttl|hw-477|sku7810"),
-    ("switch",     "Switches / controls",   r"switch|button|potentiometer|encoder|knob|key lock|\bkeys?\b|"
-                                            r"navigation tactile|piezoelectric spark"),
-    ("connector",  "Connectors / cable",    r"xt60|usb|hdmi|barrel|header pin|terminal|alligator|wire connector|"
-                                            r"kroonsteentje|audio plug|adapter|coupling|connector|iec panel|"
-                                            r"strip connector|cable reel"),
-    ("fastener",   "Fasteners",             r"bolt|screw|\bnuts?\b|washer|standoff|tap bits|drill|countersink|"
-                                            r"barrel nut|mounting hardware|lock nut|lock washer"),
-    ("mechanical", "Mechanical",            r"gear|pulley|belt|bearing|idler|rail|carriage|tube|tubing|heatsink|"
-                                            r"disk|bracket|mechanical parts|nozzle|clamp|padlock|clip|"
-                                            r"elastic band|spacer"),
-    ("tool",       "Tools",                 r"tool|bit set|measuring tape|keycap remover|radiator valve|tape|"
-                                            r"lens kit|hemming"),
-    ("material",   "Raw material",          r"scrap|shavings|sawdust|flakes|granules|seeds|salts|foam|earplug|"
-                                            r"popsicle|hot-glue|shoelace|gemstone|coil|sticker|label"),
-    ("misc",       "Misc",                  None),
+_CATEGORY_RULES_RAW: list[tuple[str, str]] = [
+    ("mcu",        r"esp32|esp8266|xiao|microcontroller|\bmcu\b"),
+    ("sensor",     r"\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|"
+                   r"mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |"
+                   r"vibration (sensor|switch)|pressure sensor|load cell|current sensor|"
+                   r"current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|"
+                   r"capacitive touch|ir receiver|laser sensor|mps20n|voltage sensor|"
+                   r"coil-type vibration|pressure-sensitive"),
+    ("power",      r"charger|converter|buck|boost|step-up|step-down|mt3608|mini-360|hw-187|"
+                   r"mp1584|cr6030|pd trigger|fast-charge|solar charge|18650|battery|"
+                   r"batteries|lr44|\bac/dc\b|power module|power meter|v meter|"
+                   r"level indicator|usb-a power"),
+    ("driver",     r"tmc2209|uln2003|motor driver|h-bridge|tc1508|mosfet|relay|\bssr\b|"
+                   r"pwm controller|speed controller|stepper driver|xy-mos|lr7843"),
+    ("motor",      r"stepper motor|servo|dc motor|gear motor|brushed dc|vibration motor|"
+                   r"\bfan\b|micro dc"),
+    ("display",    r"oled|7-seg|\bled\b|leds|cob|rgb|traffic-light|candle|flasher|display"),
+    ("comms",      r"wi-fi|wifi|uart|ir transmitter|nfc|sim card|rj-45|tracker tag|"
+                   r"walkie|receiver \(dongle\)|wireless mouse|laser diode"),
+    ("interface",  r"ads1115|\badc\b|hx711|pcm1808|i2s|555 timer|breakout|serial adapter|"
+                   r"usb-to-ttl|hw-477|sku7810"),
+    ("switch",     r"switch|button|potentiometer|encoder|knob|key lock|\bkeys?\b|"
+                   r"navigation tactile|piezoelectric spark"),
+    ("connector",  r"xt60|usb|hdmi|barrel|header pin|terminal|alligator|wire connector|"
+                   r"kroonsteentje|audio plug|adapter|coupling|connector|iec panel|"
+                   r"strip connector|cable reel"),
+    ("fastener",   r"bolt|screw|\bnuts?\b|washer|standoff|tap bits|drill|countersink|"
+                   r"barrel nut|mounting hardware|lock nut|lock washer"),
+    ("mechanical", r"gear|pulley|belt|bearing|idler|rail|carriage|tube|tubing|heatsink|"
+                   r"disk|bracket|mechanical parts|nozzle|clamp|padlock|clip|"
+                   r"elastic band|spacer"),
+    ("tool",       r"tool|bit set|measuring tape|keycap remover|radiator valve|tape|"
+                   r"lens kit|hemming"),
+    ("material",   r"scrap|shavings|sawdust|flakes|granules|seeds|salts|foam|earplug|"
+                   r"popsicle|hot-glue|shoelace|gemstone|coil|sticker|label"),
 ]
-
-CATEGORY_RULES = [(cat, re.compile(pattern)) for cat, _, pattern in CATEGORIES if pattern]
+CATEGORY_RULES = [(cat, re.compile(pattern)) for cat, pattern in _CATEGORY_RULES_RAW]
 DEFAULT_CATEGORY = "misc"
-CATEGORY_LABELS = {cat: label for cat, label, _ in CATEGORIES}
+
+CATEGORY_LABELS = {
+    "mcu": "MCU / boards",
+    "sensor": "Sensors",
+    "power": "Power",
+    "driver": "Drivers / switching",
+    "motor": "Motors",
+    "display": "LED / display",
+    "comms": "Comms / RF / optical",
+    "interface": "ADC / interface",
+    "switch": "Switches / controls",
+    "connector": "Connectors / cable",
+    "fastener": "Fasteners",
+    "mechanical": "Mechanical",
+    "tool": "Tools",
+    "material": "Raw material",
+    "misc": "Misc",
+}
 
 
 # A part number: letters followed by digits (tmc2209, mt3608, esp32, ads1115),
@@ -280,12 +295,11 @@ def find_free_boxes(items: list[dict]) -> list[dict]:
             active_by_box[i["box"]] = active_by_box.get(i["box"], 0) + 1
 
     free_boxes = []
-    active_keys = set(active_by_box.keys())
-    used_boxes_set = set(used_boxes)
     for lo, hi in ((1, max(low) if low else 0), (400, max(high) if high else 0)):
-        for b in sorted(set(range(lo, hi + 1)) - active_keys):
-            reason = "emptied" if b in used_boxes_set else "never used"
-            free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
+        for b in range(lo, hi + 1):
+            if active_by_box.get(b, 0) == 0:
+                reason = "emptied" if b in used_boxes else "never used"
+                free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
     return free_boxes
 
 
