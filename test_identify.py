@@ -347,5 +347,37 @@ class TestContextForPrompt(unittest.TestCase):
         self.assertIn("Category keys you must choose from: .", result)
         self.assertIn("- Part A", result)
 
+    def test_missing_category_labels(self):
+        # Even if categoryLabels is missing, we simulate what would happen
+        # assuming the caller provided the correct dictionary structure, but
+        # let's assume the dictionary is malformed (key error should raise)
+        data = {
+            "meta": {}
+        }
+        active = [
+            {"name": "Part A"}
+        ]
+        with self.assertRaises(KeyError):
+            context_for_prompt(data, active)
+
+    def test_special_characters_in_names(self):
+        data = {
+            "meta": {
+                "categoryLabels": {
+                    "ic": "Integrated Circuits"
+                }
+            }
+        }
+        active = [
+            {"name": "IC-123!@#"},
+            {"name": "µController"}
+        ]
+        result = context_for_prompt(data, active)
+
+        self.assertIn("- IC-123!@#", result)
+        self.assertIn("- µController", result)
+        expected_parts = "- IC-123!@#\n- µController"
+        self.assertIn(expected_parts, result)
+
 if __name__ == "__main__":
     unittest.main()
