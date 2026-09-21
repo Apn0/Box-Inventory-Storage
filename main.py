@@ -13,6 +13,7 @@ deploy time — no key, no gcloud login needed at request time.
 """
 from __future__ import annotations
 
+import os
 import base64
 import csv
 import io
