@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -164,3 +164,39 @@ def test_part_numbers(name, expected):
 def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
+
+def test_build_items_empty():
+    assert build_items([]) == []
+
+def test_build_items_basic():
+    raw_rows = [
+        {"line": 2, "box": 2, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00:00", "src": 0},
+        {"line": 3, "box": 1, "name": "Capacitor", "qty_txt": "5", "note": "", "date": "2023-01-02", "time": "12:00:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 2
+    # sorted by box by group_sort_key in build.py (operator.itemgetter(0))
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Capacitor"
+    assert items[1]["box"] == 2
+    assert items[1]["name"] == "Resistor"
+
+def test_build_items_groups_history():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "LED", "qty_txt": "10", "note": "red", "date": "2023-01-01", "time": "10:00:00", "src": 0},
+        {"line": 3, "box": 1, "name": "LED", "qty_txt": "5", "note": "red", "date": "2023-01-02", "time": "10:00:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 1
+    assert items[0]["name"] == "LED"
+    assert items[0]["qty"] == 5 # latest quantity
+    assert items[0]["history"] is not None
+    assert len(items[0]["history"]) == 2
+
+def test_build_items_handles_none_resolution():
+    # Box 81 placeholder: no name in latest entry -> resolve_item returns None
+    raw_rows = [
+        {"line": 2, "box": 81, "name": "", "qty_txt": "", "note": "", "date": "2023-01-01", "time": "10:00:00", "src": 0}
+    ]
+    items = build_items(raw_rows)
+    assert items == []
