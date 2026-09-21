@@ -290,13 +290,9 @@ def find_free_boxes(items: list[dict]) -> list[dict]:
     low = used_boxes[:split_idx]
     high = used_boxes[split_idx:]
 
-    active_by_box: dict[int, int] = {}
-    for i in items:
-        if i["status"] == "active":
-            active_by_box[i["box"]] = active_by_box.get(i["box"], 0) + 1
+    active_keys = {i["box"] for i in items if i["status"] == "active"}
 
     free_boxes = []
-    active_keys = set(active_by_box.keys())
     for lo, hi in ((1, max(low) if low else 0), (400, max(high) if high else 0)):
         free_box_nums = set(range(lo, hi + 1)) - active_keys
         for b in sorted(free_box_nums):
