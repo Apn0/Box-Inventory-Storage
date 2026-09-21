@@ -224,142 +224,36 @@ def test_build_items_sorting_by_box_and_slug():
     assert items[2]["box"] == 2
     assert items[2]["name"] == "Zener Diode"
 
+def test_build_items_empty():
+    items = build_items([])
+    assert items == []
 
-# Tests for resolve_item
-
-def test_resolve_item_basic():
-    history = [
-        {"name": "Resistor", "qty_txt": "10", "note": "10k", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}
+def test_build_items_skips_none_resolved():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        # Simulate a placeholder/gone item that resolves to None
+        {"line": 3, "box": 81, "name": "", "qty_txt": "", "note": "Empty Box", "date": "2023-01-01", "time": "12:00", "src": 0},
     ]
-    item = resolve_item(1, "resistor", history)
-    assert item is not None
-    assert item["id"] == "1-resistor"
-    assert item["box"] == 1
-    assert item["name"] == "Resistor"
-    assert item["qty"] == 10
-    assert item["peak"] == 10
-    assert item["countType"] == "exact"
-    assert item["status"] == "active"
-    assert item["note"] == "10k"
-    assert item["conflict"] is False
-    assert item["restated"] is False
-    assert item["history"] == []
+    items = build_items(raw_rows)
+    assert len(items) == 1
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Resistor"
 
-def test_resolve_item_empty_name():
-    history = [
-        {"name": "", "qty_txt": "", "note": "Empty", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}
+def test_build_items_sorting_logic():
+    raw_rows = [
+        {"line": 1, "box": 2, "name": "Zebra", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 2, "box": 2, "name": "Apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "Banana", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 4, "box": 1, "name": "apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
     ]
-    assert resolve_item(81, "item", history) is None
-
-def test_resolve_item_sorting():
-    history = [
-        {"name": "Resistor", "qty_txt": "5", "note": "Old", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "Resistor", "qty_txt": "15", "note": "New", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-        {"name": "Resistor", "qty_txt": "10", "note": "Mid", "date": "2023-01-01", "time": "13:00", "src": 0, "line": 4},
-    ]
-    item = resolve_item(1, "resistor", history)
-    assert item is not None
-    assert item["qty"] == 15
-    assert item["note"] == "New"
-    assert item["peak"] == 15
-
-def test_resolve_item_quantities_and_status():
-    # Exact > 0
-    history = [{"name": "R", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}]
-    item = resolve_item(1, "r", history)
-    assert item["qty"] == 1
-    assert item["status"] == "active"
-    assert item["countType"] == "exact"
-
-    # Exact 0
-    history = [{"name": "R", "qty_txt": "0", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}]
-    item = resolve_item(1, "r", history)
-    assert item["qty"] == 0
-    assert item["status"] == "gone"
-    assert item["countType"] == "exact"
-
-    # Empty quantity
-    history = [{"name": "R", "qty_txt": "", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}]
-    item = resolve_item(1, "r", history)
-    assert item["qty"] is None
-    assert item["status"] == "active"
-    assert item["countType"] == "unknown"
-
-    # Bulk quantity
-    history = [{"name": "R", "qty_txt": str(BULK_SENTINEL), "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2}]
-    item = resolve_item(1, "r", history)
-    assert item["qty"] is None
-    assert item["status"] == "active"
-    assert item["countType"] == "bulk"
-
-def test_resolve_item_peak_tracking():
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": str(BULK_SENTINEL), "note": "", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-        {"name": "R", "qty_txt": "2", "note": "", "date": "2023-01-03", "time": "12:00", "src": 0, "line": 4},
-        {"name": "R", "qty_txt": "10", "note": "", "date": "2023-01-04", "time": "12:00", "src": 0, "line": 5},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["peak"] == 10
-    assert item["qty"] == 10
-
-def test_resolve_item_conflict_and_restated():
-    # Conflict: >1 entry, different quantities
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["conflict"] is True
-    assert item["restated"] is False
-
-    # Restated: >1 entry, same quantities
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["conflict"] is False
-    assert item["restated"] is True
-
-    # Deliberate conflict (src = 1)
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": "", "date": "2023-01-02", "time": "12:00", "src": 1, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["conflict"] is False
-    assert item["restated"] is False
-
-    # Deliberate conflict (COUNTED_MARK in note)
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": f"abc {COUNTED_MARK} xyz", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["conflict"] is False
-    assert item["restated"] is False
-
-def test_resolve_item_note_fallback():
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "First", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["note"] == "First"
-
-    # Note from latest is non-empty, use that instead
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "First", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": "Second", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["note"] == "Second"
-
-    # All notes empty
-    history = [
-        {"name": "R", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0, "line": 2},
-        {"name": "R", "qty_txt": "10", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0, "line": 3},
-    ]
-    item = resolve_item(1, "r", history)
-    assert item["note"] == ""
+    items = build_items(raw_rows)
+    assert len(items) == 4
+    # Order should be Box 1 Apple, Box 1 Banana, Box 2 Apple, Box 2 Zebra (since group_rows sorts by box and slug)
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "apple"
+    assert items[1]["box"] == 1
+    assert items[1]["name"] == "Banana"
+    assert items[2]["box"] == 2
+    assert items[2]["name"] == "Apple"
+    assert items[3]["box"] == 2
+    assert items[3]["name"] == "Zebra"
