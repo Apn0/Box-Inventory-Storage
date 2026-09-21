@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, resolve_item, BULK_SENTINEL, COUNTED_MARK
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -164,3 +164,62 @@ def test_part_numbers(name, expected):
 def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
+
+from build import build_items
+
+def test_build_items_happy_path():
+    raw_rows = [
+        {"line": 2, "box": 2, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "Capacitor", "qty_txt": "5", "note": "", "date": "2023-01-02", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 2
+    # Should be sorted by box, then slug (1: Capacitor, then 2: Resistor)
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Capacitor"
+    assert items[1]["box"] == 2
+    assert items[1]["name"] == "Resistor"
+
+def test_build_items_grouping():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "Old", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 1, "name": "resistor", "qty_txt": "15", "note": "New", "date": "2023-01-02", "time": "12:00", "src": 0},
+        {"line": 4, "box": 2, "name": "Capacitor", "qty_txt": "5", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 2
+
+    resistors = [i for i in items if i["box"] == 1]
+    assert len(resistors) == 1
+    assert resistors[0]["qty"] == 15
+    assert resistors[0]["note"] == "New"
+    assert len(resistors[0]["history"]) == 2
+
+def test_build_items_resolving_returns_none():
+    raw_rows = [
+        {"line": 2, "box": 1, "name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 81, "name": "", "qty_txt": "", "note": "Empty Box", "date": "2023-01-01", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    # Box 81 with no name should be filtered out
+    assert len(items) == 1
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Resistor"
+
+def test_build_items_sorting_by_box_and_slug():
+    raw_rows = [
+        {"line": 2, "box": 2, "name": "Zener Diode", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 3, "box": 2, "name": "Apple", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+        {"line": 4, "box": 1, "name": "Banana", "qty_txt": "1", "note": "", "date": "2023-01-01", "time": "12:00", "src": 0},
+    ]
+    items = build_items(raw_rows)
+    assert len(items) == 3
+    # Order should be Box 1 Banana, Box 2 Apple, Box 2 Zener Diode
+    assert items[0]["box"] == 1
+    assert items[0]["name"] == "Banana"
+
+    assert items[1]["box"] == 2
+    assert items[1]["name"] == "Apple"
+
+    assert items[2]["box"] == 2
+    assert items[2]["name"] == "Zener Diode"
