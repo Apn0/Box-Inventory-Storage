@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, find_free_boxes
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -164,3 +164,66 @@ def test_part_numbers(name, expected):
 def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
+
+def test_find_free_boxes_empty():
+    assert find_free_boxes([]) == []
+
+def test_find_free_boxes_no_free():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "active"},
+        {"box": 3, "status": "active"},
+    ]
+    assert find_free_boxes(items) == []
+
+def test_find_free_boxes_emptied():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "depleted"},
+    ]
+    free_boxes = find_free_boxes(items)
+    assert len(free_boxes) == 1
+    assert free_boxes[0] == {"box": 2, "container": "1", "reason": "emptied"}
+
+def test_find_free_boxes_never_used():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 3, "status": "active"},
+    ]
+    free_boxes = find_free_boxes(items)
+    assert len(free_boxes) == 1
+    assert free_boxes[0] == {"box": 2, "container": "1", "reason": "never used"}
+
+def test_find_free_boxes_high_range():
+    items = [
+        {"box": 400, "status": "active"},
+        {"box": 402, "status": "depleted"},
+    ]
+    free_boxes = find_free_boxes(items)
+    assert len(free_boxes) == 2
+    assert free_boxes[0] == {"box": 401, "container": "H1", "reason": "never used"}
+    assert free_boxes[1] == {"box": 402, "container": "H1", "reason": "emptied"}
+
+def test_find_free_boxes_high_range_emptied():
+    items = [
+        {"box": 400, "status": "active"},
+        {"box": 401, "status": "depleted"},
+    ]
+    free_boxes = find_free_boxes(items)
+    assert len(free_boxes) == 1
+    assert free_boxes[0] == {"box": 401, "container": "H1", "reason": "emptied"}
+
+def test_find_free_boxes_mixed():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 3, "status": "depleted"},
+        {"box": 400, "status": "active"},
+        {"box": 402, "status": "depleted"},
+    ]
+    free_boxes = find_free_boxes(items)
+    assert len(free_boxes) == 4
+    # Check that they match the right details
+    assert {"box": 2, "container": "1", "reason": "never used"} in free_boxes
+    assert {"box": 3, "container": "1", "reason": "emptied"} in free_boxes
+    assert {"box": 401, "container": "H1", "reason": "never used"} in free_boxes
+    assert {"box": 402, "container": "H1", "reason": "emptied"} in free_boxes
