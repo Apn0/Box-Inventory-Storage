@@ -22,8 +22,11 @@ import os
 import urllib.error
 import urllib.request
 
+import os
 import google.auth
+import os
 import google.auth.transport.requests
+import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -282,7 +285,7 @@ def identify():
 
     try:
         result = call_vertex(b64, media, prompt, vertex_token())
-    except Exception as exc:                              # noqa: BLE001
+    except (google.auth.exceptions.GoogleAuthError, urllib.error.URLError, RuntimeError, ValueError) as exc:
         return jsonify(error=f"identification failed: {exc}"), 502
 
     seen = max(0, int(result.get("quantity") or 0))
