@@ -270,7 +270,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._json(404, {"error": "not built yet"})
 
     def _handle_get_media(self, path: str, folder: pathlib.Path) -> None:
-        name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
+        name = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
         target = folder / name
         if target.is_file() and folder.resolve() in target.resolve().parents:
             ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
