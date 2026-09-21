@@ -4,33 +4,33 @@ from identify import find_existing_part, auto_filable, propose_box
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
         # Must have at least 2 letters followed by at least 2 digits
-        self.assertEqual(_part_numbers("tmc2209"), {"tmc2209"})
-        self.assertEqual(_part_numbers("mt3608"), {"mt3608"})
-        self.assertEqual(_part_numbers("esp32"), {"esp32"})
-        self.assertEqual(_part_numbers("ads1115"), {"ads1115"})
-        self.assertEqual(_part_numbers("ch340g"), {"ch340g"})
+        self.assertEqual(part_numbers("tmc2209"), {"tmc2209"})
+        self.assertEqual(part_numbers("mt3608"), {"mt3608"})
+        self.assertEqual(part_numbers("esp32"), {"esp32"})
+        self.assertEqual(part_numbers("ads1115"), {"ads1115"})
+        self.assertEqual(part_numbers("ch340g"), {"ch340g"})
 
     def test_bare_digits(self):
         # Must have at least 4 digits
-        self.assertEqual(_part_numbers("18650"), {"18650"})
-        self.assertEqual(_part_numbers("4000"), {"4000"})
-        self.assertEqual(_part_numbers("104"), set()) # too short
-        self.assertEqual(_part_numbers("220"), set()) # too short
+        self.assertEqual(part_numbers("18650"), {"18650"})
+        self.assertEqual(part_numbers("4000"), {"4000"})
+        self.assertEqual(part_numbers("104"), set()) # too short
+        self.assertEqual(part_numbers("220"), set()) # too short
 
-    def test_invalid_part_numbers(self):
+    def test_invalidpart_numbers(self):
         # Does not match plain words
-        self.assertEqual(_part_numbers("module"), set())
-        self.assertEqual(_part_numbers("sensor"), set())
-        self.assertEqual(_part_numbers("board"), set())
-        self.assertEqual(_part_numbers("a1"), set()) # too short letters and digits
-        self.assertEqual(_part_numbers("ab1"), set()) # too short digits
-        self.assertEqual(_part_numbers("a12"), set()) # too short letters
+        self.assertEqual(part_numbers("module"), set())
+        self.assertEqual(part_numbers("sensor"), set())
+        self.assertEqual(part_numbers("board"), set())
+        self.assertEqual(part_numbers("a1"), set()) # too short letters and digits
+        self.assertEqual(part_numbers("ab1"), set()) # too short digits
+        self.assertEqual(part_numbers("a12"), set()) # too short letters
 
     def test_extracted_from_name(self):
-        self.assertEqual(_part_numbers("TMC2209-LA stepper driver module"), {"tmc2209"})
-        self.assertEqual(_part_numbers("ESP32 WROOM 32 dev board"), {"esp32"})
-        self.assertEqual(_part_numbers("18650 battery holder"), {"18650"})
-        self.assertEqual(_part_numbers("MT3608 DC-DC step-up (boost) converter module"), {"mt3608"})
+        self.assertEqual(part_numbers("TMC2209-LA stepper driver module"), {"tmc2209"})
+        self.assertEqual(part_numbers("ESP32 WROOM 32 dev board"), {"esp32"})
+        self.assertEqual(part_numbers("18650 battery holder"), {"18650"})
+        self.assertEqual(part_numbers("MT3608 DC-DC step-up (boost) converter module"), {"mt3608"})
 
 class TestAutoFilable(unittest.TestCase):
     def setUp(self):
@@ -176,7 +176,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
@@ -192,7 +192,7 @@ class TestDecide(unittest.TestCase):
             "category": "misc",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 4)
         self.assertEqual(res["name"], "18650 battery holder")
@@ -209,9 +209,9 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertFalse(res["existing"])
-        self.assertEqual(res["box"], 1) # suggest_box picks box 1 due to same category
+        self.assertEqual(res["box"], 1) # propose_box picks box 1 due to same category
         self.assertEqual(res["name"], "New IC")
         self.assertEqual(res["quantity"], 3)
         self.assertIsNone(res["from"])
@@ -225,9 +225,9 @@ class TestDecide(unittest.TestCase):
             "category": "resistor",
             "matches_existing": ""
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertFalse(res["existing"])
-        self.assertEqual(res["box"], 2) # suggest_box picks first free box
+        self.assertEqual(res["box"], 2) # propose_box picks first free box
         self.assertEqual(res["name"], "New Resistor")
         self.assertEqual(res["quantity"], 100)
         self.assertIsNone(res["from"])
@@ -241,7 +241,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": "TMC2209 stepper driver"
         }
-        res = self.decide(self.data, result)
+        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
