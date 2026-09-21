@@ -164,3 +164,45 @@ def test_part_numbers(name, expected):
 def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
+
+def test_group_rows():
+    from build import group_rows
+    # Empty list
+    assert group_rows([]) == {}
+
+    # Single item
+    assert group_rows([{"box": 1, "name": "Resistor"}]) == {(1, "resistor"): [{"box": 1, "name": "Resistor"}]}
+
+    # Multiple items, same box, same name (slug)
+    items = [
+        {"box": 1, "name": "Resistor"},
+        {"box": 1, "name": "resistor "},
+        {"box": 1, "name": "RESISTOR"},
+    ]
+    assert group_rows(items) == {
+        (1, "resistor"): [
+            {"box": 1, "name": "Resistor"},
+            {"box": 1, "name": "resistor "},
+            {"box": 1, "name": "RESISTOR"},
+        ]
+    }
+
+    # Multiple items, same box, different name
+    items = [
+        {"box": 1, "name": "Resistor"},
+        {"box": 1, "name": "Capacitor"},
+    ]
+    assert group_rows(items) == {
+        (1, "resistor"): [{"box": 1, "name": "Resistor"}],
+        (1, "capacitor"): [{"box": 1, "name": "Capacitor"}],
+    }
+
+    # Multiple items, different box, same name
+    items = [
+        {"box": 1, "name": "Resistor"},
+        {"box": 2, "name": "Resistor"},
+    ]
+    assert group_rows(items) == {
+        (1, "resistor"): [{"box": 1, "name": "Resistor"}],
+        (2, "resistor"): [{"box": 2, "name": "Resistor"}],
+    }
