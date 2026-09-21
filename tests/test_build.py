@@ -355,3 +355,38 @@ def test_build_items_empty_ignored():
 def test_build_items_empty_input():
     items = build_items([])
     assert items == []
+
+def test_build_items_mocked(mocker):
+    # Mock group_rows to return predefined out-of-order groups
+    mock_group_rows = mocker.patch("build.group_rows")
+    mock_group_rows.return_value = {
+        (2, "b-slug"): [{"history": "b"}],
+        (1, "a-slug"): [{"history": "a"}],
+        (1, "c-slug"): [{"history": "c"}],  # Will be resolved as None
+    }
+
+    # Mock resolve_item to return items or None
+    def side_effect_resolve_item(box, key_slug, history):
+        if key_slug == "c-slug":
+            return None
+        return {"box": box, "name": key_slug, "slug": key_slug, "resolved": True}
+
+    mock_resolve_item = mocker.patch("build.resolve_item", side_effect=side_effect_resolve_item)
+
+    # Call build_items with dummy raw rows
+    raw_rows = [{"dummy": "row"}]
+    items = build_items(raw_rows)
+
+    # Verify group_rows was called with raw_rows
+    mock_group_rows.assert_called_once_with(raw_rows)
+
+    # Verify resolve_item was called for each sorted group
+    assert mock_resolve_item.call_count == 3
+    mock_resolve_item.assert_any_call(1, "a-slug", [{"history": "a"}])
+    mock_resolve_item.assert_any_call(1, "c-slug", [{"history": "c"}])
+    mock_resolve_item.assert_any_call(2, "b-slug", [{"history": "b"}])
+
+    # Verify the output list only contains non-None items in expected sorted order
+    assert len(items) == 2
+    assert items[0] == {"box": 1, "name": "a-slug", "slug": "a-slug", "resolved": True}
+    assert items[1] == {"box": 2, "name": "b-slug", "slug": "b-slug", "resolved": True}
