@@ -18,5 +18,11 @@ proposed box; parts in it stay put when consolidating. Tests:
 **CSV export** prefixes `'` to text starting with `= + - @ tab CR` (formula
 injection). The `data/*.csv` sheet mirrors are deliberately NOT escaped.
 
+**APK: build locally, not on GitHub Actions.** The account's Actions allowance
+ran out 2026-09-08 and cannot be paid for; every workflow job is refused in 2s.
+`bash tools/build_apk_local.sh` builds with the SDK on this PC and publishes to
+the `latest` release (a plain upload, no Actions minutes). Same debug.keystore
+as CI, so it installs over earlier builds.
+
 > Sessions opened inside this repo load NO cross-project memory. Update this
 > file as the app evolves.
