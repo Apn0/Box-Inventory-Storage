@@ -170,6 +170,11 @@ nav.tabs .badge{
 .boxcell.free{border-style:dashed;border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent)}
 .boxcell.free span{color:var(--ok);font-weight:700}
 .boxcell.hit{outline:2px solid var(--accent)}
+.boxcell.full{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,transparent)}
+.boxcell.full span{color:var(--bad);font-weight:700}
+.fullrow{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0 10px}
+.fullrow input{width:18px;height:18px}
+.fullwarn{color:var(--bad);font-size:13px;font-weight:600;margin:0 0 8px}
 .boxcell:hover{border-color:var(--accent)}
 
 /* ---------------------------------------------------------------- panels */
@@ -438,7 +443,13 @@ function resolveSheet(boxCsv, formCsv){
   }
 
   const groups = new Map();
+  const flags = new Map();                       // box -> newest BOX_FULL row
+  const newer = (a, b) => (a.when||"").localeCompare(b.when||"") || a.src - b.src || a.line - b.line;
   for(const r of raw){
+    if(slugName(r.name) === BOX_FULL_SLUG){
+      if(!flags.has(r.box) || newer(r, flags.get(r.box)) >= 0) flags.set(r.box, r);
+      continue;
+    }
     const k = r.box + "|" + slugName(r.name);
     if(!groups.has(k)) groups.set(k, []);
     groups.get(k).push(r);
@@ -486,6 +497,11 @@ function resolveSheet(boxCsv, formCsv){
   items.sort((a, b) => a.box - b.box || a.name.localeCompare(b.name));
 
   const used = new Set(items.filter(i => i.status === "active").map(i => i.box));
+  // Same rule as find_full_boxes() in build.py: newest flag row wins, and an
+  // emptied box is never full.
+  const fullBoxes = [...flags].filter(([b, r]) => used.has(b)
+      && /^-?\d+$/.test(r.qtyTxt) && parseInt(r.qtyTxt, 10) !== 0)
+    .map(([b]) => b).sort((a, b) => a - b);
   const known = new Set(items.map(i => i.box));
   const freeBoxes = [];
   const lows = [...known].filter(b => b < 400), highs = [...known].filter(b => b >= 400);
@@ -497,7 +513,7 @@ function resolveSheet(boxCsv, formCsv){
   return {meta: Object.assign({}, SEED?.meta, {
             source: "Google Sheet (live)", rawRows: raw.length,
             generated: new Date().toISOString().slice(0, 10)}),
-          items, freeBoxes, splitItems: []};
+          items, freeBoxes, splitItems: [], fullBoxes};
 }
 
 /** Where the photo server lives when this page is NOT served by it.
@@ -568,6 +584,11 @@ function sheetAppend({box, name, qty, note}){
     f.submit();
   });
 }
+/* "This box is physically full" — a box flag stored as an ordinary sheet row
+   (Qty 1 = full, 0 = has room again), so it syncs like any count and newest
+   wins. Must match BOX_FULL_ITEM in build.py. Never treated as a part. */
+const BOX_FULL = "[BOX FULL]";
+const BOX_FULL_SLUG = "box full";
 const STORE_KEY = "boxinv.v1";
 const CAT = SEED.meta.categoryLabels;
 const CONTAINER_SIZE = SEED.meta.containerSize;
@@ -635,6 +656,28 @@ function rebuild(){
   out.sort((a,b)=> a.box - b.box || a.name.localeCompare(b.name));
   items = out;
 }
+/** Boxes marked physically full that still hold something. */
+function fullBoxes(){
+  const occupied = new Set(active().map(i => i.box));
+  return new Set((SEED.fullBoxes || []).filter(b => occupied.has(b)));
+}
+const isFull = b => fullBoxes().has(Number(b));
+
+/** Mark a box full / not full — one append to the sheet, undoable. */
+async function setBoxFull(box, full){
+  box = Number(box);
+  if(!box || isFull(box) === full) return true;
+  toast(full ? `Marking box ${box} full…` : `Marking box ${box} as having room…`);
+  const ok = await appendRow({name: BOX_FULL, box, qty: full ? 1 : 0,
+    note: full ? "box is physically full" : "box has room again", prev: full ? 0 : 1});
+  if(ok) toast(full ? `Box ${box} is full — nothing more goes in` : `Box ${box} has room again`);
+  return ok;
+}
+function fullToggleHTML(box, id){
+  return `<label class="fullrow"><input type="checkbox" id="${id}"${isFull(box) ? " checked" : ""}>
+    <span>Box <span data-fullbox>${esc(box)}</span> is physically full — nothing more fits</span></label>`;
+}
+
 function journal(entry){
   overlay.journal.push(Object.assign({at:new Date().toISOString()}, entry));
   if(overlay.journal.length > 800) overlay.journal.splice(0, overlay.journal.length - 800);
@@ -732,7 +775,11 @@ function issues(){
 function planMoves(level, cap){
   const list = active().map(i => ({it:i, box:i.box}));
   const moves = [];
-  const mergeable = r => r.it.countType === "exact";
+  const full = fullBoxes();
+  const blocked = [];
+  // A part in a full box fills it like a bulk pile does: it stays put when
+  // consolidating, and a full box never receives anything.
+  const mergeable = r => r.it.countType === "exact" && !full.has(r.it.box);
   const move = (r, to, why) => { if(r.box !== to){ moves.push({id:r.it.id, name:r.it.name,
       from:r.box, to, why}); r.box = to; } };
   const load = () => {                       // current box -> rows, using planned boxes
@@ -750,8 +797,11 @@ function planMoves(level, cap){
   }
   for(const [,rows] of byName){
     if(new Set(rows.map(r => r.box)).size < 2) continue;
-    // keep it where the larger amount already is; ties go to the lower box number
-    const home = rows.slice().sort((a,b) =>
+    // keep it where the larger amount already is; ties go to the lower box
+    // number — but only a box with room can take the rest
+    const open = rows.filter(r => !full.has(r.box));
+    if(!open.length){ blocked.push({name: rows[0].it.name, boxes: [...new Set(rows.map(r => r.box))]}); continue; }
+    const home = open.slice().sort((a,b) =>
       (Number(b.it.qty)||0) - (Number(a.it.qty)||0) || a.box - b.box)[0].box;
     for(const r of rows) move(r, home, "same part was in two boxes");
   }
@@ -798,7 +848,7 @@ function planMoves(level, cap){
       const home = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
       const inHome = elec.filter(r => containerOf(r.box) === home).map(r => r.box);
       if(!inHome.length) continue;
-      const targets = [...new Set(inHome)].sort((a,b)=>a-b);
+      const targets = [...new Set(inHome)].filter(b => !full.has(b)).sort((a,b)=>a-b);
       const l = load();
       let ti = 0;
       for(const r of elec.sort((a,b)=>a.box-b.box)){
@@ -828,7 +878,9 @@ function planMoves(level, cap){
     freed: [...boxesBefore].filter(b => !boxesAfter.has(b)).sort((a,b)=>a-b),
     spreadBefore: spread(active().map(i => ({it:i, box:i.box}))),
     spreadAfter: spread(list),
-    pinned: list.filter(r => !mergeable(r)).length
+    pinned: list.filter(r => r.it.countType !== "exact").length,
+    fullKept: full.size,
+    blocked
   };
 }
 
@@ -904,7 +956,11 @@ function viewFind(){
     </div>`;
   const list = filtered();
   const boxNote = ui.box != null
-    ? `<div class="hint">Showing box ${ui.box} only · <button class="iconbtn" data-clearbox="1">show all</button></div>` : "";
+    ? `<div class="hint">Showing box ${ui.box} only${isFull(ui.box) ? ` · <span class="tag err">full</span>` : ""}
+       · <button class="iconbtn" data-clearbox="1">show all</button>
+       ${active().some(i => i.box === ui.box)
+         ? `· <button class="iconbtn" data-setfull="${ui.box}" data-v="${isFull(ui.box) ? 0 : 1}">${
+             isFull(ui.box) ? "it has room again" : "mark box full"}</button>` : ""}</div>` : "";
   if(!list.length)
     return chips + boxNote + `<div class="empty">Nothing matches.<br><br>
       <button class="btn" data-add="1">+ Add a part</button></div>`;
@@ -920,6 +976,7 @@ function itemHTML(it){
   if(it.status === "gone") flags.push(`<span class="tag err">removed</span>`);
   if(it.edited) flags.push(`<span class="tag flag">edited</span>`);
   if(it.added)  flags.push(`<span class="tag flag">new</span>`);
+  if(isFull(it.box)) flags.push(`<span class="tag err" title="Box ${it.box} is marked physically full">box full</span>`);
   const d = daysAgo(it.updated);
   const open = ui.open === it.id;
   const exact = it.countType === "exact";
@@ -976,6 +1033,7 @@ function editorHTML(it){
     <div class="eline"><label>Note</label>
       <input type="text" data-f="note" class="grow" value="${esc(it.note||"")}"
              placeholder="spec, where it came from, what it fits…"></div>
+    ${fullToggleHTML(it.box, "efull")}
     <div class="ebtns">
       <button class="btn" data-savechanges="1">Save</button>
       <button class="btn ghost" data-onlybox="${it.box}">Show box ${it.box}</button>
@@ -993,7 +1051,9 @@ function viewBoxes(){
   }
   const q = ui.q.trim().toLowerCase();
   const hitBoxes = new Set(q ? filtered().map(i => i.box) : []);
-  let html = `<div class="hint">Tap a box to list its contents. Dashed green = free slot you can reuse.</div>`;
+  const fullSet = fullBoxes();
+  let html = `<div class="hint">Tap a box to list its contents. Dashed green = free slot you can reuse.
+    Red = marked physically full; nothing gets moved or suggested into it.</div>`;
   for(const [lo,hi,name] of boxRanges()){
     let last = null;
     for(let b=lo; b<=hi; b++){
@@ -1005,9 +1065,9 @@ function viewBoxes(){
         last = c;
       }
       const contents = byBox.get(b);
-      const free = !contents;
-      html += `<button class="boxcell${free?" free":""}${hitBoxes.has(b)?" hit":""}" data-box="${b}">
-        <b>${b}</b><span>${free?"free":contents.length+(contents.length===1?" item":" items")}</span></button>`;
+      const free = !contents, full = !free && fullSet.has(b);
+      html += `<button class="boxcell${free?" free":""}${full?" full":""}${hitBoxes.has(b)?" hit":""}" data-box="${b}">
+        <b>${b}</b><span>${free?"free":(full?"full · ":"")+contents.length+(contents.length===1?" item":" items")}</span></button>`;
     }
     html += `</div>`;
   }
@@ -1031,14 +1091,27 @@ function todoCards(){
       i.countType === "exact" ? i.qty : "many"}`})),
   });
 
-  if(s.splits.length) cards.push({
+  // A merge needs somewhere to go: at least one of the boxes must have room.
+  const full = fullBoxes();
+  const fullTag = b => full.has(b) ? `${b} (full)` : `${b}`;
+  const canMerge = s.splits.filter(x => x.boxes.some(b => !full.has(b)));
+  const stuck = s.splits.filter(x => x.boxes.every(b => full.has(b)));
+  if(canMerge.length) cards.push({
     tone:"now", when:"Do first",
-    title:`Merge ${plural(s.splits.length, "part", "parts")} living in two boxes`,
-    why:"Every time you look one of these up you can open the wrong box. The Reorganize tab does all of them in one pass.",
-    effort:`${s.splits.length} moves`,
-    targets: s.splits.map(x => ({box:x.boxes[0],
-      label:`${esc(x.name)} — boxes ${x.boxes.join(" and ")}`})),
+    title:`Merge ${plural(canMerge.length, "part", "parts")} living in two boxes`,
+    why:"Every time you look one of these up you can open the wrong box. The Reorganize tab does all of them in one pass — always into a box that is not marked full.",
+    effort:`${canMerge.length} moves`,
+    targets: canMerge.map(x => ({box:x.boxes.find(b => !full.has(b)),
+      label:`${esc(x.name)} — boxes ${x.boxes.map(fullTag).join(" and ")}`})),
     go:{tab:"reorg", level:1, label:"Plan the merge"},
+  });
+  if(stuck.length) cards.push({
+    tone:"later", when:"When a box frees up",
+    title:`${plural(stuck.length, "part is", "parts are")} split, but every box ${stuck.length === 1 ? "it is" : "they are"} in is full`,
+    why:"There is no room to merge these. Leave them, or give the part one new free box and move both halves there. Tick “has room” on a box once you have made space.",
+    effort:"only if it bothers you",
+    targets: stuck.map(x => ({box:x.boxes[0],
+      label:`${esc(x.name)} — boxes ${x.boxes.join(" and ")}, all full`})),
   });
 
   // Down to the last one or two — the thing you find out at the worst moment.
@@ -1221,12 +1294,19 @@ function viewReorg(){
       <b>${p.freed.length}</b><span>boxes freed up${p.freed.length?": "+p.freed.join(", "):""}</span>
       <b>${p.spreadBefore.toFixed(1)} → ${p.spreadAfter.toFixed(1)}</b><span>containers per category (lower is better)</span>
       <b>${p.pinned}</b><span>bulk piles left alone on purpose</span>
+      <b>${p.fullKept}</b><span>boxes marked full — nothing is moved into them</span>
     </div>
     ${p.moves.length ? `<div class="ebtns" style="margin-top:11px">
         <button class="btn" id="applyplan">Apply these ${p.moves.length} moves</button>
         <button class="btn ghost" id="printplan">Print worksheet</button>
       </div>` : `<p class="sub">Nothing to do at this level.</p>`}
   </div>
+  ${p.blocked.length ? `<div class="panel">
+      <h2>Cannot merge — every box is full <span class="count">${p.blocked.length}</span></h2>
+      <p class="sub">Left where they are. Make room in one of the boxes and tick “has room”, or move both halves to a free box.</p>
+      ${p.blocked.map(b => `<div class="bomrow"><div class="bomq">${b.boxes.join("+")}</div>
+        <div class="bomhit">${esc(b.name)}</div></div>`).join("")}
+    </div>` : ""}
   ${[...byWhy.entries()].map(([why, ms]) => `<div class="panel">
       <h2>${esc(why)} <span class="count">${ms.length}</span></h2>
       ${ms.sort((a,b)=>a.from-b.from).map(m => `<div class="bomrow">
@@ -1278,6 +1358,7 @@ function viewData(){
       <b>${s.conflicts.length}</b><span>ambiguous quantities</span>
       <b>${s.splits.length}</b><span>parts split across boxes</span>
       <b>${s.free.length}</b><span>free box numbers</span>
+      <b>${fullBoxes().size}</b><span>boxes marked physically full</span>
       <b>${nEdit}</b><span>local edits not yet exported</span>
     </div>
   </div>
@@ -1319,6 +1400,8 @@ function toCSV(){
     i.countType === "exact" ? i.qty : (i.countType === "bulk" ? "many" : ""),
     i.note || "", i.edited || i.added ? today : (i.updated ? i.updated.split("-").reverse().join("/") : "")
   ].map(q).join(","));
+  // keep the box-full flags, so pasting this over the sheet does not lose them
+  for(const b of fullBoxes()) rows.push([b, BOX_FULL, 1, "", today].map(q).join(","));
   return [head.join(","), ...rows].join("\r\n");
 }
 function download(name, text, mime){
@@ -1362,6 +1445,11 @@ function wire(){
     ev.preventDefault(); ui.box = Number(b.dataset.box); ui.tab = "find"; ui.q = ""; ui.flag = null;
     document.getElementById("q").value = ""; render(); });
   v.querySelectorAll("[data-clearbox]").forEach(b => b.onclick = () => { ui.box = null; render(); });
+  v.querySelectorAll("[data-setfull]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    await setBoxFull(Number(b.dataset.setfull), b.dataset.v === "1");
+    render();
+  });
   v.querySelectorAll("[data-onlybox]").forEach(b => b.onclick = () => {
     ui.box = Number(b.dataset.onlybox); ui.open = null; ui.tab = "find"; render(); });
   v.querySelectorAll("[data-add]").forEach(b => b.onclick = () => showAdd());
@@ -1376,8 +1464,19 @@ function wire(){
       inp.value = Math.max(0, (Number(inp.value)||0) + Number(b.dataset.step));
     });
     get("countType").onchange = e => { get("qty").disabled = e.target.value !== "exact"; };
+    const fullBox = ed.querySelector("#efull");
+    const label = ed.querySelector("[data-fullbox]");
+    get("box").oninput = () => {        // the checkbox is about the box it will be in
+      const b = Number(get("box").value) || 1;
+      label.textContent = b; fullBox.checked = isFull(b);
+    };
     ed.querySelector("[data-savechanges]").onclick = () => {
       const ct = get("countType").value;
+      const from = items.find(i => i.id === id)?.box;
+      const to = Math.max(1, Number(get("box").value)||1);
+      if(to !== from && isFull(to) &&
+         !confirm(`Box ${to} is marked full. Move this part into it anyway?`)) return;
+      const wantFull = fullBox.checked;
       edit(id, {
         qty: ct === "exact" ? (Number(get("qty").value)||0) : null,
         countType: ct,
@@ -1389,6 +1488,7 @@ function wire(){
         conflict: false
       }, "edit");
       ui.open = null; toast("Saved");
+      if(wantFull !== isFull(to)) setBoxFull(to, wantFull);
     };
     ed.querySelector("[data-del]").onclick = () => {
       if(confirm("Delete this entry from the inventory?")){
@@ -1813,7 +1913,7 @@ function showAdd(prefill = ""){
     list.innerHTML = hits.length ? hits.map(([i]) => `
       <li><button data-id="${esc(i.id)}">
         <span class="nm">${esc(i.name)}</span>
-        <span class="bx">box ${i.box}</span>
+        <span class="bx">box ${i.box}${isFull(i.box) ? " · full" : ""}</span>
         <span class="qt">${i.countType === "exact" ? i.qty : "many"}</span>
       </button></li>`).join("")
       : `<li><button disabled><span class="nm" style="color:var(--ink-3)">
@@ -1900,6 +2000,8 @@ function askCount(q){
           <input id="cbox" type="number" inputmode="numeric" value="${esc(q.box)}" min="1"
                  style="height:44px;font-size:19px">
         </div>` : ""}
+      <p class="fullwarn" id="cfullwarn"></p>
+      ${fullToggleHTML(q.box, "cfull")}
       <p class="ask">How many are in the box now?</p>
       <div class="counter">
         <button id="cminus">−</button>
@@ -1918,6 +2020,22 @@ function askCount(q){
 
   const qty = wrap.querySelector("#cqty");
   const quick = wrap.querySelector("#cquick");
+  const fullBox = wrap.querySelector("#cfull");
+  const fullWarn = wrap.querySelector("#cfullwarn");
+  const boxNow = () => Number(wrap.querySelector("#cbox")?.value) || Number(q.box);
+  // Warn only when something would go INTO a full box: a new part, or a part
+  // the photo service reports as sitting in a box already marked full.
+  const paintFull = () => {
+    const b = boxNow();
+    wrap.querySelector("[data-fullbox]").textContent = b;
+    fullBox.checked = isFull(b);
+    fullWarn.textContent = isFull(b)
+      ? (q.isNew ? `Box ${b} is marked full — pick another box, or untick below if it fits after all.`
+                 : `Box ${b} is marked full. Counting what is in it is fine; adding more is not.`)
+      : "";
+  };
+  wrap.querySelector("#cbox")?.addEventListener("input", paintFull);
+  paintFull();
   // The two answers you give most: the count is unchanged, or one came back.
   const options = [];
   if(known){
@@ -1949,6 +2067,9 @@ function askCount(q){
 
   wrap.querySelector("#csave").onclick = async () => {
     const isBulk = qty.dataset.v === "many";
+    const wantFull = fullBox.checked;
+    if(q.isNew && isFull(boxNow()) && wantFull &&
+       !confirm(`Box ${boxNow()} is marked full. Put the new part in it anyway?`)) return;
     const boxField = wrap.querySelector("#cbox");
     const body = {id: q.id,
                   qty: isBulk ? "many" : (Number(qty.value)||0),
@@ -1967,6 +2088,7 @@ function askCount(q){
         confirmQueue.shift();
         wrap.remove();
         await refreshSeed();
+        if(wantFull !== isFull(out.box)) await setBoxFull(out.box, wantFull);
         showConfirm();
       } else {
         // Typed or spoken: straight to the sheet — no server involved.
@@ -1976,6 +2098,7 @@ function askCount(q){
                                     note: "(photo-counted)",
                                     prev: q.recorded ?? undefined});
         if(ok) toast(`${body.name} → box ${body.box} = ${isBulk ? "many" : body.qty}`);
+        if(ok && wantFull !== isFull(body.box)) await setBoxFull(body.box, wantFull);
         if(typeof q.then === "function") q.then(body);
       }
     }catch(err){

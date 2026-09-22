@@ -208,7 +208,8 @@ def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str
         if b < 400 and i.get("category") == category:
             same_cat.add(b)
 
-    for b in sorted(same_cat):
+    full = set(data.get("fullBoxes") or [])     # marked physically full
+    for b in sorted(same_cat - full):
         if per_box[b] < MAX_BOX_ITEMS:
             return b, f"box {b} already holds {category} parts and has room"
 

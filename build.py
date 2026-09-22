@@ -35,6 +35,12 @@ BULK_SENTINEL = 99
 COUNTED_MARK = "photo-counted"
 # Boxes are stored in containers holding this many numbered boxes.
 CONTAINER_SIZE = 30
+# "This box is physically full" is stored as an ordinary row, so it rides the
+# same append log and newest-row-wins resolver as a part: Qty 1 = full, 0 = has
+# room again. It is a flag, never a part. Must match BOX_FULL in
+# src/app.template.html.
+BOX_FULL_ITEM = "[BOX FULL]"
+BOX_FULL_SLUG = slug(BOX_FULL_ITEM)
 
 # ---------------------------------------------------------------- categories
 # Ordered: first matching rule wins. Patterns are matched against the
@@ -276,6 +282,8 @@ def build_items(raw_rows: list[dict]) -> list[dict]:
     group_sort_key = operator.itemgetter(0)
 
     for (box, key_slug), history in sorted(groups.items(), key=group_sort_key):
+        if key_slug == BOX_FULL_SLUG:
+            continue                     # a box flag, see find_full_boxes
         item = resolve_item(box, key_slug, history)
         if item is not None:
             items.append(item)
@@ -299,6 +307,28 @@ def find_free_boxes(items: list[dict]) -> list[dict]:
             reason = "emptied" if b in used_boxes_set else "never used"
             free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
     return free_boxes
+
+
+def find_full_boxes(raw_rows: list[dict], items: list[dict]) -> list[int]:
+    """Boxes whose newest BOX_FULL row says full and that still hold a part.
+
+    An emptied box cannot be full, so the flag lapses by itself once the last
+    part leaves — no stale "full" on a box that is sitting empty.
+    """
+    newest: dict[int, dict] = {}
+    for r in raw_rows:
+        if slug(r["name"]) != BOX_FULL_SLUG:
+            continue
+        key = (r["date"] or "", r.get("time", "00:00:00"), r.get("src", 0), r["line"])
+        if r["box"] not in newest or key >= newest[r["box"]][0]:
+            newest[r["box"]] = (key, r)
+    occupied = {i["box"] for i in items if i["status"] == "active"}
+    full = []
+    for box, (_key, r) in newest.items():
+        txt = r["qty_txt"].strip()
+        if txt.lstrip("-").isdigit() and int(txt) != 0 and box in occupied:
+            full.append(box)
+    return sorted(full)
 
 
 def find_split_items(items: list[dict]) -> list[dict]:
@@ -328,15 +358,17 @@ def main() -> int:
     items = build_items(raw_rows)
     free_boxes = find_free_boxes(items)
     split_items = find_split_items(items)
+    full_boxes = find_full_boxes(raw_rows, items)
 
-    if not write_outputs(raw_rows, items, free_boxes, split_items):
+    if not write_outputs(raw_rows, items, free_boxes, split_items, full_boxes):
         return 1
 
     print_stats(raw_rows, items, free_boxes, split_items)
     return 0
 
 
-def write_outputs(raw_rows: list[dict], items: list[dict], free_boxes: list[dict], split_items: list[dict]) -> bool:
+def write_outputs(raw_rows: list[dict], items: list[dict], free_boxes: list[dict],
+                  split_items: list[dict], full_boxes: list[int] | None = None) -> bool:
     data = {
         "meta": {
             "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
@@ -349,6 +381,7 @@ def write_outputs(raw_rows: list[dict], items: list[dict], free_boxes: list[dict
         "items": items,
         "freeBoxes": free_boxes,
         "splitItems": split_items,
+        "fullBoxes": full_boxes or [],
     }
 
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)

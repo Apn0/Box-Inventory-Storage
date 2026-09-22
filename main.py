@@ -30,7 +30,8 @@ import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import CATEGORY_LABELS, categorise, parse_date, part_numbers
+from build import (BOX_FULL_SLUG, CATEGORY_LABELS, categorise, find_full_boxes,
+                   parse_date, part_numbers)
 from utils import slug
 
 app = Flask(__name__)
@@ -125,7 +126,9 @@ def _group_and_resolve(raw_rows: list[dict]) -> list[dict]:
         groups.setdefault((row["box"], slug(row["name"])), []).append(row)
 
     items = []
-    for (box, _key), history in groups.items():
+    for (box, key), history in groups.items():
+        if key == BOX_FULL_SLUG:
+            continue                     # a box flag, not a part
         history.sort(key=lambda r: (r["date"] or "", r.get("time", "00:00:00"),
                                     r.get("src", 0), r["line"]))
         latest = history[-1]
@@ -158,7 +161,11 @@ def resolve_items() -> list[dict]:
 
     raw_rows = _parse_box_csv(raw_text)
     raw_rows.extend(_parse_form_csv(form_text))
-    return _group_and_resolve(raw_rows)
+    items = _group_and_resolve(raw_rows)
+    full = set(find_full_boxes(raw_rows, items))
+    for i in items:
+        i["boxFull"] = i["box"] in full
+    return items
 
 
 def find_existing_part(active: list[dict], name: str) -> dict | None:
@@ -186,6 +193,7 @@ def propose_box(active: list[dict], category: str) -> int:
     same_cat = set()
     used = set()
 
+    full = {i["box"] for i in active if i.get("boxFull")}
     for i in active:
         box = i["box"]
         per_box[box] = per_box.get(box, 0) + 1
@@ -195,7 +203,7 @@ def propose_box(active: list[dict], category: str) -> int:
             if i["category"] == category:
                 same_cat.add(box)
 
-    for b in sorted(same_cat):
+    for b in sorted(same_cat - full):     # a box marked full takes nothing more
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
             return b
 
@@ -288,6 +296,7 @@ def identify():
         recorded = existing["qty"] if existing["countType"] == "exact" else "many"
         return jsonify(name=result["name"], recordedName=existing["name"], box=existing["box"],
                        recorded=recorded, seen=seen, isNew=False,
+                       boxFull=bool(existing.get("boxFull")),
                        confidence=result.get("confidence"), note=result.get("note", ""))
 
     box = propose_box(active, result.get("category", "misc"))
