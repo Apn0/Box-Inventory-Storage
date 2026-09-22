@@ -1307,7 +1307,11 @@ function viewData(){
 /* ------------------------------------------------------------------ export */
 function toCSV(){
   const head = ["Box","Item","Qty","Note","UpdatedAt"];
-  const q = v => /[",\n]/.test(v) ? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
+  // Text starting with = + - @ tab or CR is run as a formula when the file is
+  // opened in Excel/Sheets (CSV injection). A leading ' makes it plain text and
+  // is not shown. Numbers stay numbers, so a real count is never altered.
+  const safe = v => typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? "'" + v : String(v);
+  const q = v => { const s = safe(v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
   const d = new Date(), pad = n => String(n).padStart(2,"0");
   const today = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
   const rows = items.filter(i => i.status === "active").map(i => [
