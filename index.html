@@ -649,9 +649,10 @@ function rebuild(){
   for(const it of out){
     it.container = containerOf(it.box);
     it.status = (it.countType === "exact" && Number(it.qty) === 0) ? "gone" : "active";
-    it._hay = (it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category) + " box " + it.box).toLowerCase();
-    it._tokName = tokens(it.name);
-    it._tokAll  = tokens(it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category));
+    const text = it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category);
+    it._hay = (text + " " + glueNumbers(text) + " box " + it.box).toLowerCase();
+    it._tokName = itemTokens(it.name);
+    it._tokAll  = itemTokens(text);
   }
   out.sort((a,b)=> a.box - b.box || a.name.localeCompare(b.name));
   items = out;
@@ -707,10 +708,24 @@ function qtyHTML(it){
   const n = Number(it.qty)||0;
   return `<div class="qty${n===0?" zero":""}">${n}<small>${n===1?"pc":"pcs"}</small></div>`;
 }
+/* "3 pin", "3-pin", "3pin" and "(3-pin" are the same thing to a person, so a
+   bare number is glued to the word after it — in the query and in each part's
+   text alike. Only a PURE number glues: "m3 x 10" and "ESP32-C3" stay as-is. */
+function glueNumbers(s){
+  return String(s).toLowerCase()
+    .replace(/(^|[^a-z0-9.])(\d+(?:\.\d+)?)[\s_-]+(?=[a-z])/g, "$1$2");
+}
 /* Split on everything except digits, letters, "." and "+" so that "m3.5" and
-   "5v+" survive whole but "timing-belt" becomes two matchable words. */
+   "5v+" survive whole but "timing-belt" becomes two matchable words. One-letter
+   words are noise, but a lone digit is not: dropping it turned "3-pin" into
+   "pin" and listed every 2-, 4- and 6-pin part instead. */
 function tokens(s){
-  return String(s).toLowerCase().split(/[^a-z0-9.+]+/).filter(t => t.length > 1);
+  return glueNumbers(s).split(/[^a-z0-9.+]+/).filter(t => t.length > 1 || /\d/.test(t));
+}
+/* A part's words in both spellings, so "pin" on its own still finds "3-pin". */
+function itemTokens(s){
+  const plain = String(s).toLowerCase().split(/[^a-z0-9.+]+/).filter(t => t.length > 1);
+  return [...new Set([...plain, ...tokens(s)])];
 }
 /* A needle word matches an item word only on a whole-word or prefix basis.
    Substring matching is wrong here: it made "TOF" match "cu-tof-fs". */
@@ -918,10 +933,18 @@ function filtered(){
   if(ui.flag === "low") list = list.filter(i =>
     isRunningLow(i));
   const q = ui.q.trim().toLowerCase();
-  // Typing a bare box number jumps to that box instead of searching for the
-  // digits — with 154 boxes that is what you nearly always mean.
-  if(/^\d{1,3}$/.test(q) && items.some(i => i.box === Number(q))){
-    return list.filter(i => i.box === Number(q));
+  // Typing a bare box number (or "box 12") jumps to that box instead of
+  // searching for the digits — with 154 boxes that is what you nearly always
+  // mean. A bare "3" can also be the start of "3-pin", so parts named like that
+  // follow the box's own contents; "box 3" means the box and nothing else.
+  const boxQ = q.match(/^(box\s*)?(\d{1,3})$/);
+  if(boxQ && items.some(i => i.box === Number(boxQ[2]))){
+    const n = Number(boxQ[2]);
+    const inBox = list.filter(i => i.box === n);
+    if(boxQ[1]) return inBox;
+    const named = list.filter(i => i.box !== n && i._tokName.some(w =>
+      w.startsWith(boxQ[2]) && /^[a-z]/.test(w.slice(boxQ[2].length))));
+    return [...inBox, ...named];
   }
   if(q){
     const ts = tokens(q);
@@ -965,7 +988,9 @@ function viewFind(){
     return chips + boxNote + `<div class="empty">Nothing matches.<br><br>
       <button class="btn" data-add="1">+ Add a part</button></div>`;
   return chips + boxNote +
-    `<div class="hint">${list.length} result${list.length===1?"":"s"}
+    `<div class="hint">${list.length} result${list.length===1?"":"s"}${
+       /^\d{1,3}$/.test(ui.q.trim()) && items.some(i => i.box === Number(ui.q.trim()))
+         ? ` · box ${esc(ui.q.trim())} first, then parts like “${esc(ui.q.trim())}-pin”` : ""}
        · <button class="iconbtn" data-add="1">+ add part</button></div>
      <div class="list">${list.map(itemHTML).join("")}</div>`;
 }
