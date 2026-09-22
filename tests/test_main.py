@@ -16,7 +16,8 @@ def test_health(client):
     assert response.data == b"ok"
 
 def test_identify_missing_image(client):
-    response = client.post("/identify", data=b"")
+    response = client.post("/identify", data=b"",
+                           headers={"Authorization": "Bearer test-key"})
     assert response.status_code == 400
     assert b"no image" in response.data
 
@@ -32,3 +33,11 @@ def test_identify_too_large(client):
     large_data = b"a" * (25 * 1024 * 1024 + 100)
     response = client.post("/identify", data=large_data)
     assert response.status_code == 413
+
+
+def test_identify_rejects_bad_key_with_401(client):
+    # Must stay a clean 401 even with a photo attached: the phone only
+    # re-asks for the key on a 401.
+    response = client.post("/identify", data=b"x" * 50000,
+                           headers={"Authorization": "Bearer wrong"})
+    assert response.status_code == 401

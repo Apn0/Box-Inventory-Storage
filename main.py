@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import base64
 import csv
+import hmac
 import io
 import json
 import mimetypes
@@ -256,15 +257,20 @@ def health():
 
 @app.route("/identify", methods=["POST"])
 def identify():
+    # Read the upload BEFORE refusing it. Answering 401 with the photo still
+    # unread makes gunicorn drop the connection, and Cloud Run turns that into
+    # a 502/503 — so the phone never sees the 401 that tells it to re-ask the key.
+    body = request.get_data()
+
     expected_key = os.environ.get("API_KEY")
     auth_header = request.headers.get("Authorization", "")
-    if not expected_key or not auth_header.startswith("Bearer ") or auth_header[7:] != expected_key:
+    if not expected_key or not auth_header.startswith("Bearer ") \
+            or not hmac.compare_digest(auth_header[7:], expected_key):
         return jsonify(error="unauthorized"), 401
 
     media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
     if media not in SUPPORTED:
         media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"
-    body = request.get_data()
     if not body:
         return jsonify(error="no image"), 400
     b64 = base64.standard_b64encode(body).decode("ascii")
