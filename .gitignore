@@ -28,3 +28,6 @@ test_photo.jpg
 
 # local APK builds (tools/build_apk_local.sh)
 android/.last_version_code
+
+# Local secrets: API_KEY for the photo service in main.py. See .env.example.
+.env

@@ -125,11 +125,15 @@ parts are preserved. Bulk piles are never merged into a shared box. Boxes 10, 11
 
 ## The Android app
 
-Built by GitHub Actions — nothing Android has to be installed on the PC. Every
-push to `android/**` rebuilds it, and the APK is published to the rolling
+Built on this PC with `bash tools/build_apk_local.sh` (needs JDK 17, the Android
+SDK and Gradle; see the script header), which publishes the APK to the rolling
 [**latest**](https://github.com/Apn0/Box-Inventory-Storage/releases/tag/latest)
 release. Open that link on the phone (signed into GitHub, the repo is private),
 download, install — Android will ask you to allow installing from that browser.
+
+`.github/workflows/android.yml` would rebuild on every push to `android/**`, but
+the account's Actions allowance ran out on 2026-09-08 and every job is refused,
+so nothing is built there until that changes.
 
 The shell is a WebView pointing at `server.py`. On first run, menu → **Server
 address**:
