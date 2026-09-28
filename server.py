@@ -13,7 +13,6 @@ API has no credit. Nothing is deleted — identified photos move to data/photos/
 
 Standard library only: no pip install, no build step.
 """
-from __future__ import annotations
 
 import argparse
 import dataclasses
