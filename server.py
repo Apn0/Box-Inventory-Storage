@@ -258,7 +258,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with urllib.request.urlopen(url, timeout=20) as r:
                 body = r.read()
         except Exception as exc:                   # noqa: BLE001
-            return self._json(502, {"error": str(exc)[:200]})
+            return self._json(502, {"error": "upstream error"})
         return self._send(Response(200, body, "text/csv; charset=utf-8"))
 
     def _handle_get_inventory(self) -> None:
