@@ -197,17 +197,8 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
+def propose_box(data: dict, per_box: dict, same_cat: set, category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    per_box = {}
-    same_cat = set()
-
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400 and i.get("category") == category:
-            same_cat.add(b)
-
     full = set(data.get("fullBoxes") or [])     # marked physically full
     for b in sorted(same_cat - full):
         if per_box[b] < MAX_BOX_ITEMS:
@@ -436,7 +427,7 @@ def _claude(client, data: str, media: str, prompt: str) -> dict | None:
     return json.loads(text)
 
 
-def decide(data: dict, active: list[dict], result: dict) -> dict:
+def decide(data: dict, active: list[dict], result: dict, per_box: dict, category_boxes: dict) -> dict:
     """Where the identified part goes, and what quantity the appended row carries.
 
     A part already on record must be written as the NEW TOTAL, never the delta:
@@ -458,7 +449,9 @@ def decide(data: dict, active: list[dict], result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = propose_box(data, active, result["category"])
+    category = result.get("category")
+    same_cat = category_boxes.get(category, set())
+    box, why = propose_box(data, per_box, same_cat, category)
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -641,7 +634,7 @@ def _create_config(provider: str, context: str) -> IdentifyConfig:
 
 
 def _process_single_photo(
-    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
 ) -> tuple[dict, dict | None]:
     try:
         result = identify(path, config)
@@ -651,7 +644,7 @@ def _process_single_photo(
     if result is None:
         return {"photo": path.name, "ok": False, "error": "no answer"}, None
 
-    plan = decide(data, active, result)
+    plan = decide(data, active, result, per_box, category_boxes)
     outcome = {"photo": path.name, "ok": True,
                "name": plan["name"], "box": plan["box"],
                "confidence": result["confidence"], "note": result["note"],
@@ -700,10 +693,18 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     context = context_for_prompt(data, active)
     config = _create_config(provider, context)
 
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+
     outcomes, rows = [], []
     for path in paths:
         path = pathlib.Path(path)
-        outcome, row = _process_single_photo(path, data, active, config, unattended)
+        outcome, row = _process_single_photo(path, data, active, config, unattended, per_box, category_boxes)
         outcomes.append(outcome)
         if row is not None:
             rows.append(row)
@@ -868,6 +869,14 @@ def run(args: argparse.Namespace) -> int:
         openai_key=openai_key
     )
 
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+
     for path in paths:
         print(f"\n{path.name}")
         try:
@@ -878,7 +887,7 @@ def run(args: argparse.Namespace) -> int:
         if result is None:
             continue
 
-        plan = decide(data, active, result)
+        plan = decide(data, active, result, per_box, category_boxes)
         print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
         if result["note"]:
             print(f"  note: {result['note']}")
