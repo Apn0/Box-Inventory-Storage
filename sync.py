@@ -6,7 +6,6 @@ Run:  python sync.py
 
 Keeps a timestamped .bak of the previous CSV so a bad download can be undone.
 """
-from __future__ import annotations
 
 import datetime
 import pathlib
