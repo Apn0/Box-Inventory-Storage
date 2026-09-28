@@ -8,7 +8,6 @@ Writes data/inventory.json      (normalized, resolved, categorised)
 
 Run:  python build.py
 """
-from __future__ import annotations
 
 import csv
 import bisect
