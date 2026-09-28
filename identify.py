@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import collections
 import csv
 import typing
 import dataclasses
