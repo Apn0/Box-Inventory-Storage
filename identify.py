@@ -31,6 +31,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 from build import part_numbers
 from utils import slug
@@ -245,8 +246,15 @@ def _gemini(b64: str, media: str, prompt: str, key: str) -> dict:
     return json.loads(text)
 
 
+_vertex_token_cache: str | None = None
+_vertex_token_expiry: float = 0.0
+
 def vertex_token() -> str | None:
     """Access token for the credit-holding account, straight from gcloud."""
+    global _vertex_token_cache, _vertex_token_expiry
+    if _vertex_token_cache and time.monotonic() < _vertex_token_expiry:
+        return _vertex_token_cache
+
     try:
         out = subprocess.run(
             ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
@@ -254,7 +262,11 @@ def vertex_token() -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     token = out.stdout.strip()
-    return token or None
+    if token:
+        _vertex_token_cache = token
+        _vertex_token_expiry = time.monotonic() + 3000  # 50 minutes
+        return token
+    return None
 
 
 def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
