@@ -274,21 +274,25 @@ def group_rows(raw_rows: list[dict]) -> dict[tuple[int, str], list[dict]]:
     return groups
 
 
-def build_items(raw_rows: list[dict]) -> list[dict]:
+def build_items(raw_rows: list[dict]) -> tuple[list[dict], dict[int, dict]]:
     groups = group_rows(raw_rows)
 
     items = []
+    full_newest = {}
     # Sort keys for performance
     group_sort_key = operator.itemgetter(0)
 
     for (box, key_slug), history in sorted(groups.items(), key=group_sort_key):
         if key_slug == BOX_FULL_SLUG:
+            history_sort_key = lambda r: (r["date"] or "", r.get("time", "00:00:00"), r.get("src", 0), r["line"])
+            newest_row = max(history, key=history_sort_key)
+            full_newest[box] = newest_row
             continue                     # a box flag, see find_full_boxes
         item = resolve_item(box, key_slug, history)
         if item is not None:
             items.append(item)
 
-    return items
+    return items, full_newest
 
 
 def find_free_boxes(items: list[dict]) -> list[dict]:
@@ -309,22 +313,15 @@ def find_free_boxes(items: list[dict]) -> list[dict]:
     return free_boxes
 
 
-def find_full_boxes(raw_rows: list[dict], items: list[dict]) -> list[int]:
+def find_full_boxes(full_newest: dict[int, dict], items: list[dict]) -> list[int]:
     """Boxes whose newest BOX_FULL row says full and that still hold a part.
 
     An emptied box cannot be full, so the flag lapses by itself once the last
     part leaves — no stale "full" on a box that is sitting empty.
     """
-    newest: dict[int, dict] = {}
-    for r in raw_rows:
-        if slug(r["name"]) != BOX_FULL_SLUG:
-            continue
-        key = (r["date"] or "", r.get("time", "00:00:00"), r.get("src", 0), r["line"])
-        if r["box"] not in newest or key >= newest[r["box"]][0]:
-            newest[r["box"]] = (key, r)
     occupied = {i["box"] for i in items if i["status"] == "active"}
     full = []
-    for box, (_key, r) in newest.items():
+    for box, r in full_newest.items():
         txt = r["qty_txt"].strip()
         if txt.lstrip("-").isdigit() and int(txt) != 0 and box in occupied:
             full.append(box)
@@ -355,10 +352,10 @@ def main() -> int:
     if raw_rows is None:
         return 1
 
-    items = build_items(raw_rows)
+    items, full_newest = build_items(raw_rows)
     free_boxes = find_free_boxes(items)
     split_items = find_split_items(items)
-    full_boxes = find_full_boxes(raw_rows, items)
+    full_boxes = find_full_boxes(full_newest, items)
 
     if not write_outputs(raw_rows, items, free_boxes, split_items, full_boxes):
         return 1

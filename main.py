@@ -121,17 +121,19 @@ def _parse_form_csv(form_text: str) -> list[dict]:
     return raw_rows
 
 
-def _group_and_resolve(raw_rows: list[dict]) -> list[dict]:
+def _group_and_resolve(raw_rows: list[dict]) -> tuple[list[dict], dict[int, dict]]:
     groups: dict[tuple[int, str], list[dict]] = {}
     for row in raw_rows:
         groups.setdefault((row["box"], slug(row["name"])), []).append(row)
 
     items = []
+    full_newest = {}
     for (box, key), history in groups.items():
-        if key == BOX_FULL_SLUG:
-            continue                     # a box flag, not a part
         history.sort(key=lambda r: (r["date"] or "", r.get("time", "00:00:00"),
                                     r.get("src", 0), r["line"]))
+        if key == BOX_FULL_SLUG:
+            full_newest[box] = history[-1]
+            continue                     # a box flag, not a part
         latest = history[-1]
         if not latest["name"]:
             continue
@@ -147,7 +149,7 @@ def _group_and_resolve(raw_rows: list[dict]) -> list[dict]:
         items.append({"box": box, "name": latest["name"], "qty": qty,
                       "countType": count_type, "status": status, "note": note,
                       "category": categorise(latest["name"], note)})
-    return items
+    return items, full_newest
 
 
 def resolve_items() -> list[dict]:
@@ -162,8 +164,8 @@ def resolve_items() -> list[dict]:
 
     raw_rows = _parse_box_csv(raw_text)
     raw_rows.extend(_parse_form_csv(form_text))
-    items = _group_and_resolve(raw_rows)
-    full = set(find_full_boxes(raw_rows, items))
+    items, full_newest = _group_and_resolve(raw_rows)
+    full = set(find_full_boxes(full_newest, items))
     for i in items:
         i["boxFull"] = i["box"] in full
     return items
