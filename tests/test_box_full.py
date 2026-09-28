@@ -68,6 +68,8 @@ def test_cloud_resolver_drops_flag_and_marks_items(monkeypatch):
 def test_pc_propose_box_skips_full_boxes():
     data = {"freeBoxes": [{"box": 9, "reason": "never used"}], "fullBoxes": [1]}
     active = [{"box": 1, "category": "sensor"}, {"box": 4, "category": "sensor"}]
-    assert identify.propose_box(data, active, "sensor")[0] == 4
+    per_box = {1: 1, 4: 1}
+    same_cat = {1, 4}
+    assert identify.propose_box(data, per_box, same_cat, "sensor")[0] == 4
     data["fullBoxes"] = [1, 4]
-    assert identify.propose_box(data, active, "sensor")[0] == 9
+    assert identify.propose_box(data, per_box, same_cat, "sensor")[0] == 9
