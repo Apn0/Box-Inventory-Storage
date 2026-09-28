@@ -155,6 +155,7 @@ class TestFindExisting(unittest.TestCase):
 
 class TestDecide(unittest.TestCase):
     def setUp(self):
+        import collections
         from identify import decide
         self.decide = decide
         self.data = {
@@ -168,6 +169,14 @@ class TestDecide(unittest.TestCase):
                 {"box": 3, "reason": "empty"}
             ]
         }
+        self.active = [i for i in self.data["items"] if i["status"] == "active"]
+        self.per_box = {}
+        self.category_boxes = collections.defaultdict(set)
+        for i in self.active:
+            b = i["box"]
+            self.per_box[b] = self.per_box.get(b, 0) + 1
+            if b < 400:
+                self.category_boxes[i.get("category")].add(b)
 
     def test_appended_row_exact(self):
         result = {
@@ -176,7 +185,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
@@ -192,7 +201,7 @@ class TestDecide(unittest.TestCase):
             "category": "misc",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 4)
         self.assertEqual(res["name"], "18650 battery holder")
@@ -209,7 +218,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 1) # propose_box picks box 1 due to same category
         self.assertEqual(res["name"], "New IC")
@@ -225,7 +234,7 @@ class TestDecide(unittest.TestCase):
             "category": "resistor",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 2) # propose_box picks first free box
         self.assertEqual(res["name"], "New Resistor")
@@ -241,7 +250,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": "TMC2209 stepper driver"
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
