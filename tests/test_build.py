@@ -323,7 +323,7 @@ def test_build_items_basic():
         {"box": 1, "name": "Resistor", "qty_txt": "5", "note": "New", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
     ]
 
-    items = build_items(raw_rows)
+    items, _ = build_items(raw_rows)
 
     # Should sort by box then name: 1-Resistor, 1-Zener Diode, 2-Arduino
     assert len(items) == 3
@@ -347,13 +347,13 @@ def test_build_items_empty_ignored():
         {"box": 1, "name": "", "qty_txt": "5", "note": "Empty placeholder", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 2},
     ]
 
-    items = build_items(raw_rows)
+    items, _ = build_items(raw_rows)
 
     assert len(items) == 1
     assert items[0]["name"] == "Valid Item"
 
 def test_build_items_empty_input():
-    items = build_items([])
+    items, _ = build_items([])
     assert items == []
 
 def test_build_items_mocked(mocker):
@@ -375,7 +375,7 @@ def test_build_items_mocked(mocker):
 
     # Call build_items with dummy raw rows
     raw_rows = [{"dummy": "row"}]
-    items = build_items(raw_rows)
+    items, _ = build_items(raw_rows)
 
     # Verify group_rows was called with raw_rows
     mock_group_rows.assert_called_once_with(raw_rows)
