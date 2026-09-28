@@ -11,23 +11,20 @@ Auth to Vertex is the Cloud Run service's own identity (Application Default
 Credentials), granted roles/aiplatform.user on deft-melody-503207-k8 at
 deploy time — no key, no gcloud login needed at request time.
 """
-from __future__ import annotations
 
-import os
 import base64
 import csv
 import hmac
 import io
 import json
 import mimetypes
+import os
 import urllib.error
 import urllib.request
 
-import os
 import google.auth
-import os
-import google.auth.transport.requests
 import google.auth.exceptions
+import google.auth.transport.requests
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
