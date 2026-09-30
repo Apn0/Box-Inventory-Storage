@@ -249,8 +249,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         import urllib.request
         qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
         gid = (qs.get("gid") or [""])[0]
-        if not gid.isdigit():
-            return self._json(400, {"error": "gid must be a number"})
+        if gid not in {BOX_GID, FORM_GID}:
+            return self._json(403, {"error": "forbidden gid"})
         url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
                f"/export?format=csv&gid={gid}")
         try:
@@ -293,19 +293,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            import urllib.request
-            qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-            gid = (qs.get("gid") or [""])[0]
-            if gid not in {BOX_GID, FORM_GID}:
-                return self._json(403, {"error": "forbidden gid"})
-            url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-                   f"/export?format=csv&gid={gid}")
-            try:
-                with urllib.request.urlopen(url, timeout=20) as r:
-                    body = r.read()
-            except Exception as exc:                   # noqa: BLE001
-                return self._json(502, {"error": str(exc)[:200]})
-            return self._send(Response(200, body, "text/csv; charset=utf-8"))
+            return self._handle_get_proxy()
 
         # the freshly built inventory, so the page can update without a reload
         if path == "/data/inventory.json":
