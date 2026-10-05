@@ -1,5 +1,6 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items
+import csv
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, load_raw_rows
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -422,3 +423,154 @@ def test_resolve_item_complex_history():
     assert result["history"][1]["qty"] == "5"
     assert result["history"][2]["qty"] == "20"
     assert result["history"][3]["qty"] == "15"
+
+def test_load_raw_rows_missing_file(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+
+    assert load_raw_rows() is None
+
+def test_load_raw_rows_valid_raw_only(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    mock_form = tmp_path / "form_responses.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+    monkeypatch.setattr(build, "FORM_CSV", mock_form)
+
+    # Create mock RAW CSV
+    with open(mock_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Box", "Item", "Qty", "Note", "UpdatedAt"])
+        writer.writeheader()
+        writer.writerow({"Box": "1", "Item": "Resistor", "Qty": "10", "Note": "10k ohm", "UpdatedAt": "01/01/2023"})
+        writer.writerow({"Box": "2", "Item": "Capacitor", "Qty": "5", "Note": "", "UpdatedAt": ""})
+
+    rows = load_raw_rows()
+    assert rows is not None
+    assert len(rows) == 2
+
+    assert rows[0]["box"] == 1
+    assert rows[0]["name"] == "Resistor"
+    assert rows[0]["qty_txt"] == "10"
+    assert rows[0]["note"] == "10k ohm"
+    assert rows[0]["date"] == "2023-01-01"
+    assert rows[0]["time"] == "00:00:00"
+    assert rows[0]["src"] == 0
+    assert rows[0]["line"] == 2
+
+    assert rows[1]["box"] == 2
+    assert rows[1]["name"] == "Capacitor"
+    assert rows[1]["qty_txt"] == "5"
+    assert rows[1]["note"] == ""
+    assert rows[1]["date"] is None
+
+def test_load_raw_rows_skip_empty_box(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    mock_form = tmp_path / "form_responses.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+    monkeypatch.setattr(build, "FORM_CSV", mock_form)
+
+    # Create mock RAW CSV
+    with open(mock_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Box", "Item", "Qty", "Note", "UpdatedAt"])
+        writer.writeheader()
+        writer.writerow({"Box": "1", "Item": "Resistor", "Qty": "10", "Note": "", "UpdatedAt": ""})
+        writer.writerow({"Box": "", "Item": "Capacitor", "Qty": "5", "Note": "", "UpdatedAt": ""}) # Should be skipped
+        writer.writerow({"Box": "  ", "Item": "Inductor", "Qty": "2", "Note": "", "UpdatedAt": ""}) # Should be skipped
+
+    rows = load_raw_rows()
+    assert rows is not None
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Resistor"
+
+def test_load_raw_rows_with_form_csv(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    mock_form = tmp_path / "form_responses.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+    monkeypatch.setattr(build, "FORM_CSV", mock_form)
+
+    # Create mock RAW CSV
+    with open(mock_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Box", "Item", "Qty", "Note", "UpdatedAt"])
+        writer.writeheader()
+        writer.writerow({"Box": "1", "Item": "Resistor", "Qty": "10", "Note": "", "UpdatedAt": "01/01/2023"})
+
+    # Create mock FORM CSV
+    with open(mock_form, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Timestamp", "Box", "Item", "Qty", "Note"])
+        writer.writeheader()
+        writer.writerow({"Timestamp": "02/01/2023 14:30:00", "Box": "1", "Item": "Resistor", "Qty": "8", "Note": "photo-counted"})
+
+    rows = load_raw_rows()
+    assert rows is not None
+    assert len(rows) == 2
+
+    # Check form row
+    assert rows[1]["box"] == 1
+    assert rows[1]["name"] == "Resistor"
+    assert rows[1]["qty_txt"] == "8"
+    assert rows[1]["note"] == "photo-counted"
+    assert rows[1]["date"] == "2023-01-02"
+    assert rows[1]["time"] == "14:30:00"
+    assert rows[1]["src"] == 1
+    assert rows[1]["line"] == 2
+
+def test_load_raw_rows_form_csv_invalid_rows(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    mock_form = tmp_path / "form_responses.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+    monkeypatch.setattr(build, "FORM_CSV", mock_form)
+
+    # Create mock RAW CSV
+    with open(mock_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Box", "Item", "Qty", "Note", "UpdatedAt"])
+        writer.writeheader()
+        writer.writerow({"Box": "1", "Item": "Valid Item", "Qty": "1", "Note": "", "UpdatedAt": ""})
+
+    # Create mock FORM CSV
+    with open(mock_form, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Timestamp", "Box", "Item", "Qty", "Note"])
+        writer.writeheader()
+        # Invalid: missing box
+        writer.writerow({"Timestamp": "02/01/2023 14:30:00", "Box": "", "Item": "Resistor", "Qty": "8", "Note": ""})
+        # Invalid: missing item
+        writer.writerow({"Timestamp": "02/01/2023 14:30:00", "Box": "2", "Item": "   ", "Qty": "8", "Note": ""})
+        # Invalid: non-integer box
+        writer.writerow({"Timestamp": "02/01/2023 14:30:00", "Box": "abc", "Item": "Capacitor", "Qty": "8", "Note": ""})
+        # Valid row
+        writer.writerow({"Timestamp": "02/01/2023 15:00:00", "Box": "3", "Item": "Inductor", "Qty": "5", "Note": ""})
+
+    rows = load_raw_rows()
+    assert rows is not None
+    assert len(rows) == 2 # 1 from RAW, 1 from FORM
+    assert rows[1]["box"] == 3
+    assert rows[1]["name"] == "Inductor"
+
+def test_load_raw_rows_form_csv_unparseable_date(tmp_path, monkeypatch):
+    import build
+    mock_raw = tmp_path / "inventory_raw.csv"
+    mock_form = tmp_path / "form_responses.csv"
+    monkeypatch.setattr(build, "RAW", mock_raw)
+    monkeypatch.setattr(build, "FORM_CSV", mock_form)
+
+    # Create mock RAW CSV
+    with open(mock_raw, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Box", "Item", "Qty", "Note", "UpdatedAt"])
+        writer.writeheader()
+        writer.writerow({"Box": "1", "Item": "Valid Item", "Qty": "1", "Note": "", "UpdatedAt": ""})
+
+    # Create mock FORM CSV with bad date
+    with open(mock_form, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=["Timestamp", "Box", "Item", "Qty", "Note"])
+        writer.writeheader()
+        writer.writerow({"Timestamp": "not-a-date 14:30:00", "Box": "2", "Item": "Resistor", "Qty": "8", "Note": ""})
+
+    rows = load_raw_rows()
+    assert rows is not None
+    assert len(rows) == 2
+    assert rows[1]["box"] == 2
+    assert rows[1]["date"] is None
+    assert rows[1]["time"] == "14:30:00"
