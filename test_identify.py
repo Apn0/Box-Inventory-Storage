@@ -420,5 +420,57 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+
+from unittest.mock import patch
+
+class TestLoadChanges(unittest.TestCase):
+    def setUp(self):
+        import identify
+        identify._changes_cache = None
+        self.identify = identify
+
+    def tearDown(self):
+        self.identify._changes_cache = None
+
+    def test_cache_used(self):
+        self.identify._changes_cache = [{"mock": "data"}]
+        self.assertEqual(self.identify.load_changes(), [{"mock": "data"}])
+
+    @patch('identify.CHANGES')
+    def test_file_does_not_exist(self, mock_changes):
+        mock_changes.exists.return_value = False
+        result = self.identify.load_changes()
+        self.assertEqual(result, [])
+        self.assertEqual(self.identify._changes_cache, [])
+
+    @patch('identify.CHANGES')
+    def test_success(self, mock_changes):
+        mock_changes.exists.return_value = True
+        mock_changes.read_text.return_value = '[{"test": "value"}]'
+
+        result = self.identify.load_changes()
+        self.assertEqual(result, [{"test": "value"}])
+        self.assertEqual(self.identify._changes_cache, [{"test": "value"}])
+        mock_changes.read_text.assert_called_once_with(encoding="utf-8")
+
+    @patch('identify.CHANGES')
+    def test_json_decode_error(self, mock_changes):
+        mock_changes.exists.return_value = True
+        mock_changes.read_text.return_value = 'not json'
+
+        result = self.identify.load_changes()
+        self.assertEqual(result, [])
+        self.assertEqual(self.identify._changes_cache, [])
+
+    @patch('identify.CHANGES')
+    def test_os_error(self, mock_changes):
+        mock_changes.exists.return_value = True
+        mock_changes.read_text.side_effect = OSError("mock error")
+
+        result = self.identify.load_changes()
+        self.assertEqual(result, [])
+        self.assertEqual(self.identify._changes_cache, [])
+
+
 if __name__ == "__main__":
     unittest.main()
