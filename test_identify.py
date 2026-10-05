@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
 class TestPartNumbers(unittest.TestCase):
@@ -419,6 +420,84 @@ class TestContextForPromptAdditional(unittest.TestCase):
         ]
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
+
+class TestLoadPending(unittest.TestCase):
+    def setUp(self):
+        import identify
+        self.original_cache = identify._pending_cache
+        identify._pending_cache = None
+
+    def tearDown(self):
+        import identify
+        identify._pending_cache = self.original_cache
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_cache_populated(self, mock_read_text, mock_exists):
+        import identify
+        identify._pending_cache = [{"some": "data"}]
+
+        result = identify.load_pending()
+
+        self.assertEqual(result, [{"some": "data"}])
+        mock_exists.assert_not_called()
+        mock_read_text.assert_not_called()
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_does_not_exist(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = False
+
+        result = identify.load_pending()
+
+        self.assertEqual(result, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_not_called()
+        self.assertEqual(identify._pending_cache, [])
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_valid_json(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.return_value = '[{"box": 1, "name": "resistor"}]'
+
+        result = identify.load_pending()
+
+        self.assertEqual(result, [{"box": 1, "name": "resistor"}])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [{"box": 1, "name": "resistor"}])
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_invalid_json(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.return_value = 'invalid json'
+
+        result = identify.load_pending()
+
+        self.assertEqual(result, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [])
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_os_error(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.side_effect = OSError("Disk read error")
+
+        result = identify.load_pending()
+
+        self.assertEqual(result, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [])
+
 
 if __name__ == "__main__":
     unittest.main()
