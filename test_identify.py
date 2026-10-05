@@ -420,5 +420,54 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+
+class TestLoadPending(unittest.TestCase):
+    def setUp(self):
+        import identify
+        self.identify = identify
+        self.original_pending = identify.PENDING
+        self.original_cache = identify._pending_cache
+
+        # Create a temporary file path
+        import pathlib
+        import tempfile
+        import os
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = pathlib.Path(self.temp_dir.name) / "pending.json"
+
+        # Override identify module globals
+        identify.PENDING = self.temp_path
+        identify._pending_cache = None
+
+    def tearDown(self):
+        # Restore identify module globals
+        self.identify.PENDING = self.original_pending
+        self.identify._pending_cache = self.original_cache
+        self.temp_dir.cleanup()
+
+    def test_missing_file(self):
+        # File doesn't exist
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
+    def test_valid_json(self):
+        import json
+        data = [{"id": 1, "name": "test"}]
+        self.temp_path.write_text(json.dumps(data))
+        self.assertEqual(self.identify.load_pending(), data)
+        self.assertEqual(self.identify._pending_cache, data)
+
+    def test_invalid_json(self):
+        self.temp_path.write_text("invalid json")
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
+    def test_oserror(self):
+        # Make the path point to a directory so reading it raises IsADirectoryError (an OSError)
+        self.temp_path.mkdir()
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
 if __name__ == "__main__":
+
     unittest.main()
