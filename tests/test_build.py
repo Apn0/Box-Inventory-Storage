@@ -24,6 +24,9 @@ def test_parse_date_error_paths():
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
 
+    with pytest.raises(ValueError, match="unparseable date: '2023-02-29'"):
+        parse_date("2023-02-29")
+
 def test_find_split_items_basic():
     items = [
         {"name": "Resistor 10k", "box": 1, "status": "active"},
