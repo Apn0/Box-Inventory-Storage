@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -23,6 +23,61 @@ def test_parse_date_error_paths():
 
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
+
+def test_find_free_boxes_empty():
+    assert find_free_boxes([]) == []
+
+def test_find_free_boxes_active_continuous():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "active"}
+    ]
+    assert find_free_boxes(items) == []
+
+def test_find_free_boxes_emptied():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "inactive"},
+        {"box": 3, "status": "active"}
+    ]
+    result = find_free_boxes(items)
+    assert len(result) == 1
+    assert result[0] == {"box": 2, "container": container_of(2), "reason": "emptied"}
+
+def test_find_free_boxes_never_used():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 4, "status": "active"}
+    ]
+    result = find_free_boxes(items)
+    assert len(result) == 2
+    assert result[0] == {"box": 2, "container": container_of(2), "reason": "never used"}
+    assert result[1] == {"box": 3, "container": container_of(3), "reason": "never used"}
+
+def test_find_free_boxes_high():
+    items = [
+        {"box": 400, "status": "active"},
+        {"box": 402, "status": "active"}
+    ]
+    result = find_free_boxes(items)
+    assert len(result) == 1
+    assert result[0] == {"box": 401, "container": container_of(401), "reason": "never used"}
+
+def test_find_free_boxes_mixed():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "inactive"},
+        {"box": 4, "status": "active"},
+        {"box": 400, "status": "active"},
+        {"box": 402, "status": "inactive"}
+    ]
+    result = find_free_boxes(items)
+    assert len(result) == 4
+    assert result[0] == {"box": 2, "container": container_of(2), "reason": "emptied"}
+    assert result[1] == {"box": 3, "container": container_of(3), "reason": "never used"}
+    assert result[2] == {"box": 401, "container": container_of(401), "reason": "never used"}
+    assert result[3] == {"box": 402, "container": container_of(402), "reason": "emptied"}
+
 
 def test_find_split_items_basic():
     items = [
