@@ -87,6 +87,18 @@ class TestAutoFilable(unittest.TestCase):
         plan = {"existing": False}
         self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
 
+    def test_auto_filable_none_fields(self):
+        result = self.default_result.copy()
+        result["name"] = None
+        result["note"] = None
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
+    def test_auto_filable_missing_fields(self):
+        result = self.default_result.copy()
+        result.pop("name", None)
+        result.pop("note", None)
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
     def test_auto_filable_success(self):
         self.assertIsNone(auto_filable(self.default_result, self.default_plan))
 

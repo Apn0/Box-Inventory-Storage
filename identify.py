@@ -511,7 +511,7 @@ def auto_filable(result: dict, plan: dict) -> str | None:
     """Reason to hold a photo back for review, or None when it is safe to file."""
     if result.get("confidence") != "high":
         return f"{result.get('confidence', 'unknown')} confidence"
-    if UNSURE.search(result.get("name", "")) or UNSURE.search(result.get("note", "")):
+    if UNSURE.search(result.get("name") or "") or UNSURE.search(result.get("note") or ""):
         return "the model could not identify it"
     if int(result.get("quantity") or 0) <= 0:
         return "nothing countable in the photo"
