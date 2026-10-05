@@ -1,5 +1,5 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items
+from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, find_full_boxes
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -23,6 +23,55 @@ def test_parse_date_error_paths():
 
     with pytest.raises(ValueError, match="unparseable date: '2023-13-01'"):
         parse_date("2023-13-01")
+
+def test_find_full_boxes_basic():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "active"},
+        {"box": 3, "status": "active"},
+    ]
+    full_newest = {
+        1: {"qty_txt": "1"},
+        2: {"qty_txt": " 1 "},
+        3: {"qty_txt": "-1"}
+    }
+    assert find_full_boxes(full_newest, items) == [1, 2, 3]
+
+def test_find_full_boxes_empty():
+    items = [{"box": 1, "status": "active"}]
+    assert find_full_boxes({}, items) == []
+    assert find_full_boxes({1: {"qty_txt": "1"}}, []) == []
+    assert find_full_boxes({}, []) == []
+
+def test_find_full_boxes_inactive():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "inactive"},
+        {"box": 3, "status": "deleted"},
+    ]
+    full_newest = {
+        1: {"qty_txt": "1"},
+        2: {"qty_txt": "1"},
+        3: {"qty_txt": "1"}
+    }
+    assert find_full_boxes(full_newest, items) == [1]
+
+def test_find_full_boxes_non_numeric():
+    items = [
+        {"box": 1, "status": "active"},
+        {"box": 2, "status": "active"},
+        {"box": 3, "status": "active"},
+        {"box": 4, "status": "active"},
+        {"box": 5, "status": "active"},
+    ]
+    full_newest = {
+        1: {"qty_txt": "1"},
+        2: {"qty_txt": "0"},
+        3: {"qty_txt": "abc"},
+        4: {"qty_txt": ""},
+        5: {"qty_txt": " 0 "},
+    }
+    assert find_full_boxes(full_newest, items) == [1]
 
 def test_find_split_items_basic():
     items = [
