@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
 class TestPartNumbers(unittest.TestCase):
@@ -419,6 +420,41 @@ class TestContextForPromptAdditional(unittest.TestCase):
         ]
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
+
+class TestLoadInventory(unittest.TestCase):
+    def setUp(self):
+        import identify
+        identify._inventory_cache = None
+
+    def test_cache_hit(self):
+        import identify
+        identify._inventory_cache = {"cached": True}
+        self.assertEqual(identify.load_inventory(), {"cached": True})
+
+    @patch("identify.INVENTORY")
+    def test_file_exists(self, mock_inventory):
+        import identify
+        mock_inventory.exists.return_value = True
+        mock_inventory.read_text.return_value = '{"from_file": true}'
+
+        result = identify.load_inventory()
+
+        self.assertEqual(result, {"from_file": True})
+        self.assertEqual(identify._inventory_cache, {"from_file": True})
+        mock_inventory.exists.assert_called_once()
+        mock_inventory.read_text.assert_called_once_with(encoding="utf-8")
+
+    @patch("identify.INVENTORY")
+    @patch("sys.exit")
+    def test_missing_file(self, mock_exit, mock_inventory):
+        import identify
+        mock_inventory.exists.return_value = False
+        mock_exit.side_effect = SystemExit
+
+        with self.assertRaises(SystemExit):
+            identify.load_inventory()
+
+        mock_exit.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()
