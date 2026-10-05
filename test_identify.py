@@ -420,5 +420,76 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+class TestFindExistingPart(unittest.TestCase):
+    def test_exact_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver module", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
+
+        # Exact string
+        res = find_existing_part(active, "TMC2209 stepper driver module")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver module")
+
+        # Exact slug match but different case/punctuation
+        res = find_existing_part(active, "TMC2209 STEPPER driver module!")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver module")
+
+    def test_part_number_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
+
+        # Differs in descriptive words, but shares the TMC2209 part number
+        res = find_existing_part(active, "TMC2209 module")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver")
+
+    def test_ambiguous_match(self):
+        # Two different items share the same part number
+        active = [
+            {"name": "TMC2209 stepper driver version A", "box": 1},
+            {"name": "TMC2209 stepper driver version B", "box": 2}
+        ]
+
+        # "TMC2209 module" matches both, so it's ambiguous
+        res = find_existing_part(active, "TMC2209 module")
+        self.assertIsNone(res)
+
+        # Exact match should still work though
+        res = find_existing_part(active, "TMC2209 stepper driver version B")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver version B")
+
+    def test_no_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
+
+        res = find_existing_part(active, "LM317 voltage regulator")
+        self.assertIsNone(res)
+
+    def test_no_part_number_match(self):
+        # Items without a recognizable part number
+        active = [
+            {"name": "red LED", "box": 1},
+            {"name": "blue LED", "box": 2}
+        ]
+
+        # If we search for an item with no part numbers, it shouldn't match
+        # another item with no part numbers randomly.
+        res = find_existing_part(active, "green LED")
+        self.assertIsNone(res)
+
+        # Exact match still works
+        res = find_existing_part(active, "red led")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "red LED")
+
+
 if __name__ == "__main__":
     unittest.main()
