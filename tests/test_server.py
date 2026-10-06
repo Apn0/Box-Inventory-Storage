@@ -120,6 +120,12 @@ def test_windows_path_extraction():
     assert name_safe == "cmd.exe"
 
 
+def test_port_in_use_oserror():
+    from server import port_in_use
+    with patch('server.socket.socket', side_effect=OSError("Mocked OSError")):
+        assert port_in_use(1234) is None
+
+
 def test_symlink_path_access(tmp_path):
     import pathlib
     import urllib.parse

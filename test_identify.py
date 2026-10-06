@@ -1,5 +1,8 @@
+import pathlib
+import tempfile
 import unittest
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
+from unittest.mock import patch
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, archive_name
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -86,6 +89,18 @@ class TestAutoFilable(unittest.TestCase):
     def test_not_existing(self):
         plan = {"existing": False}
         self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
+
+    def test_auto_filable_none_fields(self):
+        result = self.default_result.copy()
+        result["name"] = None
+        result["note"] = None
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
+    def test_auto_filable_missing_fields(self):
+        result = self.default_result.copy()
+        result.pop("name", None)
+        result.pop("note", None)
+        self.assertIsNone(auto_filable(result, self.default_plan))
 
     def test_auto_filable_success(self):
         self.assertIsNone(auto_filable(self.default_result, self.default_plan))
@@ -420,5 +435,38 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+class TestArchiveName(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.patcher = patch("identify.PHOTOS", pathlib.Path(self.temp_dir.name))
+        self.mock_photos = self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.temp_dir.cleanup()
+
+    def test_basic(self):
+        target = archive_name(1, "Resistor 10k", ".jpg")
+        self.assertEqual(target.name, "1_resistor_10k.jpg")
+
+    def test_special_chars(self):
+        target = archive_name(2, "Capacitor, 100uF (50V)!", ".png")
+        self.assertEqual(target.name, "2_capacitor_100uf_50v.png")
+
+    def test_long_name(self):
+        name = "A" * 50
+        target = archive_name(3, name, ".webp")
+        self.assertEqual(target.name, f"3_{'a'*40}.webp")
+
+    def test_conflict(self):
+        target1 = archive_name(4, "test", ".jpg")
+        target1.touch()
+        target2 = archive_name(4, "test", ".jpg")
+        self.assertEqual(target2.name, "4_test_2.jpg")
+        target2.touch()
+        target3 = archive_name(4, "test", ".jpg")
+        self.assertEqual(target3.name, "4_test_3.jpg")
+
 if __name__ == "__main__":
+
     unittest.main()
