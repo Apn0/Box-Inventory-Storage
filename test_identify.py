@@ -1,9 +1,7 @@
 import unittest
-import tempfile
-import json
-from pathlib import Path
-from unittest.mock import patch
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, save_pending, load_pending
+from unittest.mock import patch, MagicMock
+import pathlib
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, file_one, INBOX, COUNTED_MARK
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -436,53 +434,56 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+class TestFileOne(unittest.TestCase):
+    @patch('identify.shutil.copy2')
+    @patch('identify.archive_name')
+    def test_file_one_in_inbox(self, mock_archive_name, mock_copy2):
+        mock_path = MagicMock(spec=pathlib.Path)
+        mock_path.suffix = ".jpg"
+        mock_path.resolve.return_value.parents = [INBOX]
 
-class TestLoadPending(unittest.TestCase):
-    def setUp(self):
-        import identify
-        self.identify = identify
-        self.original_pending = identify.PENDING
-        self.original_cache = identify._pending_cache
+        mock_archive_name.return_value = pathlib.Path("/mock/archive/path.jpg")
 
-        # Create a temporary file path
-        import pathlib
-        import tempfile
-        import os
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = pathlib.Path(self.temp_dir.name) / "pending.json"
+        result = {"note": "some note"}
+        plan = {"box": 42, "name": "Test Part", "quantity": 5}
 
-        # Override identify module globals
-        identify.PENDING = self.temp_path
-        identify._pending_cache = None
+        res = file_one(mock_path, result, plan)
 
-    def tearDown(self):
-        # Restore identify module globals
-        self.identify.PENDING = self.original_pending
-        self.identify._pending_cache = self.original_cache
-        self.temp_dir.cleanup()
+        mock_archive_name.assert_called_once_with(42, "Test Part", ".jpg")
+        mock_copy2.assert_called_once_with(mock_path, mock_archive_name.return_value)
+        mock_path.unlink.assert_called_once()
 
-    def test_missing_file(self):
-        # File doesn't exist
-        self.assertEqual(self.identify.load_pending(), [])
-        self.assertEqual(self.identify._pending_cache, [])
+        self.assertEqual(res, {
+            "box": 42,
+            "name": "Test Part",
+            "quantity": 5,
+            "note": f"some note ({COUNTED_MARK})"
+        })
 
-    def test_valid_json(self):
-        import json
-        data = [{"id": 1, "name": "test"}]
-        self.temp_path.write_text(json.dumps(data))
-        self.assertEqual(self.identify.load_pending(), data)
-        self.assertEqual(self.identify._pending_cache, data)
+    @patch('identify.shutil.copy2')
+    @patch('identify.archive_name')
+    def test_file_one_outside_inbox(self, mock_archive_name, mock_copy2):
+        mock_path = MagicMock(spec=pathlib.Path)
+        mock_path.suffix = ".png"
+        mock_path.resolve.return_value.parents = [pathlib.Path("/some/other/path")]
 
-    def test_invalid_json(self):
-        self.temp_path.write_text("invalid json")
-        self.assertEqual(self.identify.load_pending(), [])
-        self.assertEqual(self.identify._pending_cache, [])
+        mock_archive_name.return_value = pathlib.Path("/mock/archive/path.png")
 
-    def test_oserror(self):
-        # Make the path point to a directory so reading it raises IsADirectoryError (an OSError)
-        self.temp_path.mkdir()
-        self.assertEqual(self.identify.load_pending(), [])
-        self.assertEqual(self.identify._pending_cache, [])
+        result = {"note": ""}
+        plan = {"box": 10, "name": "Another Part", "quantity": "many"}
+
+        res = file_one(mock_path, result, plan)
+
+        mock_archive_name.assert_called_once_with(10, "Another Part", ".png")
+        mock_copy2.assert_called_once_with(mock_path, mock_archive_name.return_value)
+        mock_path.unlink.assert_not_called()
+
+        self.assertEqual(res, {
+            "box": 10,
+            "name": "Another Part",
+            "quantity": "many",
+            "note": f"({COUNTED_MARK})"
+        })
 
 if __name__ == "__main__":
 
