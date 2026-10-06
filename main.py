@@ -172,7 +172,9 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     """Tolerates how the vision model words a name — see identify.py for why."""
     key = slug(name)
     for item in active:
-        if slug(item["name"]) == key:
+        if "_slug" not in item:
+            item["_slug"] = slug(item["name"])
+        if item["_slug"] == key:
             return item
 
     wanted = part_numbers(name)
@@ -181,7 +183,7 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
 
     hit = None
     for item in active:
-        if not wanted.isdisjoint(slug(item["name"]).split()):
+        if not wanted.isdisjoint(item["_slug"].split()):
             if hit is not None:
                 return None
             hit = item
@@ -191,15 +193,16 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
 def propose_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
     same_cat = set()
-    used = set()
+    full = set()
 
-    full = {i["box"] for i in active if i.get("boxFull")}
     for i in active:
         box = i["box"]
         per_box[box] = per_box.get(box, 0) + 1
 
+        if i.get("boxFull"):
+            full.add(box)
+
         if box < 400:
-            used.add(box)
             if i["category"] == category:
                 same_cat.add(box)
 
@@ -208,7 +211,7 @@ def propose_box(active: list[dict], category: str) -> int:
             return b
 
     b = 1
-    while b in used:
+    while b in per_box and b < 400:
         b += 1
     return b
 
