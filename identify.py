@@ -12,7 +12,6 @@ after you confirm. Writing appends to data/inventory_raw.csv and re-runs build.p
 The API key is read from the user's Desktop\\.env and is never written into
 index.html — the app itself stays offline and key-free.
 """
-from __future__ import annotations
 
 import argparse
 import base64
