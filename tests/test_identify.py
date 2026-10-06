@@ -149,3 +149,25 @@ def test_context_for_prompt_duplicate_names():
         "- Item B"
     )
     assert result == expected
+
+
+from unittest.mock import patch, MagicMock
+
+def test_load_inventory_missing_file():
+    import identify
+
+    # Store original state
+    original_cache = identify._inventory_cache
+
+    try:
+        # Clear the cache to force the file check
+        identify._inventory_cache = None
+
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with patch('identify.INVENTORY', mock_path):
+            with pytest.raises(SystemExit, match="missing .* — run build.py first"):
+                identify.load_inventory()
+    finally:
+        # Restore original state
+        identify._inventory_cache = original_cache
