@@ -211,8 +211,7 @@ def resolve_item(box: int, key_slug: str, history: list[dict]) -> dict | None:
         # Box 81: a placeholder row with no item at all.
         return None
 
-    qty_values = [r["qty_txt"] for r in history]
-    distinct = {q for q in qty_values}
+    distinct = {r["qty_txt"] for r in history}
     restated = len(history) > 1 and len(distinct) == 1
     # Differing quantities normally mean the sheet contradicts itself. A row
     # identify.py wrote is a deliberate recount, not an ambiguity — it says
