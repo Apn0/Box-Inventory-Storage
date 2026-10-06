@@ -1,5 +1,9 @@
 import unittest
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
+import tempfile
+import json
+from pathlib import Path
+from unittest.mock import patch
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, save_pending, load_pending
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -431,6 +435,59 @@ class TestContextForPromptAdditional(unittest.TestCase):
         ]
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
+
+class TestPendingState(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name) / "pending.json"
+
+        # Reset the global cache before each test to ensure a clean state
+        import identify
+        identify._pending_cache = None
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_save_and_load_pending(self):
+        entries = [{"box": "1", "name": "Resistor", "qty": "10", "note": ""}]
+
+        with patch("identify.PENDING", self.temp_path):
+            save_pending(entries)
+
+            # Verify file was written
+            self.assertTrue(self.temp_path.exists())
+            written_data = json.loads(self.temp_path.read_text(encoding="utf-8"))
+            self.assertEqual(written_data, entries)
+
+            # Clear cache to force a disk read
+            import identify
+            identify._pending_cache = None
+
+            loaded_entries = load_pending()
+            self.assertEqual(loaded_entries, entries)
+
+            # Verify cache is populated
+            self.assertEqual(identify._pending_cache, entries)
+
+            # Verify cache is used (delete file, should still return cached data)
+            self.temp_path.unlink()
+            cached_entries = load_pending()
+            self.assertEqual(cached_entries, entries)
+
+    def test_load_pending_empty(self):
+        with patch("identify.PENDING", self.temp_path):
+            # File does not exist yet
+            self.assertFalse(self.temp_path.exists())
+            loaded_entries = load_pending()
+            self.assertEqual(loaded_entries, [])
+
+    def test_load_pending_corrupt(self):
+        with patch("identify.PENDING", self.temp_path):
+            self.temp_path.parent.mkdir(parents=True, exist_ok=True)
+            self.temp_path.write_text("{ corrupt json", encoding="utf-8")
+
+            loaded_entries = load_pending()
+            self.assertEqual(loaded_entries, [])
 
 if __name__ == "__main__":
     unittest.main()
