@@ -56,3 +56,63 @@ def test_parse_form_csv_malformed_date():
     assert result[0]["name"] == "Resistor"
     assert result[0]["date"] is None
     assert result[0]["time"] == "10:00:00"
+
+
+def test_parse_form_csv_happy_path():
+    from main import _parse_form_csv
+
+    csv_data = (
+        "Timestamp,Box,Item,Qty,Note\n"
+        "2023-01-01 12:30:00,5,Capacitor,20,Shelf 1\n"
+        "2023-01-02,6,Diode,30,\n"
+    )
+
+    result = _parse_form_csv(csv_data)
+
+    assert len(result) == 2
+
+    assert result[0]["line"] == 2
+    assert result[0]["box"] == 5
+    assert result[0]["name"] == "Capacitor"
+    assert result[0]["qty_txt"] == "20"
+    assert result[0]["note"] == "Shelf 1"
+    assert result[0]["date"] == "2023-01-01"
+    assert result[0]["time"] == "12:30:00"
+    assert result[0]["src"] == 1
+
+    assert result[1]["line"] == 3
+    assert result[1]["box"] == 6
+    assert result[1]["name"] == "Diode"
+    assert result[1]["qty_txt"] == "30"
+    assert result[1]["note"] == ""
+    assert result[1]["date"] == "2023-01-02"
+    assert result[1]["time"] == "00:00:01"
+    assert result[1]["src"] == 1
+
+
+def test_parse_form_csv_skipped_values():
+    from main import _parse_form_csv
+
+    csv_data = (
+        "Timestamp,Box,Item,Qty,Note\n"
+        "2023-01-01 10:00:00,,Missing Box,1,\n"
+        "2023-01-01 10:00:00,1,,1,\n"
+        "2023-01-01 10:00:00,abc,Bad Box,1,\n"
+        "2023-01-01 10:00:00,-5,Negative Box,1,\n"
+    )
+
+    result = _parse_form_csv(csv_data)
+
+    # First three should be skipped, negative box should be kept
+    assert len(result) == 1
+    assert result[0]["box"] == -5
+    assert result[0]["name"] == "Negative Box"
+
+
+def test_parse_form_csv_not_starting_with_timestamp():
+    from main import _parse_form_csv
+
+    csv_data = "Date,Box,Item,Qty,Note\n2023-01-01,1,Resistor,10,\n"
+    result = _parse_form_csv(csv_data)
+
+    assert result == []
