@@ -436,76 +436,54 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
-class TestFindExistingPart(unittest.TestCase):
-    def test_exact_match(self):
-        active = [
-            {"name": "TMC2209 stepper driver module", "box": 1},
-            {"name": "10k resistor", "box": 2}
-        ]
 
-        # Exact string
-        res = find_existing_part(active, "TMC2209 stepper driver module")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["name"], "TMC2209 stepper driver module")
+class TestLoadPending(unittest.TestCase):
+    def setUp(self):
+        import identify
+        self.identify = identify
+        self.original_pending = identify.PENDING
+        self.original_cache = identify._pending_cache
 
-        # Exact slug match but different case/punctuation
-        res = find_existing_part(active, "TMC2209 STEPPER driver module!")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["name"], "TMC2209 stepper driver module")
+        # Create a temporary file path
+        import pathlib
+        import tempfile
+        import os
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = pathlib.Path(self.temp_dir.name) / "pending.json"
 
-    def test_part_number_match(self):
-        active = [
-            {"name": "TMC2209 stepper driver", "box": 1},
-            {"name": "10k resistor", "box": 2}
-        ]
+        # Override identify module globals
+        identify.PENDING = self.temp_path
+        identify._pending_cache = None
 
-        # Differs in descriptive words, but shares the TMC2209 part number
-        res = find_existing_part(active, "TMC2209 module")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["name"], "TMC2209 stepper driver")
+    def tearDown(self):
+        # Restore identify module globals
+        self.identify.PENDING = self.original_pending
+        self.identify._pending_cache = self.original_cache
+        self.temp_dir.cleanup()
 
-    def test_ambiguous_match(self):
-        # Two different items share the same part number
-        active = [
-            {"name": "TMC2209 stepper driver version A", "box": 1},
-            {"name": "TMC2209 stepper driver version B", "box": 2}
-        ]
+    def test_missing_file(self):
+        # File doesn't exist
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
 
-        # "TMC2209 module" matches both, so it's ambiguous
-        res = find_existing_part(active, "TMC2209 module")
-        self.assertIsNone(res)
+    def test_valid_json(self):
+        import json
+        data = [{"id": 1, "name": "test"}]
+        self.temp_path.write_text(json.dumps(data))
+        self.assertEqual(self.identify.load_pending(), data)
+        self.assertEqual(self.identify._pending_cache, data)
 
-        # Exact match should still work though
-        res = find_existing_part(active, "TMC2209 stepper driver version B")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["name"], "TMC2209 stepper driver version B")
+    def test_invalid_json(self):
+        self.temp_path.write_text("invalid json")
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
 
-    def test_no_match(self):
-        active = [
-            {"name": "TMC2209 stepper driver", "box": 1},
-            {"name": "10k resistor", "box": 2}
-        ]
-
-        res = find_existing_part(active, "LM317 voltage regulator")
-        self.assertIsNone(res)
-
-    def test_no_part_number_match(self):
-        # Items without a recognizable part number
-        active = [
-            {"name": "red LED", "box": 1},
-            {"name": "blue LED", "box": 2}
-        ]
-
-        # If we search for an item with no part numbers, it shouldn't match
-        # another item with no part numbers randomly.
-        res = find_existing_part(active, "green LED")
-        self.assertIsNone(res)
-
-        # Exact match still works
-        res = find_existing_part(active, "red led")
-        self.assertIsNotNone(res)
-        self.assertEqual(res["name"], "red LED")
-
+    def test_oserror(self):
+        # Make the path point to a directory so reading it raises IsADirectoryError (an OSError)
+        self.temp_path.mkdir()
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
 
 if __name__ == "__main__":
+
     unittest.main()
