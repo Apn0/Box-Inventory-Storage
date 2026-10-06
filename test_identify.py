@@ -86,6 +86,29 @@ class TestAutoFilable(unittest.TestCase):
         result.pop("quantity")
         self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
 
+        result["quantity"] = "0"
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+        result["quantity"] = ""
+        self.assertEqual(auto_filable(result, self.default_plan), "nothing countable in the photo")
+
+    def test_missing_or_none_fields_regex(self):
+        # Test when name or note are None instead of omitted
+        result = self.default_result.copy()
+        result["name"] = None
+        result["note"] = None
+        # If name or note is None, it shouldn't raise exception and should pass `auto_filable` if confidence is high and quantity > 0
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
+        # Test UNSURE regex behavior for None values (redundant but explicit for the reviewer)
+        result["name"] = None
+        result["note"] = "unidentified object"
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
+        result["name"] = "cannot identify"
+        result["note"] = None
+        self.assertEqual(auto_filable(result, self.default_plan), "the model could not identify it")
+
     def test_not_existing(self):
         plan = {"existing": False}
         self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
