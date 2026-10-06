@@ -41,3 +41,18 @@ def test_identify_rejects_bad_key_with_401(client):
     response = client.post("/identify", data=b"x" * 50000,
                            headers={"Authorization": "Bearer wrong"})
     assert response.status_code == 401
+
+
+def test_parse_form_csv_malformed_date():
+    from main import _parse_form_csv
+
+    # A CSV row with a malformed date should catch the ValueError in parse_date
+    # and default the 'date' field to None
+    csv_data = "Timestamp,Box,Item,Qty,Note\nbad_date 10:00:00,1,Resistor,10,\n"
+
+    result = _parse_form_csv(csv_data)
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Resistor"
+    assert result[0]["date"] is None
+    assert result[0]["time"] == "10:00:00"
