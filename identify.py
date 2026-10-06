@@ -12,10 +12,10 @@ after you confirm. Writing appends to data/inventory_raw.csv and re-runs build.p
 The API key is read from the user's Desktop\\.env and is never written into
 index.html — the app itself stays offline and key-free.
 """
-from __future__ import annotations
 
 import argparse
 import base64
+import collections
 import csv
 import typing
 import dataclasses
@@ -176,15 +176,18 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     hit_ambiguous = False
 
     for item in active:
-        item_name = item["name"]
+        if "_slug" not in item:
+            item["_slug"] = slug(item["name"])
 
         # exact wins
-        if slug(item_name) == key:
+        if item["_slug"] == key:
             return item
 
         # then the part number
         if wanted and not hit_ambiguous:
-            if not wanted.isdisjoint(part_numbers(item_name)):
+            if "_part_numbers" not in item:
+                item["_part_numbers"] = part_numbers(item["name"])
+            if not wanted.isdisjoint(item["_part_numbers"]):
                 if hit is not None:
                     # Several boxes carry this part number — too ambiguous to pick one.
                     hit_ambiguous = True
@@ -511,7 +514,7 @@ def auto_filable(result: dict, plan: dict) -> str | None:
     """Reason to hold a photo back for review, or None when it is safe to file."""
     if result.get("confidence") != "high":
         return f"{result.get('confidence', 'unknown')} confidence"
-    if UNSURE.search(result.get("name", "")) or UNSURE.search(result.get("note", "")):
+    if UNSURE.search(result.get("name") or "") or UNSURE.search(result.get("note") or ""):
         return "the model could not identify it"
     if int(result.get("quantity") or 0) <= 0:
         return "nothing countable in the photo"
@@ -806,7 +809,6 @@ def append_rows(rows: list[dict]) -> None:
     today = datetime.date.today().strftime("%d/%m/%Y")
     written = []
     with RAW.open("a", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh, lineterminator="\r\n")
         for r in rows:
             buf = io.StringIO()
             csv.writer(buf, lineterminator="").writerow(
@@ -833,11 +835,7 @@ def parse_args(args_list: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(args_list)
 
 
-def run(args: argparse.Namespace) -> int:
-    paths = [pathlib.Path(p) for pattern in args.images for p in glob.glob(pattern)]
-    if not paths:
-        sys.exit("no files matched")
-
+def setup_config(args: argparse.Namespace, context: str) -> IdentifyConfig:
     anthropic_key = read_key("ANTHROPIC_API_KEY")
     gemini_key = read_key("GOOGLE_API_KEY")
     openai_key = read_key("OPENAI_API_KEY")
@@ -868,17 +866,54 @@ def run(args: argparse.Namespace) -> int:
                 sys.exit("pip install anthropic")
             print("  anthropic SDK not installed — skipping Claude")
 
-    data = load_inventory()
-    active = [i for i in data["items"] if i["status"] == "active"]
-    context = context_for_prompt(data, active)
-    accepted: list[dict] = []
-    config = IdentifyConfig(
+    return IdentifyConfig(
         client=client,
         context=context,
         provider=args.provider,
         gemini_key=gemini_key,
         openai_key=openai_key
     )
+
+
+def process_image(path: pathlib.Path, config: IdentifyConfig, data: dict,
+                  active: list[dict], per_box: dict, category_boxes: dict,
+                  args: argparse.Namespace) -> dict | None:
+    print(f"\n{path.name}")
+    try:
+        result = identify(path, config)
+    except Exception as exc:                     # noqa: BLE001 - report and continue
+        print(f"  failed: {exc}")
+        return None
+    if result is None:
+        return None
+
+    plan = decide(data, active, result, per_box, category_boxes)
+    print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
+    if result["note"]:
+        print(f"  note: {result['note']}")
+    print(f"  -> box {plan['box']}  ({plan['why']})")
+
+    if args.dry_run:
+        return None
+    if not args.yes:
+        answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
+        if answer in {"n", "no"}:
+            return None
+        if answer.isdigit():
+            plan["box"] = int(answer)
+
+    return file_one(path, result, plan)
+
+
+def run(args: argparse.Namespace) -> int:
+    paths = [pathlib.Path(p) for pattern in args.images for p in glob.glob(pattern)]
+    if not paths:
+        sys.exit("no files matched")
+
+    data = load_inventory()
+    active = [i for i in data["items"] if i["status"] == "active"]
+    context = context_for_prompt(data, active)
+    config = setup_config(args, context)
 
     per_box = {}
     category_boxes = collections.defaultdict(set)
@@ -888,32 +923,11 @@ def run(args: argparse.Namespace) -> int:
         if b < 400:
             category_boxes[i.get("category")].add(b)
 
+    accepted: list[dict] = []
     for path in paths:
-        print(f"\n{path.name}")
-        try:
-            result = identify(path, config)
-        except Exception as exc:                     # noqa: BLE001 - report and continue
-            print(f"  failed: {exc}")
-            continue
-        if result is None:
-            continue
-
-        plan = decide(data, active, result, per_box, category_boxes)
-        print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
-        if result["note"]:
-            print(f"  note: {result['note']}")
-        print(f"  -> box {plan['box']}  ({plan['why']})")
-
-        if args.dry_run:
-            continue
-        if not args.yes:
-            answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
-            if answer in {"n", "no"}:
-                continue
-            if answer.isdigit():
-                plan["box"] = int(answer)
-
-        accepted.append(file_one(path, result, plan))
+        filed = process_image(path, config, data, active, per_box, category_boxes, args)
+        if filed is not None:
+            accepted.append(filed)
 
     if not accepted:
         print("\nnothing filed")

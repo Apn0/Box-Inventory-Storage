@@ -120,6 +120,12 @@ def test_windows_path_extraction():
     assert name_safe == "cmd.exe"
 
 
+def test_port_in_use_oserror():
+    from server import port_in_use
+    with patch('server.socket.socket', side_effect=OSError("Mocked OSError")):
+        assert port_in_use(1234) is None
+
+
 def test_symlink_path_access(tmp_path):
     import pathlib
     import urllib.parse
@@ -150,3 +156,40 @@ def test_symlink_path_access(tmp_path):
     # Should not be allowed since the target resolves outside the folder
     is_allowed = target.is_file() and folder.resolve() in target.resolve().parents
     assert is_allowed == False
+
+def test_handler_exception_leakage(mocker):
+    from server import Handler
+    import json
+
+    handler = Handler.__new__(Handler)
+    handler._json = mocker.MagicMock()
+
+    # Mock headers and rfile
+    handler.headers = {"Content-Length": "100"}
+
+    # Test _handle_quickadd exception
+    handler.rfile = mocker.MagicMock()
+    handler.rfile.read.return_value = json.dumps({"name": "Test Part", "box": 5}).encode('utf-8')
+
+    with patch('identify.commit', side_effect=Exception("SUPER_SECRET_TOKEN_QUICKADD")):
+        handler._handle_quickadd()
+
+    # Check that error doesn't leak the token
+    handler._json.assert_called_with(500, {"error": "internal error"})
+
+    # Test _handle_confirm_dismiss exception
+    handler.rfile.read.return_value = json.dumps({"id": "123", "name": "Test Part", "box": 5}).encode('utf-8')
+
+    with patch('identify.load_pending', return_value=[{"id": "123", "photo": "test.jpg"}]):
+        with patch('identify.commit', side_effect=Exception("SUPER_SECRET_TOKEN_CONFIRM")):
+            handler._handle_confirm_dismiss("/confirm")
+
+    # Check that error doesn't leak the token
+    handler._json.assert_called_with(500, {"error": "internal error"})
+
+    # Test _handle_undo exception
+    with patch('identify.undo_last', side_effect=Exception("SUPER_SECRET_TOKEN_UNDO")):
+        handler._handle_undo()
+
+    # Check that error doesn't leak the token
+    handler._json.assert_called_with(409, {"error": "undo failed"})
