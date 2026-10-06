@@ -1,5 +1,9 @@
 import unittest
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
+import tempfile
+import json
+from pathlib import Path
+from unittest.mock import patch
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, save_pending, load_pending
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -86,6 +90,18 @@ class TestAutoFilable(unittest.TestCase):
     def test_not_existing(self):
         plan = {"existing": False}
         self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
+
+    def test_auto_filable_none_fields(self):
+        result = self.default_result.copy()
+        result["name"] = None
+        result["note"] = None
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
+    def test_auto_filable_missing_fields(self):
+        result = self.default_result.copy()
+        result.pop("name", None)
+        result.pop("note", None)
+        self.assertIsNone(auto_filable(result, self.default_plan))
 
     def test_auto_filable_success(self):
         self.assertIsNone(auto_filable(self.default_result, self.default_plan))
@@ -420,5 +436,54 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
+
+class TestLoadPending(unittest.TestCase):
+    def setUp(self):
+        import identify
+        self.identify = identify
+        self.original_pending = identify.PENDING
+        self.original_cache = identify._pending_cache
+
+        # Create a temporary file path
+        import pathlib
+        import tempfile
+        import os
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = pathlib.Path(self.temp_dir.name) / "pending.json"
+
+        # Override identify module globals
+        identify.PENDING = self.temp_path
+        identify._pending_cache = None
+
+    def tearDown(self):
+        # Restore identify module globals
+        self.identify.PENDING = self.original_pending
+        self.identify._pending_cache = self.original_cache
+        self.temp_dir.cleanup()
+
+    def test_missing_file(self):
+        # File doesn't exist
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
+    def test_valid_json(self):
+        import json
+        data = [{"id": 1, "name": "test"}]
+        self.temp_path.write_text(json.dumps(data))
+        self.assertEqual(self.identify.load_pending(), data)
+        self.assertEqual(self.identify._pending_cache, data)
+
+    def test_invalid_json(self):
+        self.temp_path.write_text("invalid json")
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
+    def test_oserror(self):
+        # Make the path point to a directory so reading it raises IsADirectoryError (an OSError)
+        self.temp_path.mkdir()
+        self.assertEqual(self.identify.load_pending(), [])
+        self.assertEqual(self.identify._pending_cache, [])
+
 if __name__ == "__main__":
+
     unittest.main()
