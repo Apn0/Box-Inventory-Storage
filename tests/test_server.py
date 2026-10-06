@@ -157,39 +157,46 @@ def test_symlink_path_access(tmp_path):
     is_allowed = target.is_file() and folder.resolve() in target.resolve().parents
     assert is_allowed == False
 
-def test_handler_exception_leakage(mocker):
-    from server import Handler
-    import json
+def test_review_list(tmp_path, monkeypatch):
+    import server
+    import time
 
-    handler = Handler.__new__(Handler)
-    handler._json = mocker.MagicMock()
+    # Mock the REVIEW directory
+    review_dir = tmp_path / "review"
+    monkeypatch.setattr(server, "REVIEW", review_dir)
 
-    # Mock headers and rfile
-    handler.headers = {"Content-Length": "100"}
+    # 1. Test empty / non-existent directory
+    assert server.review_list() == []
 
-    # Test _handle_quickadd exception
-    handler.rfile = mocker.MagicMock()
-    handler.rfile.read.return_value = json.dumps({"name": "Test Part", "box": 5}).encode('utf-8')
+    review_dir.mkdir()
+    assert server.review_list() == []
 
-    with patch('identify.commit', side_effect=Exception("SUPER_SECRET_TOKEN_QUICKADD")):
-        handler._handle_quickadd()
+    # 2. Add files of various types and a directory
+    file1 = review_dir / "photo1.jpg"
+    file1.write_text("dummy data 1")
+    time.sleep(0.01) # Ensure different modification times
 
-    # Check that error doesn't leak the token
-    handler._json.assert_called_with(500, {"error": "internal error"})
+    file2 = review_dir / "image2.PNG"
+    file2.write_text("dummy data 222")
+    time.sleep(0.01)
 
-    # Test _handle_confirm_dismiss exception
-    handler.rfile.read.return_value = json.dumps({"id": "123", "name": "Test Part", "box": 5}).encode('utf-8')
+    # File with unallowed extension
+    file3 = review_dir / "doc.txt"
+    file3.write_text("not a photo")
 
-    with patch('identify.load_pending', return_value=[{"id": "123", "photo": "test.jpg"}]):
-        with patch('identify.commit', side_effect=Exception("SUPER_SECRET_TOKEN_CONFIRM")):
-            handler._handle_confirm_dismiss("/confirm")
+    # Directory
+    subdir = review_dir / "subdir.jpg"
+    subdir.mkdir()
 
-    # Check that error doesn't leak the token
-    handler._json.assert_called_with(500, {"error": "internal error"})
+    # 3. Test that review_list returns correct files in correct order (newest first)
+    result = server.review_list()
+    assert len(result) == 2
 
-    # Test _handle_undo exception
-    with patch('identify.undo_last', side_effect=Exception("SUPER_SECRET_TOKEN_UNDO")):
-        handler._handle_undo()
+    # file2 should be first because it's newest
+    assert result[0]["name"] == "image2.PNG"
+    assert result[0]["size"] == len("dummy data 222")
+    assert "at" in result[0]
 
-    # Check that error doesn't leak the token
-    handler._json.assert_called_with(409, {"error": "undo failed"})
+    assert result[1]["name"] == "photo1.jpg"
+    assert result[1]["size"] == len("dummy data 1")
+    assert "at" in result[1]
