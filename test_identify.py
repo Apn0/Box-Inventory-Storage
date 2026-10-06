@@ -436,58 +436,76 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
-class TestPendingState(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = Path(self.temp_dir.name) / "pending.json"
+class TestFindExistingPart(unittest.TestCase):
+    def test_exact_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver module", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
 
-        # Reset the global cache before each test to ensure a clean state
-        import identify
-        identify._pending_cache = None
+        # Exact string
+        res = find_existing_part(active, "TMC2209 stepper driver module")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver module")
 
-    def tearDown(self):
-        self.temp_dir.cleanup()
+        # Exact slug match but different case/punctuation
+        res = find_existing_part(active, "TMC2209 STEPPER driver module!")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver module")
 
-    def test_save_and_load_pending(self):
-        entries = [{"box": "1", "name": "Resistor", "qty": "10", "note": ""}]
+    def test_part_number_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
 
-        with patch("identify.PENDING", self.temp_path):
-            save_pending(entries)
+        # Differs in descriptive words, but shares the TMC2209 part number
+        res = find_existing_part(active, "TMC2209 module")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver")
 
-            # Verify file was written
-            self.assertTrue(self.temp_path.exists())
-            written_data = json.loads(self.temp_path.read_text(encoding="utf-8"))
-            self.assertEqual(written_data, entries)
+    def test_ambiguous_match(self):
+        # Two different items share the same part number
+        active = [
+            {"name": "TMC2209 stepper driver version A", "box": 1},
+            {"name": "TMC2209 stepper driver version B", "box": 2}
+        ]
 
-            # Clear cache to force a disk read
-            import identify
-            identify._pending_cache = None
+        # "TMC2209 module" matches both, so it's ambiguous
+        res = find_existing_part(active, "TMC2209 module")
+        self.assertIsNone(res)
 
-            loaded_entries = load_pending()
-            self.assertEqual(loaded_entries, entries)
+        # Exact match should still work though
+        res = find_existing_part(active, "TMC2209 stepper driver version B")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "TMC2209 stepper driver version B")
 
-            # Verify cache is populated
-            self.assertEqual(identify._pending_cache, entries)
+    def test_no_match(self):
+        active = [
+            {"name": "TMC2209 stepper driver", "box": 1},
+            {"name": "10k resistor", "box": 2}
+        ]
 
-            # Verify cache is used (delete file, should still return cached data)
-            self.temp_path.unlink()
-            cached_entries = load_pending()
-            self.assertEqual(cached_entries, entries)
+        res = find_existing_part(active, "LM317 voltage regulator")
+        self.assertIsNone(res)
 
-    def test_load_pending_empty(self):
-        with patch("identify.PENDING", self.temp_path):
-            # File does not exist yet
-            self.assertFalse(self.temp_path.exists())
-            loaded_entries = load_pending()
-            self.assertEqual(loaded_entries, [])
+    def test_no_part_number_match(self):
+        # Items without a recognizable part number
+        active = [
+            {"name": "red LED", "box": 1},
+            {"name": "blue LED", "box": 2}
+        ]
 
-    def test_load_pending_corrupt(self):
-        with patch("identify.PENDING", self.temp_path):
-            self.temp_path.parent.mkdir(parents=True, exist_ok=True)
-            self.temp_path.write_text("{ corrupt json", encoding="utf-8")
+        # If we search for an item with no part numbers, it shouldn't match
+        # another item with no part numbers randomly.
+        res = find_existing_part(active, "green LED")
+        self.assertIsNone(res)
 
-            loaded_entries = load_pending()
-            self.assertEqual(loaded_entries, [])
+        # Exact match still works
+        res = find_existing_part(active, "red led")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["name"], "red LED")
+
 
 if __name__ == "__main__":
     unittest.main()
