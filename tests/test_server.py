@@ -174,11 +174,11 @@ def test_review_list(tmp_path, monkeypatch):
     # 2. Add files of various types and a directory
     file1 = review_dir / "photo1.jpg"
     file1.write_text("dummy data 1")
-    time.sleep(0.01) # Ensure different modification times
+    time.sleep(0.05) # Ensure different modification times
 
     file2 = review_dir / "image2.PNG"
     file2.write_text("dummy data 222")
-    time.sleep(0.01)
+    time.sleep(0.05)
 
     # File with unallowed extension
     file3 = review_dir / "doc.txt"
@@ -200,3 +200,66 @@ def test_review_list(tmp_path, monkeypatch):
     assert result[1]["name"] == "photo1.jpg"
     assert result[1]["size"] == len("dummy data 1")
     assert "at" in result[1]
+
+def test_photos_in_not_exists(tmp_path):
+    from server import _photos_in
+    import pathlib
+    non_existent = tmp_path / "does_not_exist"
+    assert _photos_in(non_existent) == []
+
+def test_photos_in_empty(tmp_path):
+    from server import _photos_in
+    empty_folder = tmp_path / "empty"
+    empty_folder.mkdir()
+    assert _photos_in(empty_folder) == []
+
+def test_photos_in_filtering_and_sorting(tmp_path):
+    from server import _photos_in
+    import time
+    import os
+
+    test_folder = tmp_path / "test_photos"
+    test_folder.mkdir()
+
+    # Create valid files
+    file1 = test_folder / "img1.jpg"
+    file1.write_text("1")
+
+    # We want file2 to be newer than file1
+    file2 = test_folder / "img2.PNG"
+    file2.write_text("22")
+
+    # file3 is even newer
+    file3 = test_folder / "img3.webp"
+    file3.write_text("333")
+
+    # Use os.utime to definitively set the modification times
+    now = time.time()
+    os.utime(file1, (now, now - 10))
+    os.utime(file2, (now, now - 5))
+    os.utime(file3, (now, now))
+
+
+    # Create invalid extension
+    invalid = test_folder / "document.txt"
+    invalid.write_text("text")
+
+    # Create subdirectory
+    subdir = test_folder / "subdir.jpg"
+    subdir.mkdir()
+
+    results = _photos_in(test_folder)
+
+    # It should skip subdir.jpg and document.txt
+    assert len(results) == 3
+
+    # It should be sorted reverse chronologically (newest first)
+    assert results[0]["name"] == "img3.webp"
+    assert results[0]["size"] == 3
+    assert "at" in results[0]
+
+    assert results[1]["name"] == "img2.PNG"
+    assert results[1]["size"] == 2
+
+    assert results[2]["name"] == "img1.jpg"
+    assert results[2]["size"] == 1
