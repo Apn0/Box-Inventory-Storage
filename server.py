@@ -93,7 +93,7 @@ def worker() -> None:
                 record(out)
         except Exception as exc:                        # noqa: BLE001
             record({"photo": path.name, "state": "failed", "ok": False,
-                    "error": str(exc)[:200]})
+                    "error": "internal error"})
             print(f"   worker error: {exc}")
         finally:
             _work.task_done()
@@ -356,7 +356,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         "note": body.get("note", "")},
                                        body.get("qty"), box, name)
             except Exception as exc:               # noqa: BLE001
-                return self._json(500, {"error": str(exc)[:200]})
+                print(f"  quickadd error: {exc}")
+                return self._json(500, {"error": "internal error"})
         record({"photo": None, "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
         print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
@@ -394,7 +395,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 done = identify.commit(entry, body.get("qty"),
                                        body.get("box"), body.get("name"))
             except Exception as exc:               # noqa: BLE001
-                return self._json(500, {"error": str(exc)[:200]})
+                print(f"  confirm error: {exc}")
+                return self._json(500, {"error": "internal error"})
             identify.save_pending(entries)
         record({"photo": entry["photo"], "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
@@ -407,7 +409,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 undone = identify.undo_last()
             except Exception as exc:               # noqa: BLE001
-                return self._json(409, {"error": str(exc)[:200]})
+                print(f"  undo error: {exc}")
+                return self._json(409, {"error": "undo failed"})
         if not undone:
             return self._json(200, {"ok": False, "message": "nothing to undo"})
         names = ", ".join(r["name"] for r in undone["rows"])
