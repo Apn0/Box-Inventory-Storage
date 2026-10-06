@@ -1,3 +1,4 @@
+from build import resolve_item, BULK_SENTINEL, COUNTED_MARK
 import pytest
 from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
 
@@ -6,10 +7,12 @@ def test_parse_date_happy_paths():
     assert parse_date("2023-12-01") == "2023-12-01"
     assert parse_date("01-12-2023") == "2023-12-01"
 
+
 def test_parse_date_empty_inputs():
     assert parse_date(None) is None
     assert parse_date("") is None
     assert parse_date("   ") is None
+
 
 def test_parse_date_error_paths():
     with pytest.raises(ValueError, match="unparseable date: 'not a date'"):
@@ -88,6 +91,7 @@ def test_find_split_items_basic():
     result = find_split_items(items)
     assert result == [{"name": "Resistor 10k", "boxes": [1, 2]}]
 
+
 def test_find_split_items_ignores_inactive():
     items = [
         {"name": "LED Blue", "box": 3, "status": "active"},
@@ -95,6 +99,7 @@ def test_find_split_items_ignores_inactive():
     ]
     result = find_split_items(items)
     assert result == []
+
 
 def test_find_split_items_slug_matching():
     items = [
@@ -107,6 +112,7 @@ def test_find_split_items_slug_matching():
     assert result[0]["name"] == "ESP32 Board"
     assert result[0]["boxes"] == [5, 6, 7]
 
+
 def test_find_split_items_duplicate_boxes():
     items = [
         {"name": "Wire", "box": 8, "status": "active"},
@@ -114,6 +120,7 @@ def test_find_split_items_duplicate_boxes():
     ]
     result = find_split_items(items)
     assert result == []
+
 
 def test_find_split_items_sorting():
     items = [
@@ -126,6 +133,7 @@ def test_find_split_items_sorting():
     assert len(result) == 2
     assert result[0]["name"] == "Arduino"
     assert result[1]["name"] == "Zener Diode"
+
 
 @pytest.mark.parametrize("box, expected", [
     (1, "1"),
@@ -148,6 +156,7 @@ def test_container_of(box, expected):
     """
     assert container_of(box) == expected
 
+
 @pytest.mark.parametrize("name, expected", [
     # Happy paths - typical part numbers
     ("tmc2209", {"tmc2209"}),
@@ -158,8 +167,10 @@ def test_container_of(box, expected):
     ("ESP32", {"esp32"}),
     ("LM393 Sensor", {"lm393"}),
     # Special characters and separators
-    ("hc-sr04", {"sr04"}), # 'hc' is discarded, 'sr04' matches
-    ("neo-6m gps", set()), # slug turns it into 'neo 6m gps'. 'neo' has no digits, '6m' lacks 2+ letters
+    ("hc-sr04", {"sr04"}),  # 'hc' is discarded, 'sr04' matches
+    # slug turns it into 'neo 6m gps'. 'neo' has no digits, '6m' lacks 2+
+    # letters
+    ("neo-6m gps", set()),
     # Multiple parts
     ("esp32 with mt3608", {"esp32", "mt3608"}),
     # Bare runs of digits (4+ digits)
@@ -170,15 +181,15 @@ def test_container_of(box, expected):
     ("ch340g chip", {"ch340g"}),
     ("lm2596s module", {"lm2596s"}),
     # Negatives - should not match
-    ("module", set()), # no digits
-    ("sensor", set()), # no digits
-    ("v2", set()), # only 1 letter
-    ("m3", set()), # only 1 letter
-    ("42", set()), # bare run of digits but less than 4 digits
-    ("123", set()), # bare run of digits but less than 4 digits
-    ("esp3", set()), # only 1 digit, requires 2+ digits according to actual regex
-    ("", set()), # empty string
-    ("   ", set()), # whitespace
+    ("module", set()),  # no digits
+    ("sensor", set()),  # no digits
+    ("v2", set()),  # only 1 letter
+    ("m3", set()),  # only 1 letter
+    ("42", set()),  # bare run of digits but less than 4 digits
+    ("123", set()),  # bare run of digits but less than 4 digits
+    ("esp3", set()),  # only 1 digit, requires 2+ digits according to actual regex
+    ("", set()),  # empty string
+    ("   ", set()),  # whitespace
 ])
 def test_part_numbers(name, expected):
     """Test extracting part numbers from a string.
@@ -186,11 +197,12 @@ def test_part_numbers(name, expected):
     """
     assert part_numbers(name) == expected
 
+
 @pytest.mark.parametrize("name, note, expected", [
     # Basic matches
     ("ESP32", "", "mcu"),
-    ("Capacitor", "10uF", "misc"), # Default category
-    ("LED", "Red", "display"), # Case insensitive match
+    ("Capacitor", "10uF", "misc"),  # Default category
+    ("LED", "Red", "display"),  # Case insensitive match
 
     # Matching in note vs name
     ("Unknown item", "Use as an mcu", "mcu"),
@@ -199,15 +211,17 @@ def test_part_numbers(name, expected):
 
     # Word boundaries (\b)
     ("mcu", "", "mcu"),
-    ("mcus", "", "misc"), # Should not match \bmcu\b
-    ("fan", "", "motor"), # \bfan\b
-    ("fancy", "", "misc"), # Should not match
-    ("adc", "", "interface"), # \badc\b
+    ("mcus", "", "misc"),  # Should not match \bmcu\b
+    ("fan", "", "motor"),  # \bfan\b
+    ("fancy", "", "misc"),  # Should not match
+    ("adc", "", "interface"),  # \badc\b
     ("adcs", "", "misc"),
 
     # Precedence (first matching rule wins)
-    ("esp32", "with gps", "mcu"), # "mcu" comes before "sensor" (gps)
-    ("gps", "with esp32", "mcu"), # even if gps is in name, esp32 matches the 'mcu' rule which is checked first
+    ("esp32", "with gps", "mcu"),  # "mcu" comes before "sensor" (gps)
+    # even if gps is in name, esp32 matches the 'mcu' rule which is checked
+    # first
+    ("gps", "with esp32", "mcu"),
 
     # Complex names
     ("esp8266 node mcu", "", "mcu"),
@@ -220,7 +234,6 @@ def test_categorise(name, note, expected):
     """Test the categorise function for assigning categories to items based on regex patterns."""
     assert categorise(name, note) == expected
 
-from build import resolve_item, BULK_SENTINEL, COUNTED_MARK
 
 def test_resolve_item_basic():
     history = [
@@ -248,6 +261,7 @@ def test_resolve_item_basic():
     assert result["restated"] is False
     assert result["history"] == []
 
+
 def test_resolve_item_sorting():
     history = [
         {
@@ -273,8 +287,9 @@ def test_resolve_item_sorting():
     assert result["qty"] == 5
     assert result["note"] == "Later"
     assert len(result["history"]) == 2
-    assert result["history"][0]["qty"] == "2" # The earlier one
-    assert result["history"][1]["qty"] == "5" # The later one
+    assert result["history"][0]["qty"] == "2"  # The earlier one
+    assert result["history"][1]["qty"] == "5"  # The later one
+
 
 def test_resolve_item_empty_name():
     history = [
@@ -291,16 +306,29 @@ def test_resolve_item_empty_name():
     result = resolve_item(1, "empty", history)
     assert result is None
 
+
 def test_resolve_item_qty_and_status():
     # Unknown quantity
-    history_unknown = [{"name": "Item1", "qty_txt": "", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}]
+    history_unknown = [{"name": "Item1",
+                        "qty_txt": "",
+                        "note": "",
+                        "date": "2023-10-01",
+                        "time": "10:00:00",
+                        "src": 0,
+                        "line": 1}]
     res = resolve_item(1, "item1", history_unknown)
     assert res["countType"] == "unknown"
     assert res["qty"] is None
     assert res["status"] == "active"
 
     # Bulk quantity
-    history_bulk = [{"name": "Item2", "qty_txt": str(BULK_SENTINEL), "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}]
+    history_bulk = [{"name": "Item2",
+                     "qty_txt": str(BULK_SENTINEL),
+                     "note": "",
+                     "date": "2023-10-01",
+                     "time": "10:00:00",
+                     "src": 0,
+                     "line": 1}]
     res2 = resolve_item(2, "item2", history_bulk)
     assert res2["countType"] == "bulk"
     assert res2["qty"] is None
@@ -308,27 +336,55 @@ def test_resolve_item_qty_and_status():
     assert res2["peak"] is None
 
     # Exact quantity gone
-    history_gone = [{"name": "Item3", "qty_txt": "0", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}]
+    history_gone = [{"name": "Item3",
+                     "qty_txt": "0",
+                     "note": "",
+                     "date": "2023-10-01",
+                     "time": "10:00:00",
+                     "src": 0,
+                     "line": 1}]
     res3 = resolve_item(3, "item3", history_gone)
     assert res3["countType"] == "exact"
     assert res3["qty"] == 0
     assert res3["status"] == "gone"
 
+
 def test_resolve_item_peak():
     history = [
-        {"name": "PeakItem", "qty_txt": "2", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "PeakItem", "qty_txt": "15", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
-        {"name": "PeakItem", "qty_txt": "5", "note": "", "date": "2023-10-03", "time": "10:00:00", "src": 0, "line": 3}
+        {"name": "PeakItem",
+         "qty_txt": "2",
+         "note": "",
+         "date": "2023-10-01",
+         "time": "10:00:00",
+         "src": 0,
+         "line": 1},
+        {"name": "PeakItem",
+         "qty_txt": "15",
+         "note": "",
+         "date": "2023-10-02",
+         "time": "10:00:00",
+         "src": 0,
+         "line": 2},
+        {"name": "PeakItem",
+         "qty_txt": "5",
+         "note": "",
+         "date": "2023-10-03",
+         "time": "10:00:00",
+         "src": 0,
+         "line": 3}
     ]
     res = resolve_item(1, "peakitem", history)
     assert res["qty"] == 5
     assert res["peak"] == 15
 
+
 def test_resolve_item_conflict_restated():
     # Restated
     history_restated = [
-        {"name": "RestatedItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "RestatedItem", "qty_txt": "5", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
+        {"name": "RestatedItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "RestatedItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
     ]
     res_restated = resolve_item(1, "restateditem", history_restated)
     assert res_restated["restated"] is True
@@ -336,8 +392,10 @@ def test_resolve_item_conflict_restated():
 
     # Conflict
     history_conflict = [
-        {"name": "ConflictItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "ConflictItem", "qty_txt": "10", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
+        {"name": "ConflictItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "ConflictItem", "qty_txt": "10", "note": "",
+            "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
     ]
     res_conflict = resolve_item(1, "conflictitem", history_conflict)
     assert res_conflict["restated"] is False
@@ -345,37 +403,55 @@ def test_resolve_item_conflict_restated():
 
     # Conflict overridden by deliberate recount source=1
     history_deliberate_src = [
-        {"name": "ConflictItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "ConflictItem", "qty_txt": "10", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 1, "line": 2}
+        {"name": "ConflictItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "ConflictItem", "qty_txt": "10", "note": "",
+            "date": "2023-10-02", "time": "10:00:00", "src": 1, "line": 2}
     ]
     res_delib_src = resolve_item(1, "conflictitem", history_deliberate_src)
     assert res_delib_src["conflict"] is False
 
     # Conflict overridden by deliberate recount note
     history_deliberate_note = [
-        {"name": "ConflictItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "ConflictItem", "qty_txt": "10", "note": COUNTED_MARK, "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
+        {"name": "ConflictItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "ConflictItem", "qty_txt": "10", "note": COUNTED_MARK,
+            "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
     ]
     res_delib_note = resolve_item(1, "conflictitem", history_deliberate_note)
     assert res_delib_note["conflict"] is False
 
+
 def test_resolve_item_note_resolution():
     history = [
-        {"name": "NoteItem", "qty_txt": "5", "note": "Old Note", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "NoteItem", "qty_txt": "5", "note": "", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2}
+        {"name": "NoteItem", "qty_txt": "5", "note": "Old Note",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "NoteItem",
+         "qty_txt": "5",
+         "note": "",
+         "date": "2023-10-02",
+         "time": "10:00:00",
+         "src": 0,
+         "line": 2}
     ]
     res = resolve_item(1, "noteitem", history)
     assert res["note"] == "Old Note"
 
+
 def test_build_items_basic():
     raw_rows = [
         # Box 2: "Arduino" (only 1 row)
-        {"box": 2, "name": "Arduino", "qty_txt": "1", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 3},
-        # Box 1: "Zener Diode" (will be sorted after "Resistor" in the same box)
-        {"box": 1, "name": "Zener Diode", "qty_txt": "20", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 4},
+        {"box": 2, "name": "Arduino", "qty_txt": "1", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 3},
+        # Box 1: "Zener Diode" (will be sorted after "Resistor" in the same
+        # box)
+        {"box": 1, "name": "Zener Diode", "qty_txt": "20", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 4},
         # Box 1: "Resistor" (duplicate - newest wins)
-        {"box": 1, "name": "Resistor", "qty_txt": "10", "note": "Old", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"box": 1, "name": "Resistor", "qty_txt": "5", "note": "New", "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
+        {"box": 1, "name": "Resistor", "qty_txt": "10", "note": "Old",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"box": 1, "name": "Resistor", "qty_txt": "5", "note": "New",
+            "date": "2023-10-02", "time": "10:00:00", "src": 0, "line": 2},
     ]
 
     items, _ = build_items(raw_rows)
@@ -396,10 +472,13 @@ def test_build_items_basic():
     assert items[2]["name"] == "Arduino"
     assert items[2]["qty"] == 1
 
+
 def test_build_items_empty_ignored():
     raw_rows = [
-        {"box": 1, "name": "Valid Item", "qty_txt": "1", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"box": 1, "name": "", "qty_txt": "5", "note": "Empty placeholder", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 2},
+        {"box": 1, "name": "Valid Item", "qty_txt": "1", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"box": 1, "name": "", "qty_txt": "5", "note": "Empty placeholder",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 2},
     ]
 
     items, _ = build_items(raw_rows)
@@ -407,9 +486,11 @@ def test_build_items_empty_ignored():
     assert len(items) == 1
     assert items[0]["name"] == "Valid Item"
 
+
 def test_build_items_empty_input():
     items, _ = build_items([])
     assert items == []
+
 
 def test_build_items_mocked(mocker):
     # Mock group_rows to return predefined out-of-order groups
@@ -424,9 +505,12 @@ def test_build_items_mocked(mocker):
     def side_effect_resolve_item(box, key_slug, history):
         if key_slug == "c-slug":
             return None
-        return {"box": box, "name": key_slug, "slug": key_slug, "resolved": True}
+        return {"box": box, "name": key_slug,
+                "slug": key_slug, "resolved": True}
 
-    mock_resolve_item = mocker.patch("build.resolve_item", side_effect=side_effect_resolve_item)
+    mock_resolve_item = mocker.patch(
+        "build.resolve_item",
+        side_effect=side_effect_resolve_item)
 
     # Call build_items with dummy raw rows
     raw_rows = [{"dummy": "row"}]
@@ -441,24 +525,45 @@ def test_build_items_mocked(mocker):
     mock_resolve_item.assert_any_call(1, "c-slug", [{"history": "c"}])
     mock_resolve_item.assert_any_call(2, "b-slug", [{"history": "b"}])
 
-    # Verify the output list only contains non-None items in expected sorted order
+    # Verify the output list only contains non-None items in expected sorted
+    # order
     assert len(items) == 2
-    assert items[0] == {"box": 1, "name": "a-slug", "slug": "a-slug", "resolved": True}
-    assert items[1] == {"box": 2, "name": "b-slug", "slug": "b-slug", "resolved": True}
+    assert items[0] == {
+        "box": 1,
+        "name": "a-slug",
+        "slug": "a-slug",
+        "resolved": True}
+    assert items[1] == {
+        "box": 2,
+        "name": "b-slug",
+        "slug": "b-slug",
+        "resolved": True}
+
 
 def test_resolve_item_id_fallback():
     history = [
-        {"name": "NamelessItem", "qty_txt": "5", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}
+        {"name": "NamelessItem", "qty_txt": "5", "note": "",
+            "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}
     ]
     res = resolve_item(1, "", history)
     assert res["id"] == "1-item"
 
+
 def test_resolve_item_complex_history():
     history = [
-        {"name": "Resistor", "qty_txt": "10", "note": "", "date": "2023-01-01", "time": "10:00:00", "src": 0, "line": 1},
-        {"name": "Resistor", "qty_txt": "5", "note": "used 5", "date": "2023-01-02", "time": "11:00:00", "src": 0, "line": 2},
-        {"name": "Resistor", "qty_txt": "20", "note": COUNTED_MARK, "date": "2023-01-03", "time": "12:00:00", "src": 0, "line": 3},
-        {"name": "Resistor", "qty_txt": "15", "note": "used 5", "date": "2023-01-04", "time": "13:00:00", "src": 0, "line": 4},
+        {"name": "Resistor",
+         "qty_txt": "10",
+         "note": "",
+         "date": "2023-01-01",
+         "time": "10:00:00",
+         "src": 0,
+         "line": 1},
+        {"name": "Resistor", "qty_txt": "5", "note": "used 5",
+            "date": "2023-01-02", "time": "11:00:00", "src": 0, "line": 2},
+        {"name": "Resistor", "qty_txt": "20", "note": COUNTED_MARK,
+            "date": "2023-01-03", "time": "12:00:00", "src": 0, "line": 3},
+        {"name": "Resistor", "qty_txt": "15", "note": "used 5",
+            "date": "2023-01-04", "time": "13:00:00", "src": 0, "line": 4},
     ]
     # Scramble the order to test sorting logic
     history = [history[2], history[0], history[3], history[1]]
@@ -470,10 +575,62 @@ def test_resolve_item_complex_history():
     assert result["peak"] == 20
     assert result["countType"] == "exact"
     assert result["status"] == "active"
-    assert result["conflict"] is True # distinct qtys > 1 and last is not deliberate
+    # distinct qtys > 1 and last is not deliberate
+    assert result["conflict"] is True
     assert len(result["history"]) == 4
     # ensure sorted properly by dates
     assert result["history"][0]["qty"] == "10"
     assert result["history"][1]["qty"] == "5"
     assert result["history"][2]["qty"] == "20"
     assert result["history"][3]["qty"] == "15"
+
+
+def test_group_rows_basic():
+    raw_rows = [
+        {"box": 1, "name": "Resistor", "qty_txt": "10"},
+        {"box": 1, "name": "Resistor", "qty_txt": "5"},
+        {"box": 2, "name": "Capacitor", "qty_txt": "2"},
+    ]
+    groups = group_rows(raw_rows)
+    assert len(groups) == 2
+
+    assert (1, "resistor") in groups
+    assert len(groups[(1, "resistor")]) == 2
+    assert groups[(1, "resistor")][0]["qty_txt"] == "10"
+    assert groups[(1, "resistor")][1]["qty_txt"] == "5"
+
+    assert (2, "capacitor") in groups
+    assert len(groups[(2, "capacitor")]) == 1
+
+
+def test_group_rows_empty():
+    groups = group_rows([])
+    assert groups == {}
+
+
+def test_group_rows_slug_normalization():
+    raw_rows = [
+        {"box": 1, "name": "ESP32 Board", "qty_txt": "1"},
+        {"box": 1, "name": "esp32 board", "qty_txt": "2"},
+        {"box": 1, "name": "  ESP32   BOARD  ", "qty_txt": "3"},
+    ]
+    groups = group_rows(raw_rows)
+    assert len(groups) == 1
+
+    key = (1, "esp32 board")
+    assert key in groups
+    assert len(groups[key]) == 3
+    assert groups[key][0]["qty_txt"] == "1"
+    assert groups[key][1]["qty_txt"] == "2"
+    assert groups[key][2]["qty_txt"] == "3"
+
+
+def test_group_rows_different_boxes():
+    raw_rows = [
+        {"box": 1, "name": "Arduino", "qty_txt": "1"},
+        {"box": 2, "name": "Arduino", "qty_txt": "2"},
+    ]
+    groups = group_rows(raw_rows)
+    assert len(groups) == 2
+    assert (1, "arduino") in groups
+    assert (2, "arduino") in groups
