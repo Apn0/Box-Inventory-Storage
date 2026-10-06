@@ -1,8 +1,8 @@
 import pathlib
 import tempfile
 import unittest
-from unittest.mock import patch
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, archive_name
+import unittest.mock
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -435,56 +435,82 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
-
-from unittest.mock import patch
-
-class TestLoadChanges(unittest.TestCase):
+class TestLoadPending(unittest.TestCase):
     def setUp(self):
         import identify
-        identify._changes_cache = None
-        self.identify = identify
+        self.original_cache = identify._pending_cache
+        identify._pending_cache = None
 
     def tearDown(self):
-        self.identify._changes_cache = None
+        import identify
+        identify._pending_cache = self.original_cache
 
-    def test_cache_used(self):
-        self.identify._changes_cache = [{"mock": "data"}]
-        self.assertEqual(self.identify.load_changes(), [{"mock": "data"}])
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_cache_populated(self, mock_read_text, mock_exists):
+        import identify
+        identify._pending_cache = [{"some": "data"}]
 
-    @patch('identify.CHANGES')
-    def test_file_does_not_exist(self, mock_changes):
-        mock_changes.exists.return_value = False
-        result = self.identify.load_changes()
+        result = identify.load_pending()
+
+        self.assertEqual(result, [{"some": "data"}])
+        mock_exists.assert_not_called()
+        mock_read_text.assert_not_called()
+
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_does_not_exist(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = False
+
+        result = identify.load_pending()
+
         self.assertEqual(result, [])
-        self.assertEqual(self.identify._changes_cache, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_not_called()
+        self.assertEqual(identify._pending_cache, [])
 
-    @patch('identify.CHANGES')
-    def test_success(self, mock_changes):
-        mock_changes.exists.return_value = True
-        mock_changes.read_text.return_value = '[{"test": "value"}]'
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_valid_json(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.return_value = '[{"box": 1, "name": "resistor"}]'
 
-        result = self.identify.load_changes()
-        self.assertEqual(result, [{"test": "value"}])
-        self.assertEqual(self.identify._changes_cache, [{"test": "value"}])
-        mock_changes.read_text.assert_called_once_with(encoding="utf-8")
+        result = identify.load_pending()
 
-    @patch('identify.CHANGES')
-    def test_json_decode_error(self, mock_changes):
-        mock_changes.exists.return_value = True
-        mock_changes.read_text.return_value = 'not json'
+        self.assertEqual(result, [{"box": 1, "name": "resistor"}])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [{"box": 1, "name": "resistor"}])
 
-        result = self.identify.load_changes()
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_invalid_json(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.return_value = 'invalid json'
+
+        result = identify.load_pending()
+
         self.assertEqual(result, [])
-        self.assertEqual(self.identify._changes_cache, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [])
 
-    @patch('identify.CHANGES')
-    def test_os_error(self, mock_changes):
-        mock_changes.exists.return_value = True
-        mock_changes.read_text.side_effect = OSError("mock error")
+    @unittest.mock.patch("pathlib.Path.exists")
+    @unittest.mock.patch("pathlib.Path.read_text")
+    def test_file_exists_os_error(self, mock_read_text, mock_exists):
+        import identify
+        mock_exists.return_value = True
+        mock_read_text.side_effect = OSError("Disk read error")
 
-        result = self.identify.load_changes()
+        result = identify.load_pending()
+
         self.assertEqual(result, [])
-        self.assertEqual(self.identify._changes_cache, [])
+        mock_exists.assert_called_once()
+        mock_read_text.assert_called_once_with(encoding="utf-8")
+        self.assertEqual(identify._pending_cache, [])
 
 
 if __name__ == "__main__":
