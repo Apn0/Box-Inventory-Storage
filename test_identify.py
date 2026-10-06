@@ -1,7 +1,8 @@
-import unittest
-from unittest.mock import patch, MagicMock
 import pathlib
-from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, file_one, INBOX, COUNTED_MARK
+import tempfile
+import unittest
+from unittest.mock import patch
+from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt, archive_name
 
 class TestPartNumbers(unittest.TestCase):
     def test_letters_then_digits(self):
@@ -434,56 +435,37 @@ class TestContextForPromptAdditional(unittest.TestCase):
         with self.assertRaises(KeyError):
             context_for_prompt(data, active)
 
-class TestFileOne(unittest.TestCase):
-    @patch('identify.shutil.copy2')
-    @patch('identify.archive_name')
-    def test_file_one_in_inbox(self, mock_archive_name, mock_copy2):
-        mock_path = MagicMock(spec=pathlib.Path)
-        mock_path.suffix = ".jpg"
-        mock_path.resolve.return_value.parents = [INBOX]
+class TestArchiveName(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.patcher = patch("identify.PHOTOS", pathlib.Path(self.temp_dir.name))
+        self.mock_photos = self.patcher.start()
 
-        mock_archive_name.return_value = pathlib.Path("/mock/archive/path.jpg")
+    def tearDown(self):
+        self.patcher.stop()
+        self.temp_dir.cleanup()
 
-        result = {"note": "some note"}
-        plan = {"box": 42, "name": "Test Part", "quantity": 5}
+    def test_basic(self):
+        target = archive_name(1, "Resistor 10k", ".jpg")
+        self.assertEqual(target.name, "1_resistor_10k.jpg")
 
-        res = file_one(mock_path, result, plan)
+    def test_special_chars(self):
+        target = archive_name(2, "Capacitor, 100uF (50V)!", ".png")
+        self.assertEqual(target.name, "2_capacitor_100uf_50v.png")
 
-        mock_archive_name.assert_called_once_with(42, "Test Part", ".jpg")
-        mock_copy2.assert_called_once_with(mock_path, mock_archive_name.return_value)
-        mock_path.unlink.assert_called_once()
+    def test_long_name(self):
+        name = "A" * 50
+        target = archive_name(3, name, ".webp")
+        self.assertEqual(target.name, f"3_{'a'*40}.webp")
 
-        self.assertEqual(res, {
-            "box": 42,
-            "name": "Test Part",
-            "quantity": 5,
-            "note": f"some note ({COUNTED_MARK})"
-        })
-
-    @patch('identify.shutil.copy2')
-    @patch('identify.archive_name')
-    def test_file_one_outside_inbox(self, mock_archive_name, mock_copy2):
-        mock_path = MagicMock(spec=pathlib.Path)
-        mock_path.suffix = ".png"
-        mock_path.resolve.return_value.parents = [pathlib.Path("/some/other/path")]
-
-        mock_archive_name.return_value = pathlib.Path("/mock/archive/path.png")
-
-        result = {"note": ""}
-        plan = {"box": 10, "name": "Another Part", "quantity": "many"}
-
-        res = file_one(mock_path, result, plan)
-
-        mock_archive_name.assert_called_once_with(10, "Another Part", ".png")
-        mock_copy2.assert_called_once_with(mock_path, mock_archive_name.return_value)
-        mock_path.unlink.assert_not_called()
-
-        self.assertEqual(res, {
-            "box": 10,
-            "name": "Another Part",
-            "quantity": "many",
-            "note": f"({COUNTED_MARK})"
-        })
+    def test_conflict(self):
+        target1 = archive_name(4, "test", ".jpg")
+        target1.touch()
+        target2 = archive_name(4, "test", ".jpg")
+        self.assertEqual(target2.name, "4_test_2.jpg")
+        target2.touch()
+        target3 = archive_name(4, "test", ".jpg")
+        self.assertEqual(target3.name, "4_test_3.jpg")
 
 if __name__ == "__main__":
 
