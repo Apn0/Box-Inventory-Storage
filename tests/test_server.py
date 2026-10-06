@@ -120,6 +120,12 @@ def test_windows_path_extraction():
     assert name_safe == "cmd.exe"
 
 
+def test_port_in_use_oserror():
+    from server import port_in_use
+    with patch('server.socket.socket', side_effect=OSError("Mocked OSError")):
+        assert port_in_use(1234) is None
+
+
 def test_symlink_path_access(tmp_path):
     import pathlib
     import urllib.parse
@@ -150,3 +156,47 @@ def test_symlink_path_access(tmp_path):
     # Should not be allowed since the target resolves outside the folder
     is_allowed = target.is_file() and folder.resolve() in target.resolve().parents
     assert is_allowed == False
+
+def test_review_list(tmp_path, monkeypatch):
+    import server
+    import time
+
+    # Mock the REVIEW directory
+    review_dir = tmp_path / "review"
+    monkeypatch.setattr(server, "REVIEW", review_dir)
+
+    # 1. Test empty / non-existent directory
+    assert server.review_list() == []
+
+    review_dir.mkdir()
+    assert server.review_list() == []
+
+    # 2. Add files of various types and a directory
+    file1 = review_dir / "photo1.jpg"
+    file1.write_text("dummy data 1")
+    time.sleep(0.01) # Ensure different modification times
+
+    file2 = review_dir / "image2.PNG"
+    file2.write_text("dummy data 222")
+    time.sleep(0.01)
+
+    # File with unallowed extension
+    file3 = review_dir / "doc.txt"
+    file3.write_text("not a photo")
+
+    # Directory
+    subdir = review_dir / "subdir.jpg"
+    subdir.mkdir()
+
+    # 3. Test that review_list returns correct files in correct order (newest first)
+    result = server.review_list()
+    assert len(result) == 2
+
+    # file2 should be first because it's newest
+    assert result[0]["name"] == "image2.PNG"
+    assert result[0]["size"] == len("dummy data 222")
+    assert "at" in result[0]
+
+    assert result[1]["name"] == "photo1.jpg"
+    assert result[1]["size"] == len("dummy data 1")
+    assert "at" in result[1]
