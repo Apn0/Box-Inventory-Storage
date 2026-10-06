@@ -337,11 +337,11 @@ def find_split_items(items: list[dict]) -> list[dict]:
         by_name.setdefault(k, []).append(i["box"])
         if k not in orig_name:
             orig_name[k] = i["name"]
-    split_items = [
-        {"name": orig_name[k], "boxes": sorted(set(v))}
-        for k, v in by_name.items()
-        if len(set(v)) > 1
-    ]
+    split_items = []
+    for k, v in by_name.items():
+        unique_boxes = set(v)
+        if len(unique_boxes) > 1:
+            split_items.append({"name": orig_name[k], "boxes": sorted(unique_boxes)})
     split_items.sort(key=lambda s: s["name"].lower())
     return split_items
 
