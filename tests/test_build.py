@@ -591,6 +591,7 @@ def test_group_rows_basic():
         {"box": 1, "name": "Resistor", "qty_txt": "5"},
         {"box": 2, "name": "Capacitor", "qty_txt": "2"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 2
 
@@ -604,6 +605,7 @@ def test_group_rows_basic():
 
 
 def test_group_rows_empty():
+    from build import group_rows
     groups = group_rows([])
     assert groups == {}
 
@@ -614,6 +616,7 @@ def test_group_rows_slug_normalization():
         {"box": 1, "name": "esp32 board", "qty_txt": "2"},
         {"box": 1, "name": "  ESP32   BOARD  ", "qty_txt": "3"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 1
 
@@ -630,6 +633,7 @@ def test_group_rows_different_boxes():
         {"box": 1, "name": "Arduino", "qty_txt": "1"},
         {"box": 2, "name": "Arduino", "qty_txt": "2"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 2
     assert (1, "arduino") in groups

@@ -200,3 +200,40 @@ def test_review_list(tmp_path, monkeypatch):
     assert result[1]["name"] == "photo1.jpg"
     assert result[1]["size"] == len("dummy data 1")
     assert "at" in result[1]
+
+def test_record_basic(monkeypatch):
+    import server
+
+    # Reset the global state for testing
+    monkeypatch.setattr(server, "_activity", [])
+
+    entry1 = {"event": "test_event_1"}
+    server.record(entry1)
+
+    assert len(server._activity) == 1
+    assert server._activity[0]["event"] == "test_event_1"
+    assert "at" in server._activity[0]
+
+    entry2 = {"event": "test_event_2"}
+    server.record(entry2)
+
+    assert len(server._activity) == 2
+    assert server._activity[1]["event"] == "test_event_2"
+    assert "at" in server._activity[1]
+
+def test_record_truncation(monkeypatch):
+    import server
+    import datetime
+
+    # Reset the global state for testing
+    monkeypatch.setattr(server, "_activity", [])
+
+    # Add 50 entries
+    for i in range(50):
+        server.record({"id": i})
+
+    assert len(server._activity) == 40
+    # The first 10 entries (0-9) should be dropped,
+    # so the remaining list should start from id 10 to 49
+    assert server._activity[0]["id"] == 10
+    assert server._activity[-1]["id"] == 49
