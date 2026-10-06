@@ -1,6 +1,6 @@
 from build import resolve_item, BULK_SENTINEL, COUNTED_MARK
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
+from build import parse_date, group_rows, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -591,6 +591,7 @@ def test_group_rows_basic():
         {"box": 1, "name": "Resistor", "qty_txt": "5"},
         {"box": 2, "name": "Capacitor", "qty_txt": "2"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 2
 
@@ -604,6 +605,7 @@ def test_group_rows_basic():
 
 
 def test_group_rows_empty():
+    from build import group_rows
     groups = group_rows([])
     assert groups == {}
 
@@ -614,6 +616,7 @@ def test_group_rows_slug_normalization():
         {"box": 1, "name": "esp32 board", "qty_txt": "2"},
         {"box": 1, "name": "  ESP32   BOARD  ", "qty_txt": "3"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 1
 
@@ -630,6 +633,7 @@ def test_group_rows_different_boxes():
         {"box": 1, "name": "Arduino", "qty_txt": "1"},
         {"box": 2, "name": "Arduino", "qty_txt": "2"},
     ]
+    from build import group_rows
     groups = group_rows(raw_rows)
     assert len(groups) == 2
     assert (1, "arduino") in groups
