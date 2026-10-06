@@ -211,8 +211,7 @@ def resolve_item(box: int, key_slug: str, history: list[dict]) -> dict | None:
         # Box 81: a placeholder row with no item at all.
         return None
 
-    qty_values = [r["qty_txt"] for r in history]
-    distinct = {q for q in qty_values}
+    distinct = {r["qty_txt"] for r in history}
     restated = len(history) > 1 and len(distinct) == 1
     # Differing quantities normally mean the sheet contradicts itself. A row
     # identify.py wrote is a deliberate recount, not an ambiguity — it says
@@ -337,11 +336,11 @@ def find_split_items(items: list[dict]) -> list[dict]:
         by_name.setdefault(k, []).append(i["box"])
         if k not in orig_name:
             orig_name[k] = i["name"]
-    split_items = [
-        {"name": orig_name[k], "boxes": sorted(set(v))}
-        for k, v in by_name.items()
-        if len(set(v)) > 1
-    ]
+    split_items = []
+    for k, v in by_name.items():
+        unique_boxes = set(v)
+        if len(unique_boxes) > 1:
+            split_items.append({"name": orig_name[k], "boxes": sorted(unique_boxes)})
     split_items.sort(key=lambda s: s["name"].lower())
     return split_items
 
