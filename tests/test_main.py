@@ -56,3 +56,27 @@ def test_parse_form_csv_malformed_date():
     assert result[0]["name"] == "Resistor"
     assert result[0]["date"] is None
     assert result[0]["time"] == "10:00:00"
+
+def test_parse_box_csv_valid():
+    from main import _parse_box_csv
+    csv_data = "Box,Item,Qty,Note,UpdatedAt\n1,Resistor,10,some note,2023-01-01\n"
+    result = _parse_box_csv(csv_data)
+    assert len(result) == 1
+    assert result[0]["box"] == 1
+    assert result[0]["name"] == "Resistor"
+    assert result[0]["qty_txt"] == "10"
+    assert result[0]["note"] == "some note"
+
+def test_parse_box_csv_missing_box():
+    from main import _parse_box_csv
+    # Box column present but empty value
+    csv_data = "Box,Item,Qty,Note,UpdatedAt\n,Resistor,10,some note,2023-01-01\n"
+    result = _parse_box_csv(csv_data)
+    assert len(result) == 0
+
+def test_parse_box_csv_missing_box_column():
+    from main import _parse_box_csv
+    # Box column completely missing
+    csv_data = "Item,Qty,Note,UpdatedAt\nResistor,10,some note,2023-01-01\n"
+    result = _parse_box_csv(csv_data)
+    assert len(result) == 0
