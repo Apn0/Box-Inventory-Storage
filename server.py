@@ -481,17 +481,19 @@ def lan_ips() -> list[str]:
     return found
 
 
-def main() -> int:
+def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8781)
     ap.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     ap.add_argument("--no-auto", action="store_true",
                     help="just queue photos; do not identify them on arrival")
-    args = ap.parse_args()
+    return ap.parse_args()
 
+
+def setup_worker(auto: bool) -> None:
     global AUTO
-    AUTO = not args.no_auto
+    AUTO = auto
 
     if not INDEX.exists():
         sys.exit("index.html missing — run build.py first")
@@ -502,6 +504,8 @@ def main() -> int:
         for entry in inbox_list():        # anything left over from last time
             _work.put(INBOX / entry["name"])
 
+
+def start_server(args: argparse.Namespace) -> None:
     # Binding alone is not a reliable conflict check on Windows: a server on the
     # IPv6 wildcard and one on the IPv4 wildcard both bind the same port happily,
     # and "localhost" then reaches whichever the resolver picks. Probe instead.
@@ -531,6 +535,12 @@ def main() -> int:
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
+
+
+def main() -> int:
+    args = parse_args()
+    setup_worker(not args.no_auto)
+    start_server(args)
     return 0
 
 
