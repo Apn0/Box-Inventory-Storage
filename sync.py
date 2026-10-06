@@ -12,6 +12,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 
 SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
@@ -30,7 +31,7 @@ def main() -> int:
     try:
         with urllib.request.urlopen(URL, timeout=60) as r:
             body = r.read()
-    except Exception as exc:
+    except urllib.error.URLError as exc:
         print(f"download failed: {exc}", file=sys.stderr)
         print("(is the sheet still shared as 'anyone with the link'?)", file=sys.stderr)
         return 1
@@ -60,7 +61,7 @@ def main() -> int:
         if form_body.decode("utf-8-sig", errors="replace").startswith("Timestamp"):
             FORM_CSV.write_bytes(form_body)
             print(f"wrote {FORM_CSV}  ({form_body.count(b'\n')} rows)")
-    except Exception as exc:                           # noqa: BLE001
+    except (urllib.error.URLError, OSError) as exc:
         print(f"form tab skipped: {exc}")
 
     return subprocess.call([sys.executable, str(ROOT / "build.py")])

@@ -1,3 +1,5 @@
+import pathlib
+import tempfile
 import unittest
 from unittest.mock import patch
 from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
@@ -87,6 +89,18 @@ class TestAutoFilable(unittest.TestCase):
     def test_not_existing(self):
         plan = {"existing": False}
         self.assertEqual(auto_filable(self.default_result, plan), "new item, requires visual check")
+
+    def test_auto_filable_none_fields(self):
+        result = self.default_result.copy()
+        result["name"] = None
+        result["note"] = None
+        self.assertIsNone(auto_filable(result, self.default_plan))
+
+    def test_auto_filable_missing_fields(self):
+        result = self.default_result.copy()
+        result.pop("name", None)
+        result.pop("note", None)
+        self.assertIsNone(auto_filable(result, self.default_plan))
 
     def test_auto_filable_success(self):
         self.assertIsNone(auto_filable(self.default_result, self.default_plan))
@@ -457,4 +471,5 @@ class TestLoadInventory(unittest.TestCase):
         mock_exit.assert_called_once()
 
 if __name__ == "__main__":
+
     unittest.main()
