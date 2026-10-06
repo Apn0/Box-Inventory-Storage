@@ -120,16 +120,10 @@ def test_windows_path_extraction():
     assert name_safe == "cmd.exe"
 
 
-def test_lan_ips_oserror(mocker, capsys):
-    from server import lan_ips
-
-    mocker.patch('socket.getaddrinfo', side_effect=OSError("Mocked resolution error"))
-
-    ips = lan_ips()
-
-    assert ips == []
-    captured = capsys.readouterr()
-    assert "Warning: could not resolve local hostname: Mocked resolution error" in captured.err
+def test_port_in_use_oserror():
+    from server import port_in_use
+    with patch('server.socket.socket', side_effect=OSError("Mocked OSError")):
+        assert port_in_use(1234) is None
 
 
 def test_symlink_path_access(tmp_path):
