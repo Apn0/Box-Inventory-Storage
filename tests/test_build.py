@@ -1,6 +1,6 @@
 from build import resolve_item, BULK_SENTINEL, COUNTED_MARK
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
+from build import parse_date, group_rows, find_split_items, container_of, part_numbers, categorise, build_items, find_free_boxes
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
