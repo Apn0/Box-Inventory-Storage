@@ -4,6 +4,7 @@ import { resolveSheet, parseCSV, containerOf, containerRange, categorize, slugNa
 
 let SEED = snapshot;
 let SHEET = null;
+let IDENTIFY_URL = null;
 
 // `let`, not `const`: the baked-in data is only the instant first paint — the
 // live truth is the Google Sheet, fetched right after boot and after every save.
@@ -102,9 +103,37 @@ function sheetAppend({box, name, qty, note}){
     f.submit();
   });
 }
-/* "This box is physically full" — a box flag stored as an ordinary sheet row
-   (Qty 1 = full, 0 = has room again), so it syncs like any count and newest
-   wins. Must match BOX_FULL_ITEM in build.py. Never treated as a part. */
+
+async function refreshSeed(){
+  try{
+    const [boxCsv, formCsv] = await Promise.all(
+      [fetchTab(SHEET.boxGid), fetchTab(SHEET.formGid).catch(() => "")]);
+    const fresh = resolveSheet(boxCsv, formCsv);
+    if(fresh.items.length){ SEED = fresh; rebuild(); render(); return true; }
+  }catch(e){ /* sheet unreachable — try local/static copy */ }
+  try{
+    const fresh = await (await fetch("./data/inventory.json", {cache:"no-store"})).json();
+    if(fresh && Array.isArray(fresh.items)){ SEED = fresh; rebuild(); render(); return true; }
+  }catch(e){ /* offline — keep the snapshot on screen */ }
+  return false;
+}
+
+async function appendRow({name, box, qty, note, prev}){
+  const qtyOut = (qty === "many" || qty === null) ? "many" : String(qty);
+  const before = SEED.meta.rawRows || 0;
+  await sheetAppend({box, name, qty: qtyOut, note: note || ""});
+  for(const delay of [1200, 2500, 5000]){
+    await new Promise(r => setTimeout(r, delay));
+    if(await refreshSeed() && (SEED.meta.rawRows || 0) > before){
+      if(prev !== undefined) showUndo(`${name}: ${prev ?? "new"} → ${qtyOut}`,
+                                      {name, box, qty: prev});
+      return true;
+    }
+  }
+  toast("Could not confirm the save — check the connection");
+  return false;
+}
+
 
 
 const STORE_KEY = "boxinv.v1";
@@ -1638,6 +1667,104 @@ function askCount(q){
       if(typeof q.then === "function") q.then(null);
     }
   };
+}
+
+function setupCamera(){
+  if(SERVED){
+    const link = document.createElement("link");
+    link.rel = "manifest"; link.href = "/manifest.webmanifest";
+    document.head.appendChild(link);
+  }
+
+  const mkInput = (capture) => {
+    const i = document.createElement("input");
+    i.type = "file"; i.accept = "image/*"; i.multiple = true;
+    if(capture) i.setAttribute("capture", "environment");
+    i.style.display = "none";
+    document.body.appendChild(i);
+    return i;
+  };
+  const camInput = mkInput(true);
+  const galInput = mkInput(false);
+
+  const btn = document.createElement("button");
+  btn.id = "cam"; btn.title = "Take a photo of a part";
+  btn.innerHTML = `<span>📷</span>`;
+  document.body.appendChild(btn);
+
+  const gal = document.createElement("button");
+  gal.id = "gal"; gal.title = "Pick photos you already took";
+  gal.innerHTML = `<span>🖼️</span>`;
+  document.body.appendChild(gal);
+
+  const sayBtn = document.createElement("button");
+  sayBtn.id = "say"; sayBtn.title = "Type a part name — hold for voice mode";
+  sayBtn.innerHTML = `<span>⌨️</span>`;
+  document.body.appendChild(sayBtn);
+
+  let holdTimer = null, wentVoice = false;
+  const armHold = () => {
+    wentVoice = false;
+    holdTimer = setTimeout(() => {
+      wentVoice = true;
+      if(navigator.vibrate) navigator.vibrate(30);
+      startVoice();
+    }, 550);
+  };
+  const releaseHold = ev => {
+    clearTimeout(holdTimer);
+    if(!wentVoice){ ev.preventDefault(); showAdd(); }
+  };
+  sayBtn.addEventListener("touchstart", armHold, {passive:true});
+  sayBtn.addEventListener("touchend", releaseHold);
+  sayBtn.addEventListener("mousedown", armHold);
+  sayBtn.addEventListener("mouseup", releaseHold);
+
+  btn.onclick = () => { camInput.value = ""; camInput.click(); };
+  gal.onclick = () => { galInput.value = ""; galInput.click(); };
+
+  const upload = async (input) => {
+    const files = [...input.files];
+    if(!files.length) return;
+
+    let apiKey = localStorage.getItem("IDENTIFY_API_KEY");
+    if(!apiKey){
+      apiKey = prompt("Please enter the API Key to identify photos:");
+      if(!apiKey) return;
+      localStorage.setItem("IDENTIFY_API_KEY", apiKey);
+    }
+
+    btn.dataset.busy = gal.dataset.busy = "1";
+    for(const f of files){
+      toast("Identifying…");
+      try{
+        const headers = {
+          "X-Filename": f.name || "photo.jpg",
+          "Content-Type": f.type || "image/jpeg"
+        };
+        if(apiKey) headers["Authorization"] = "Bearer " + apiKey;
+
+        const res = await fetch(IDENTIFY_URL, {
+          method: "POST",
+          headers: headers,
+          body: f,
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem("IDENTIFY_API_KEY");
+        }
+        const out = await res.json();
+        if(!res.ok) throw new Error(out.error || res.status);
+        await new Promise(resolve => askCount(Object.assign({}, out, {then: resolve})));
+      }catch(err){
+        toast("Could not identify: " + err.message);
+      }
+    }
+    delete btn.dataset.busy; delete gal.dataset.busy;
+  };
+
+  camInput.onchange = () => upload(camInput);
+  galInput.onchange = () => upload(galInput);
 }
 
 /* ------------------------------------------------------------------- boot */
