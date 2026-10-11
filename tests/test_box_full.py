@@ -17,7 +17,8 @@ PARTS = [
 
 
 def test_flag_row_is_not_a_part():
-    items, full_newest = build_items(PARTS + [row(1, BOX_FULL_ITEM, "1", "2026-09-02", 5)])
+    rows = PARTS + [row(1, BOX_FULL_ITEM, "1", "2026-09-02", 5)]
+    items = build_items(rows)
     assert [i["name"] for i in items if i["box"] == 1] == ["Resistor 10k"]
     assert all("box full" not in i["name"].lower() for i in items)
 
@@ -27,23 +28,24 @@ def test_newest_flag_row_wins():
              row(1, BOX_FULL_ITEM, "0", "2026-09-03", 6),      # room again
              row(2, BOX_FULL_ITEM, "0", "2026-09-02", 7),
              row(2, BOX_FULL_ITEM, "1", "2026-09-02", 1, src=1, time="12:00:00")]
-    items, full_newest = build_items(PARTS + flags)
-    assert find_full_boxes(full_newest, items) == [2]
+    rows = PARTS + flags
+    items = build_items(rows)
+    assert find_full_boxes(rows, items) == [2]
 
 
 def test_an_emptied_box_is_never_full():
     rows = PARTS + [row(3, "ESP32-C3", "0", "2026-09-05", 8),      # last part gone
                     row(3, BOX_FULL_ITEM, "1", "2026-09-02", 9)]
-    items, full_newest = build_items(rows)
-    assert find_full_boxes(full_newest, items) == []
+    items = build_items(rows)
+    assert find_full_boxes(rows, items) == []
     assert 3 in {f["box"] for f in find_free_boxes(items)}
 
 
 def test_flag_alone_does_not_occupy_a_box():
     rows = PARTS + [row(7, BOX_FULL_ITEM, "1", "2026-09-02", 9)]
-    items, full_newest = build_items(rows)
+    items = build_items(rows)
     assert 7 not in {i["box"] for i in items}
-    assert find_full_boxes(full_newest, items) == []
+    assert find_full_boxes(rows, items) == []
 
 
 def test_cloud_propose_box_skips_full_boxes():

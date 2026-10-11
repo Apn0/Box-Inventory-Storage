@@ -2,7 +2,7 @@
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
     "generated": "2026-10-11",
-    "rawRows": 285,
+    "rawRows": 288,
     "containerSize": 30,
     "bulkSentinel": 99,
     "categoryLabels": {
@@ -67,8 +67,8 @@
       "status": "active",
       "note": "Extra tap sizes not in 6-piece M3/M4/M5/M6/M8/M10 set",
       "category": "fastener",
-      "updated": "2026-02-25",
-      "conflict": true,
+      "updated": "2026-10-11",
+      "conflict": false,
       "restated": false,
       "history": [
         {
@@ -79,6 +79,11 @@
         {
           "qty": "2",
           "date": "2026-02-25",
+          "note": ""
+        },
+        {
+          "qty": "2",
+          "date": "2026-10-11",
           "note": ""
         }
       ]
@@ -1837,14 +1842,14 @@
       "box": 43,
       "container": "2",
       "name": "MT3608 DC-DC step-up (boost) converter module",
-      "qty": 1,
+      "qty": 2,
       "peak": 4,
       "countType": "exact",
       "status": "active",
       "note": "",
       "category": "power",
-      "updated": "2026-03-01",
-      "conflict": true,
+      "updated": "2026-10-11",
+      "conflict": false,
       "restated": false,
       "history": [
         {
@@ -1860,6 +1865,11 @@
         {
           "qty": "1",
           "date": "2026-03-01",
+          "note": ""
+        },
+        {
+          "qty": "2",
+          "date": "2026-10-11",
           "note": ""
         }
       ]
@@ -2782,14 +2792,14 @@
       "box": 84,
       "container": "3",
       "name": "Laser diode module",
-      "qty": 9,
+      "qty": 8,
       "peak": 9,
       "countType": "exact",
       "status": "active",
       "note": "",
       "category": "comms",
-      "updated": "2026-04-07",
-      "conflict": true,
+      "updated": "2026-10-11",
+      "conflict": false,
       "restated": false,
       "history": [
         {
@@ -2800,6 +2810,11 @@
         {
           "qty": "9",
           "date": "2026-04-07",
+          "note": ""
+        },
+        {
+          "qty": "8",
+          "date": "2026-10-11",
           "note": ""
         }
       ]
