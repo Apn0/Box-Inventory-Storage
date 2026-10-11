@@ -2,7 +2,7 @@
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
     "generated": "2026-10-11",
-    "rawRows": 288,
+    "rawRows": 289,
     "containerSize": 30,
     "bulkSentinel": 99,
     "categoryLabels": {
@@ -3071,6 +3071,22 @@
       "note": "Black round knob with silver top and indicator line",
       "category": "switch",
       "updated": "2026-02-17",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "100-bme280 environmental sensor",
+      "box": 100,
+      "container": "4",
+      "name": "BME280 Environmental Sensor",
+      "qty": 3,
+      "peak": 3,
+      "countType": "exact",
+      "status": "active",
+      "note": "(photo-counted)",
+      "category": "misc",
+      "updated": "2026-10-11",
       "conflict": false,
       "restated": false,
       "history": []
