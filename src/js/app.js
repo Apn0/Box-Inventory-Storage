@@ -2,6 +2,8 @@ import { loadConfig, getConfig } from "./config.js";
 import { snapshot } from "../../data/snapshot.js";
 import { resolveSheet, parseCSV, containerOf, containerRange, categorize, slugName, BOX_FULL, BOX_FULL_SLUG } from "./resolve.js";
 
+const SERVED = typeof location !== "undefined" && (location.protocol === "http:" || location.protocol === "https:");
+
 let SEED = snapshot;
 let SHEET = null;
 let IDENTIFY_URL = null;
@@ -108,7 +110,7 @@ async function refreshSeed(){
   try{
     const [boxCsv, formCsv] = await Promise.all(
       [fetchTab(SHEET.boxGid), fetchTab(SHEET.formGid).catch(() => "")]);
-    const fresh = resolveSheet(boxCsv, formCsv);
+    const fresh = resolveSheet(boxCsv, formCsv, SEED.meta);
     if(fresh.items.length){ SEED = fresh; rebuild(); render(); return true; }
   }catch(e){ /* sheet unreachable — try local/static copy */ }
   try{
@@ -240,6 +242,27 @@ function toast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
   clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 1900);
+}
+let undoTimer = null;
+function showUndo(what, revert){
+  document.getElementById("undobar")?.remove();
+  const bar = document.createElement("div");
+  bar.id = "undobar";
+  bar.innerHTML = `<b>${esc(what)}</b><button>Undo</button>`;
+  bar.querySelector("button").onclick = async () => {
+    bar.querySelector("button").disabled = true;
+    toast("Undoing…");
+    try{
+      if(revert){
+        await appendRow({name: revert.name, box: revert.box, qty: revert.qty, note: "(undo)"});
+        toast("Undone");
+      }
+    }catch(err){ toast("Undo failed: " + err.message); }
+    bar.remove();
+  };
+  document.body.appendChild(bar);
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => bar.remove(), 9000);
 }
 function qtyHTML(it){
   if(it.countType === "bulk")    return `<div class="qty bulk">many<small>bulk</small></div>`;
@@ -455,7 +478,7 @@ function renderTabs(){
   const tabs = [["find","Find"],["boxes","Boxes"],["issues","To do"],["build","Build check"],
                 ["reorg","Reorganize"],["labels","Labels"],["data","Data"]];
   document.getElementById("tabs").innerHTML = tabs.map(([k,label]) =>
-    `<button data-tab="${k}" aria-selected="${ui.tab===k}">${esc(label)}${
+    `<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${esc(label)}${
       k==="issues" && n ? `<span class="badge">${n}</span>` : ""}</button>`).join("");
 }
 
@@ -812,7 +835,7 @@ function viewBuild(){
       <h2>Result <span class="count">${have} found · ${missing} to sort out</span></h2>
       ${boxList.length?`<p class="sub"><b>Open these boxes:</b> ${boxList.map(b=>
         `<a href="#" data-box="${b}">${b}</a>`).join(" · ")}
-        &nbsp;(container${boxList.length>1?"s":""} ${[...new Set(boxList.map(containerOf))].join(", ")})</p>`:""}
+        &nbsp;(container${boxList.length>1?"s":""} ${[...new Set(boxList.map(b => containerOf(b, SEED?.meta?.containerSize || 30)))].join(", ")})</p>`:""}
       ${rows}</div>`;
   }
   return `<div class="panel">
@@ -896,7 +919,7 @@ function viewLabels(){
     <div class="labelsheet">${boxes.map(b => {
       const c = byBox.get(b);
       return `<div class="label"><b>${b}</b>
-        <span class="c">container ${Math.floor((b-1)/(SEED?.meta?.containerSize || 30))+1}</span>
+        <span class="c">container ${containerOf(b, SEED?.meta?.containerSize || 30)}</span>
         <ul>${c.slice(0,4).map(i => `<li>${esc(i.name.slice(0,42))}${
           i.countType==="exact"?" ("+i.qty+")":""}</li>`).join("")}
         ${c.length>4?`<li>+${c.length-4} more</li>`:""}</ul></div>`;
@@ -1127,7 +1150,6 @@ function wire(){
 /* ------------------------------------------------------------------ camera
    Identification runs in the cloud (see setupCamera below) — this flag only
    decides whether to add a browser install manifest link. */
-const SERVED = location.protocol === "http:" || location.protocol === "https:";
 
 /* ------------------------------------------------------- speech (local)
    Dictation uses the browser's own recognizer. In Chrome on Android that runs
@@ -1639,6 +1661,7 @@ function askCount(q){
         await refreshSeed();
         if(wantFull !== isFull(out.box)) await setBoxFull(out.box, wantFull);
         showConfirm();
+        if(typeof q.then === "function") q.then(body);
       } else {
         toast("Saving…");
         const ok = await appendRow({name: body.name, box: body.box, qty: body.qty,
@@ -1662,6 +1685,7 @@ function askCount(q){
       confirmQueue.shift();
       wrap.remove();
       showConfirm();
+      if(typeof q.then === "function") q.then(null);
     } else {
       wrap.remove();
       if(typeof q.then === "function") q.then(null);
@@ -1793,22 +1817,28 @@ document.addEventListener("keydown", e => {
   }
   if(e.key === "Escape" && document.activeElement === qEl){
     qEl.value = ""; ui.q = ""; render();
+  } else if(e.key === "Escape"){
+    const wrap = document.getElementById("sheetwrap");
+    if(wrap) wrap.remove();
   }
 });
 
 (async function init() {
-  const cfg = await loadConfig();
-  SHEET = {
-    id: cfg.sheet_id,
-    boxGid: cfg.box_gid,
-    formGid: cfg.form_gid,
-    formAction: cfg.form_url,
-    entries: cfg.form_entries,
-  };
-  IDENTIFY_URL = cfg.identify_endpoint || "https://box-identify-463126624138.us-central1.run.app/identify";
-  
   rebuild();
   render();
+  try {
+    const cfg = await loadConfig();
+    SHEET = {
+      id: cfg.sheet_id,
+      boxGid: cfg.box_gid,
+      formGid: cfg.form_gid,
+      formAction: cfg.form_url,
+      entries: cfg.form_entries,
+    };
+    IDENTIFY_URL = cfg.identify_endpoint || "https://box-identify-463126624138.us-central1.run.app/identify";
+  } catch(err) {
+    console.warn("Using offline defaults:", err);
+  }
   refreshSeed();
   setupCamera();
 })();

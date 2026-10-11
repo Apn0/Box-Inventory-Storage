@@ -8,7 +8,7 @@ export const BOX_FULL_SLUG = "box full";
 
 export const CATEGORY_RULES = [
   ["mcu",        /esp32|esp8266|xiao|microcontroller|\bmcu\b/],
-  ["sensor",     /\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |vibration (sensor|switch)|pressure sensor|load cell|current sensor|current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|capacitive touch|ir receiver|laser sensor|mps20n|voltage sensor|coil-type vibration|pressure-sensitive/],
+  ["sensor",     /\bmq-|mq gas|guva|heart-rate|neo-6m|gps|bme|bmp|ens160|aht2|gyro|accelerom|mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |vibration (sensor|switch)|pressure sensor|load cell|current sensor|current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|capacitive touch|ir receiver|laser sensor|mps20n|voltage sensor|coil-type vibration|pressure-sensitive/],
   ["power",      /charger|converter|buck|boost|step-up|step-down|mt3608|mini-360|hw-187|mp1584|cr6030|pd trigger|fast-charge|solar charge|18650|battery|batteries|lr44|\bac\/dc\b|power module|power meter|v meter|level indicator|usb-a power/],
   ["driver",     /tmc2209|uln2003|motor driver|h-bridge|tc1508|mosfet|relay|\bssr\b|pwm controller|speed controller|stepper driver|xy-mos|lr7843/],
   ["motor",      /stepper motor|servo|dc motor|gear motor|brushed dc|vibration motor|\bfan\b|micro dc/],
@@ -33,11 +33,18 @@ export const slugName = s => String(s).normalize("NFKD").replace(/[̀-ͯ]/g, "")
   .replace(/[^a-z0-9]+/gi, " ").toLowerCase().trim();
 
 export function parseSheetDate(text) {
-  const m = String(text || "").trim()
-    .match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?$/);
-  if(!m) return null;
+  const s = String(text || "").trim();
+  if(!s) return null;
   const p = n => String(n).padStart(2, "0");
-  return `${m[3]}-${p(m[2])}-${p(m[1])}T${p(m[4]||0)}:${m[5]||"00"}:${m[6]||"00"}`;
+  const iso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(iso){
+    return `${iso[1]}-${p(iso[2])}-${p(iso[3])}T${p(iso[4]||0)}:${iso[5]||"00"}:${iso[6]||"00"}`;
+  }
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(dmy){
+    return `${dmy[3]}-${p(dmy[2])}-${p(dmy[1])}T${p(dmy[4]||0)}:${dmy[5]||"00"}:${dmy[6]||"00"}`;
+  }
+  return null;
 }
 
 export function parseCSV(text) {
@@ -57,16 +64,37 @@ export function parseCSV(text) {
   return rows.filter(r => r.some(c => c.trim() !== ""));
 }
 
-export function containerOf(box, containerSize) {
+export function containerOf(box, containerSize = 30) {
   const base = box >= 400 ? 400 : 0;
   const n = Math.floor((box - base - 1) / containerSize) + 1;
   return (base ? "H" : "") + n;
 }
 
-export function containerRange(box, containerSize) {
+export function containerRange(box, containerSize = 30) {
   const base = box >= 400 ? 400 : 0;
   const c = Math.floor((box - base - 1) / containerSize);
   return [base + c * containerSize + 1, base + (c + 1) * containerSize];
+}
+
+export function findSplitItems(items) {
+  const byName = new Map();
+  const origName = new Map();
+  for(const i of items){
+    if(i.status !== "active") continue;
+    const k = slugName(i.name);
+    if(!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(i.box);
+    if(!origName.has(k)) origName.set(k, i.name);
+  }
+  const splitItems = [];
+  for(const [k, v] of byName){
+    const uniqueBoxes = [...new Set(v)].sort((a,b)=>a-b);
+    if(uniqueBoxes.length > 1){
+      splitItems.push({name: origName.get(k), boxes: uniqueBoxes});
+    }
+  }
+  splitItems.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  return splitItems;
 }
 
 export function resolveSheet(boxCsv, formCsv, seedMeta) {
@@ -123,17 +151,25 @@ export function resolveSheet(boxCsv, formCsv, seedMeta) {
       if(/^\d+$/.test(r.qtyTxt) && n !== 99) peak = Math.max(peak ?? 0, n);
     }
 
-    const distinct = new Set(history.map(r => r.qtyTxt.toLowerCase()));
+    const normQty = q => {
+      const s = (q || "").trim().toLowerCase();
+      if(s === "99" || s === "many") return "many";
+      if(s === "" || s === "?") return "?";
+      return s;
+    };
+    const distinct = new Set(history.map(r => normQty(r.qtyTxt)));
     const deliberate = latest.src === 1
         || (latest.note || "").toLowerCase().includes("photo-counted");
     const conflict = history.length > 1 && distinct.size > 1 && !deliberate;
 
+    const note = latest.note || [...history].reverse().find(r => r.note)?.note || "";
     items.push({
       id: `${latest.box}-${slugName(latest.name)}`,
       box: latest.box, name: latest.name, qty, peak, countType,
+      container: containerOf(latest.box, seedMeta?.containerSize || 30),
       status: (countType === "exact" && qty === 0) ? "gone" : "active",
-      note: latest.note || [...history].reverse().find(r => r.note)?.note || "",
-      category: categorize(latest.name, latest.note),
+      note: note,
+      category: categorize(latest.name, note),
       updated: latest.when ? latest.when.slice(0, 10) : null,
       conflict, restated: history.length > 1 && distinct.size === 1,
       history: history.length > 1
@@ -159,5 +195,5 @@ export function resolveSheet(boxCsv, formCsv, seedMeta) {
   return {meta: Object.assign({}, seedMeta, {
             source: "Google Sheet (live)", rawRows: raw.length,
             generated: new Date().toISOString().slice(0, 10)}),
-          items, freeBoxes, splitItems: [], fullBoxes};
+          items, freeBoxes, splitItems: findSplitItems(items), fullBoxes};
 }

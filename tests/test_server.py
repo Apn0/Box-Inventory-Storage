@@ -103,6 +103,31 @@ def test_is_relative_to_symlink_outside_folder(tmp_path):
     assert safe_check == False
 
 
+def test_handler_symlink_traversal_blocked(mocker, tmp_path):
+    import pytest
+    from server import Handler
+    folder = tmp_path / "photos"
+    folder.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret_data")
+    link = folder / "leak.jpg"
+    try:
+        link.symlink_to(secret)
+    except OSError:
+        pytest.skip("Symlink creation not permitted in this environment")
+
+    handler = Handler.__new__(Handler)
+    handler.path = "/data/photos/leak.jpg"
+    handler._json = mocker.MagicMock()
+    handler._send = mocker.MagicMock()
+
+    with patch('server.PHOTOS', folder):
+        handler.do_GET()
+
+    handler._json.assert_called_with(404, {"error": "not found"})
+    assert not handler._send.called
+
+
 def test_windows_path_extraction():
     import pathlib
     import urllib.parse

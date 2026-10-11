@@ -345,17 +345,17 @@ textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px so
       <h1>Box Inventory</h1>
       <span class="tag" id="stat-line"></span>
       <span class="spacer"></span>
-      <button class="iconbtn" id="theme-btn" title="Light / dark">◐</button>
+      <button class="iconbtn" id="theme-btn" title="Light / dark" aria-label="Toggle light or dark theme">◐</button>
     </div>
     <div class="searchrow">
-      <input id="q" type="search" placeholder="Search parts, boxes, notes…  (press /)" autocomplete="off" spellcheck="false">
-      <button class="clearq" id="clearq" title="Clear">✕</button>
+      <input id="q" type="search" placeholder="Search parts, boxes, notes…  (press /)" autocomplete="off" spellcheck="false" aria-label="Search parts, boxes, and notes">
+      <button class="clearq" id="clearq" title="Clear" aria-label="Clear search query">✕</button>
     </div>
-    <nav class="tabs" id="tabs"></nav>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Main navigation"></nav>
   </header>
   <main id="view"></main>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="./src/js/app.js"></script>
 <script>

@@ -24,6 +24,7 @@ import mimetypes
 import pathlib
 import queue
 import urllib.parse
+import urllib.request
 import re
 import shutil
 import socket
@@ -278,7 +279,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            import urllib.request
             qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             gid = (qs.get("gid") or [""])[0]
             if gid not in {BOX_GID, FORM_GID}:
@@ -300,10 +300,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                import urllib.parse
                 name = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
                 target = folder / name
-                if target.is_file() and target.absolute().is_relative_to(folder.absolute()):
+                if target.is_file() and target.resolve().is_relative_to(folder.resolve()):
                     ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
                     return self._send(Response(200, target.read_bytes(), ctype))
                 return self._json(404, {"error": "not found"})
@@ -393,7 +392,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 done = identify.commit(entry, body.get("qty"),
                                        body.get("box"), body.get("name"))
             except Exception as exc:               # noqa: BLE001
-                print(f"  quickadd error: {exc}")
+                print(f"  confirm error: {exc}")
                 return self._json(500, {"error": "Internal server error"})
             identify.save_pending(entries)
         record({"photo": entry["photo"], "state": "done", "ok": True,
@@ -407,7 +406,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 undone = identify.undo_last()
             except Exception as exc:               # noqa: BLE001
-                return self._json(409, {"error": str(exc)[:200]})
+                print(f"  undo error: {exc}")
+                return self._json(409, {"error": "cannot undo"})
         if not undone:
             return self._json(200, {"ok": False, "message": "nothing to undo"})
         names = ", ".join(r["name"] for r in undone["rows"])

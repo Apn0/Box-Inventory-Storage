@@ -12,18 +12,32 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import json
 import urllib.error
 import urllib.request
-
-SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
-BOX_GID = 788564724       # the BOX tab — the historical append log
-FORM_GID = 677102738      # "Form responses 1" — rows written through the app
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={BOX_GID}"
-FORM_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={FORM_GID}"
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
 FORM_CSV = ROOT / "data" / "form_responses.csv"
+
+config_file = ROOT / "config.json"
+if config_file.exists():
+    try:
+        _cfg = json.loads(config_file.read_text(encoding="utf-8"))
+        SHEET_ID = _cfg.get("sheet_id", "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ")
+        BOX_GID = _cfg.get("box_gid", 788564724)
+        FORM_GID = _cfg.get("form_gid", 677102738)
+    except Exception:
+        SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+        BOX_GID = 788564724
+        FORM_GID = 677102738
+else:
+    SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+    BOX_GID = 788564724
+    FORM_GID = 677102738
+
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={BOX_GID}"
+FORM_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={FORM_GID}"
 
 
 def main() -> int:
@@ -48,6 +62,17 @@ def main() -> int:
         bak = RAW.with_suffix(f".csv.{stamp}.bak")
         shutil.copy2(RAW, bak)
         print(f"previous CSV kept at {bak.name}")
+
+        # Check for unmerged offline rows
+        local_lines = set(RAW.read_text("utf-8-sig", errors="replace").splitlines())
+        cloud_lines = set(text.splitlines())
+        offline_unique = [l for l in local_lines if l and l not in cloud_lines and not l.startswith("Box,")]
+        if offline_unique:
+            offline_file = RAW.parent / "offline_unmerged.csv"
+            with offline_file.open("a", encoding="utf-8") as fh:
+                for line in offline_unique:
+                    fh.write(line + "\n")
+            print(f"WARNING: preserved {len(offline_unique)} unmerged offline rows in {offline_file}")
 
     RAW.write_bytes(body)
     print(f"wrote {RAW}  ({rows} lines)")

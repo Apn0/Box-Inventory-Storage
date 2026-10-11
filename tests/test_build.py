@@ -1,5 +1,8 @@
 import pytest
-from build import parse_date, find_split_items, container_of, part_numbers, categorise, build_items
+from build import (
+    parse_date, find_split_items, container_of, part_numbers, categorise, build_items,
+    parse_raw_rows, resolve_item,
+)
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -422,3 +425,42 @@ def test_resolve_item_complex_history():
     assert result["history"][1]["qty"] == "5"
     assert result["history"][2]["qty"] == "20"
     assert result["history"][3]["qty"] == "15"
+
+
+def test_parse_raw_rows_malformed_and_edge_cases():
+    csv_text = "Box,Item,Qty,Note,UpdatedAt\n1,Part A,10,Note A,invalid-date\ninvalid_box,Part B,5,,\n2,Part C,2,,2026-05-12 14:00:00\n"
+    form_text = "Timestamp,Box,Item,Qty,Note\n2026-05-12 15:00:00,1,Part A,12,\nbad_ts,2,Part C,3,\n"
+    rows = parse_raw_rows(csv_text, form_text)
+    assert len(rows) == 4
+    # Check that invalid date didn't crash and resulted in date=None
+    assert rows[0]["box"] == 1
+    assert rows[0]["date"] is None
+    # Check that box 2 parsed properly
+    assert rows[1]["box"] == 2
+    assert rows[1]["date"] == "2026-05-12"
+
+
+def test_resolve_item_bulk_normalization_no_conflict():
+    # '99' and 'many' should be normalized together and not produce a false conflict
+    history = [
+        {"name": "M3 Screws", "qty_txt": "99", "note": "", "date": "2026-01-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "M3 Screws", "qty_txt": "many", "note": "", "date": "2026-01-02", "time": "10:00:00", "src": 0, "line": 2},
+    ]
+    res = resolve_item(10, "m3-screws", history)
+    assert res is not None
+    assert res["countType"] == "bulk"
+    assert res["conflict"] is False
+    assert res["restated"] is True
+
+
+def test_resolve_item_note_inheritance():
+    # Newer update with empty note inherits note from earlier entry
+    history = [
+        {"name": "BME280 Sensor", "qty_txt": "2", "note": "temperature and pressure", "date": "2026-01-01", "time": "10:00:00", "src": 0, "line": 1},
+        {"name": "BME280 Sensor", "qty_txt": "3", "note": "", "date": "2026-01-02", "time": "10:00:00", "src": 0, "line": 2},
+    ]
+    res = resolve_item(5, "bme280-sensor", history)
+    assert res is not None
+    assert res["note"] == "temperature and pressure"
+    assert res["category"] == "sensor"
+

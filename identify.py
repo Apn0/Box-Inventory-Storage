@@ -270,6 +270,14 @@ def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
     return json.loads(text)
 
 
+@dataclasses.dataclass
+class IdentifyConfig:
+    context: str
+    provider: str = "auto"
+    client: typing.Any = None
+    gemini_key: str | None = None
+    openai_key: str | None = None
+
 
 def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
@@ -413,10 +421,23 @@ def save_pending(entries: list[dict]) -> None:
     PENDING.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-FORM_ACTION = ("https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9k"
-               "EePiOvndgu1jlUsIQ/formResponse")
-FORM_ENTRIES = {"box": "entry.2127766863", "name": "entry.957000781",
-                "qty": "entry.971108864", "note": "entry.1227292805"}
+config_file = ROOT / "config.json"
+if config_file.exists():
+    try:
+        _cfg = json.loads(config_file.read_text(encoding="utf-8"))
+        FORM_ACTION = _cfg.get("form_url", "https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9kEePiOvndgu1jlUsIQ/formResponse")
+        FORM_ENTRIES = _cfg.get("form_entries", {
+            "box": "entry.2127766863", "name": "entry.957000781",
+            "qty": "entry.971108864", "note": "entry.1227292805"
+        })
+    except Exception:
+        FORM_ACTION = "https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9kEePiOvndgu1jlUsIQ/formResponse"
+        FORM_ENTRIES = {"box": "entry.2127766863", "name": "entry.957000781",
+                        "qty": "entry.971108864", "note": "entry.1227292805"}
+else:
+    FORM_ACTION = "https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9kEePiOvndgu1jlUsIQ/formResponse"
+    FORM_ENTRIES = {"box": "entry.2127766863", "name": "entry.957000781",
+                    "qty": "entry.971108864", "note": "entry.1227292805"}
 FORM_MIRROR = ROOT / "data" / "form_responses.csv"
 
 
@@ -693,11 +714,8 @@ def run(args: argparse.Namespace) -> int:
     context = context_for_prompt(data, active)
     accepted: list[dict] = []
     config = IdentifyConfig(
-        client=client,
         context=context,
         provider=args.provider,
-        gemini_key=gemini_key,
-        openai_key=openai_key
     )
 
     per_box = {}

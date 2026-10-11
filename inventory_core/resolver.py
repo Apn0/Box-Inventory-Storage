@@ -21,7 +21,7 @@ BOX_FULL_SLUG = slug(BOX_FULL_ITEM)
 # ---------------------------------------------------------------- categories
 _CATEGORY_RULES_RAW: List[Tuple[str, str]] = [
     ("mcu",        r"esp32|esp8266|xiao|microcontroller|\bmcu\b"),
-    ("sensor",     r"\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|"
+    ("sensor",     r"\bmq-|mq gas|guva|heart-rate|neo-6m|gps|bme|bmp|environmental sensor|ens160|aht2|gyro|accelerom|"
                    r"mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |"
                    r"vibration (sensor|switch)|pressure sensor|load cell|current sensor|"
                    r"current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|"
@@ -111,8 +111,14 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
     box_reader = csv.DictReader(StringIO(box_csv_text))
     for line_no, row in enumerate(box_reader, start=2):
         box_txt = (row.get("Box") or "").strip()
-        if not box_txt:
+        if not box_txt or not box_txt.lstrip("-").isdigit():
             continue
+        updated_txt = (row.get("UpdatedAt") or "").strip()
+        date_part, _, _ = updated_txt.partition(" ")
+        try:
+            box_date = parse_date(date_part)
+        except ValueError:
+            box_date = None
         raw_rows.append(
             {
                 "line": line_no,
@@ -120,7 +126,7 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
                 "name": (row.get("Item") or "").strip(),
                 "qty_txt": (row.get("Qty") or "").strip(),
                 "note": (row.get("Note") or "").strip(),
-                "date": parse_date(row.get("UpdatedAt") or ""),
+                "date": box_date,
                 "time": "00:00:00",
                 "src": 0,
             }
@@ -162,7 +168,15 @@ def resolve_item(box: int, key_slug: str, history: List[Dict]) -> Optional[Dict]
     if not latest["name"]:
         return None
 
-    qty_values = [r["qty_txt"] for r in history]
+    def norm_qty(q: str) -> str:
+        s = (q or "").strip().lower()
+        if s == "99" or s == "many":
+            return "many"
+        if s == "" or s == "?":
+            return "?"
+        return s
+
+    qty_values = [norm_qty(r["qty_txt"]) for r in history]
     distinct = {q for q in qty_values}
     restated = len(history) > 1 and len(distinct) == 1
     

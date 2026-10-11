@@ -17,7 +17,10 @@ import os
 import base64
 import hmac
 import json
+import logging
 import mimetypes
+import pathlib
+import threading
 import urllib.error
 import urllib.request
 import time
@@ -37,9 +40,23 @@ from utils import slug
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024
 
-SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
-BOX_GID = 788564724
-FORM_GID = 677102738
+ROOT = pathlib.Path(__file__).resolve().parent
+config_file = ROOT / "config.json"
+if config_file.exists():
+    try:
+        _cfg = json.loads(config_file.read_text(encoding="utf-8"))
+        SHEET_ID = _cfg.get("sheet_id", "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ")
+        BOX_GID = int(_cfg.get("box_gid", 788564724))
+        FORM_GID = int(_cfg.get("form_gid", 677102738))
+    except Exception:
+        SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+        BOX_GID = 788564724
+        FORM_GID = 677102738
+else:
+    SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+    BOX_GID = 788564724
+    FORM_GID = 677102738
+
 BOX_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={BOX_GID}"
 FORM_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={FORM_GID}"
 
@@ -138,13 +155,15 @@ def propose_box(active: list[dict], category: str) -> int:
 
 
 _vertex_creds = None
+_vertex_lock = threading.Lock()
 def vertex_token() -> str:
     global _vertex_creds
-    if _vertex_creds is None or not _vertex_creds.valid:
-        if _vertex_creds is None:
-            _vertex_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        _vertex_creds.refresh(google.auth.transport.requests.Request())
-    return _vertex_creds.token
+    with _vertex_lock:
+        if _vertex_creds is None or not _vertex_creds.valid:
+            if _vertex_creds is None:
+                _vertex_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            _vertex_creds.refresh(google.auth.transport.requests.Request())
+        return _vertex_creds.token
 
 
 def call_vertex(b64: str, media: str, prompt: str, token: str) -> dict:
@@ -180,11 +199,16 @@ def call_vertex(b64: str, media: str, prompt: str, token: str) -> dict:
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin")
-    if origin in ["https://apn0.github.io", "http://localhost", "http://127.0.0.1"] or \
-       (origin and origin.startswith("http://localhost:")):
+    if origin and (
+        origin in ["https://apn0.github.io", "http://localhost", "http://127.0.0.1"]
+        or origin.startswith((
+            "http://localhost:", "http://127.0.0.1:", "http://192.168.", "http://10.", "http://172."
+        ))
+    ):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Filename"
+        response.headers["Access-Control-Max-Age"] = "86400"
     return response
 
 
@@ -218,7 +242,8 @@ def identify():
     try:
         items = resolve_items()
     except (urllib.error.URLError, ValueError) as exc:
-        return jsonify(error=f"could not read the sheet: {exc}"), 502
+        logging.error("could not read the sheet: %s", exc)
+        return jsonify(error="could not read the sheet"), 502
 
     cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
     active = [i for i in items if i["status"] == "active"]
@@ -231,7 +256,8 @@ def identify():
     try:
         result = call_vertex(b64, media, prompt, vertex_token())
     except (google.auth.exceptions.GoogleAuthError, urllib.error.URLError, RuntimeError, ValueError) as exc:
-        return jsonify(error=f"identification failed: {exc}"), 502
+        logging.error("identification failed: %s", exc)
+        return jsonify(error="identification failed"), 502
 
     seen = max(0, int(result.get("quantity") or 0))
 
@@ -239,7 +265,7 @@ def identify():
         find_existing_part(active, result["matches_existing"]) if result.get("matches_existing") else None)
 
     if existing:
-        recorded = existing["qty"] if existing["countType"] == "exact" else "many"
+        recorded = existing["qty"] if existing["countType"] == "exact" else ("many" if existing["countType"] == "bulk" else None)
         return jsonify(name=result["name"], recordedName=existing["name"], box=existing["box"],
                        recorded=recorded, seen=seen, isNew=False,
                        boxFull=bool(existing.get("boxFull")),
