@@ -1,8 +1,8 @@
 {
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
-    "generated": "2026-10-02",
-    "rawRows": 269,
+    "generated": "2026-10-11",
+    "rawRows": 285,
     "containerSize": 30,
     "bulkSentinel": 99,
     "categoryLabels": {
@@ -95,6 +95,22 @@
       "note": "3mm & 5mm bore",
       "category": "fastener",
       "updated": "2025-12-18",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "3-flexible shaft coupling",
+      "box": 3,
+      "container": "1",
+      "name": "Flexible shaft coupling",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "connector",
+      "updated": "2026-10-04",
       "conflict": false,
       "restated": false,
       "history": []
@@ -1225,6 +1241,22 @@
       "history": []
     },
     {
+      "id": "30-flexible shaft coupling",
+      "box": 30,
+      "container": "1",
+      "name": "Flexible shaft coupling",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "connector",
+      "updated": "2026-10-04",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
       "id": "31-6 pin on off on toggle switch",
       "box": 31,
       "container": "2",
@@ -1956,6 +1988,22 @@
       "history": []
     },
     {
+      "id": "48-flexible shaft coupler",
+      "box": 48,
+      "container": "2",
+      "name": "Flexible shaft coupler",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "misc",
+      "updated": "2026-10-04",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
       "id": "48-gt2 timing belt pulley aluminum flanged",
       "box": 48,
       "container": "2",
@@ -1988,6 +2036,22 @@
       "history": []
     },
     {
+      "id": "49-flexible shaft coupling",
+      "box": 49,
+      "container": "2",
+      "name": "Flexible shaft coupling",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "connector",
+      "updated": "2026-10-04",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
       "id": "49-gt2 timing belt idler pulley plastic flanged",
       "box": 49,
       "container": "2",
@@ -2015,6 +2079,38 @@
       "note": "",
       "category": "mechanical",
       "updated": "2026-01-15",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "50-flexible shaft coupler",
+      "box": 50,
+      "container": "2",
+      "name": "Flexible shaft coupler",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "misc",
+      "updated": "2026-10-04",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "51-helical shaft coupling",
+      "box": 51,
+      "container": "2",
+      "name": "Helical shaft coupling",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "connector",
+      "updated": "2026-10-04",
       "conflict": false,
       "restated": false,
       "history": []
@@ -2116,6 +2212,22 @@
       "history": []
     },
     {
+      "id": "55-flexible shaft coupling",
+      "box": 55,
+      "container": "2",
+      "name": "Flexible shaft coupling",
+      "qty": 2,
+      "peak": 2,
+      "countType": "exact",
+      "status": "active",
+      "note": "(photo-counted)",
+      "category": "connector",
+      "updated": "2026-10-04",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
       "id": "56-alligator clip jumper wires red green",
       "box": 56,
       "container": "2",
@@ -2159,6 +2271,22 @@
       "note": "",
       "category": "mechanical",
       "updated": "2026-01-16",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "58-flexible shaft coupler",
+      "box": 58,
+      "container": "2",
+      "name": "Flexible shaft coupler",
+      "qty": 0,
+      "peak": 0,
+      "countType": "exact",
+      "status": "gone",
+      "note": "(photo-counted)",
+      "category": "misc",
+      "updated": "2026-10-04",
       "conflict": false,
       "restated": false,
       "history": []
@@ -4194,11 +4322,6 @@
   ],
   "freeBoxes": [
     {
-      "box": 55,
-      "container": "2",
-      "reason": "never used"
-    },
-    {
       "box": 75,
       "container": "3",
       "reason": "emptied"
@@ -4313,6 +4436,14 @@
     }
   ],
   "fullBoxes": [
+    3,
+    30,
+    48,
+    49,
+    50,
+    51,
+    58,
+    78,
     123,
     124
   ]
