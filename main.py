@@ -15,24 +15,23 @@ from __future__ import annotations
 
 import os
 import base64
-import csv
 import hmac
-import io
 import json
 import mimetypes
 import urllib.error
 import urllib.request
+import time
 
-import os
 import google.auth
-import os
 import google.auth.transport.requests
 import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
-from build import (BOX_FULL_SLUG, CATEGORY_LABELS, categorise, find_full_boxes,
-                   parse_date, part_numbers)
+from inventory_core.resolver import (
+    CATEGORY_LABELS, categorise, find_full_boxes, part_numbers,
+    parse_raw_rows, build_items
+)
 from utils import slug
 
 app = Flask(__name__)
@@ -48,7 +47,6 @@ VERTEX_PROJECT = "deft-melody-503207-k8"
 VERTEX_LOCATION = "us-central1"
 VERTEX_MODEL = "gemini-2.5-flash"
 
-BULK_SENTINEL = 99
 MAX_BOX_ITEMS = 6           # keep in step with identify.py / the app's reorganise cap
 
 SUPPORTED = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -81,88 +79,12 @@ def _fetch(url: str) -> str:
         return r.read().decode("utf-8-sig", errors="replace")
 
 
-def _parse_box_csv(raw_text: str) -> list[dict]:
-    raw_rows = []
-    for line_no, row in enumerate(csv.DictReader(io.StringIO(raw_text)), start=2):
-        box_txt = (row.get("Box") or "").strip()
-        if not box_txt:
-            continue
-        raw_rows.append({
-            "line": line_no, "box": int(box_txt),
-            "name": (row.get("Item") or "").strip(),
-            "qty_txt": (row.get("Qty") or "").strip(),
-            "note": (row.get("Note") or "").strip(),
-            "date": parse_date(row.get("UpdatedAt") or ""),
-            "time": "00:00:00", "src": 0,
-        })
-    return raw_rows
-
-
-def _parse_form_csv(form_text: str) -> list[dict]:
-    raw_rows = []
-    if form_text.startswith("Timestamp"):
-        for line_no, row in enumerate(csv.DictReader(io.StringIO(form_text)), start=2):
-            box_txt = (row.get("Box") or "").strip()
-            name = (row.get("Item") or "").strip()
-            if not box_txt or not name or not box_txt.lstrip("-").isdigit():
-                continue
-            ts = (row.get("Timestamp") or "").strip()
-            date_part, _, time_part = ts.partition(" ")
-            try:
-                date = parse_date(date_part)
-            except ValueError:
-                date = None
-            raw_rows.append({
-                "line": line_no, "box": int(box_txt), "name": name,
-                "qty_txt": (row.get("Qty") or "").strip(),
-                "note": (row.get("Note") or "").strip(),
-                "date": date, "time": time_part or "00:00:01", "src": 1,
-            })
-    return raw_rows
-
-
-def _group_and_resolve(raw_rows: list[dict]) -> list[dict]:
-    groups: dict[tuple[int, str], list[dict]] = {}
-    for row in raw_rows:
-        groups.setdefault((row["box"], slug(row["name"])), []).append(row)
-
-    items = []
-    for (box, key), history in groups.items():
-        if key == BOX_FULL_SLUG:
-            continue                     # a box flag, not a part
-        history.sort(key=lambda r: (r["date"] or "", r.get("time", "00:00:00"),
-                                    r.get("src", 0), r["line"]))
-        latest = history[-1]
-        if not latest["name"]:
-            continue
-        qty_txt = latest["qty_txt"]
-        if qty_txt == "":
-            count_type, qty = "unknown", None
-        elif int(qty_txt) == BULK_SENTINEL:
-            count_type, qty = "bulk", None
-        else:
-            count_type, qty = "exact", int(qty_txt)
-        status = "gone" if (count_type == "exact" and qty == 0) else "active"
-        note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
-        items.append({"box": box, "name": latest["name"], "qty": qty,
-                      "countType": count_type, "status": status, "note": note,
-                      "category": categorise(latest["name"], note)})
-    return items
-
-
 def resolve_items() -> list[dict]:
-    """The same newest-row-wins resolver as build.py, against the live sheet.
-
-    A slimmed-down copy: only the fields identify needs (box/name/qty/status/
-    category), not the full app.template.html item shape. If build.py's
-    resolver logic changes, mirror it here too.
-    """
     with ThreadPoolExecutor(max_workers=2) as executor:
-        raw_text, form_text = executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL])
+        raw_text, form_text = list(executor.map(_fetch, [BOX_CSV_URL, FORM_CSV_URL]))
 
-    raw_rows = _parse_box_csv(raw_text)
-    raw_rows.extend(_parse_form_csv(form_text))
-    items = _group_and_resolve(raw_rows)
+    raw_rows = parse_raw_rows(raw_text, form_text)
+    items = build_items(raw_rows)
     full = set(find_full_boxes(raw_rows, items))
     for i in items:
         i["boxFull"] = i["box"] in full
@@ -192,15 +114,16 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
 def propose_box(active: list[dict], category: str) -> int:
     per_box: dict[int, int] = {}
     same_cat = set()
-    used = set()
+    full = set()
 
-    full = {i["box"] for i in active if i.get("boxFull")}
     for i in active:
         box = i["box"]
         per_box[box] = per_box.get(box, 0) + 1
 
+        if i.get("boxFull"):
+            full.add(box)
+
         if box < 400:
-            used.add(box)
             if i["category"] == category:
                 same_cat.add(box)
 
@@ -209,15 +132,19 @@ def propose_box(active: list[dict], category: str) -> int:
             return b
 
     b = 1
-    while b in used:
+    while b in per_box and b < 400:
         b += 1
     return b
 
 
+_vertex_creds = None
 def vertex_token() -> str:
-    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    creds.refresh(google.auth.transport.requests.Request())
-    return creds.token
+    global _vertex_creds
+    if _vertex_creds is None or not _vertex_creds.valid:
+        if _vertex_creds is None:
+            _vertex_creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        _vertex_creds.refresh(google.auth.transport.requests.Request())
+    return _vertex_creds.token
 
 
 def call_vertex(b64: str, media: str, prompt: str, token: str) -> dict:
@@ -250,24 +177,37 @@ def call_vertex(b64: str, media: str, prompt: str, token: str) -> dict:
     return json.loads(text)
 
 
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin in ["https://apn0.github.io", "http://localhost", "http://127.0.0.1"] or \
+       (origin and origin.startswith("http://localhost:")):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Filename"
+    return response
+
+
 @app.route("/", methods=["GET"])
 def health():
     return "ok"
 
 
-@app.route("/identify", methods=["POST"])
+@app.route("/identify", methods=["POST", "OPTIONS"])
 def identify():
-    # Read the upload BEFORE refusing it. Answering 401 with the photo still
-    # unread makes gunicorn drop the connection, and Cloud Run turns that into
-    # a 502/503 — so the phone never sees the 401 that tells it to re-ask the key.
-    body = request.get_data()
+    if request.method == "OPTIONS":
+        return "", 204
 
     expected_key = os.environ.get("API_KEY")
     auth_header = request.headers.get("Authorization", "")
     if not expected_key or not auth_header.startswith("Bearer ") \
             or not hmac.compare_digest(auth_header[7:], expected_key):
+        # We read and discard the body so gunicorn does not drop the connection
+        # with an unread body, which would result in a 502/503 for the client.
+        _ = request.get_data()
         return jsonify(error="unauthorized"), 401
 
+    body = request.get_data()
     media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
     if media not in SUPPORTED:
         media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"

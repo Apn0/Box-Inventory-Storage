@@ -31,6 +31,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 from build import part_numbers
 from utils import slug
@@ -82,8 +83,6 @@ SCHEMA = {
 # a photo does not raise a false "ambiguous quantity" every time.
 COUNTED_MARK = "photo-counted"
 
-OPENAI_MODEL = "gpt-4o"
-GEMINI_MODEL = "gemini-2.5-flash"
 
 # Vertex AI on the separate Google account that holds the credits. Auth comes
 # from gcloud, so no key for it lives in .env.
@@ -91,8 +90,6 @@ VERTEX_ACCOUNT = "peterfrissen123@gmail.com"
 VERTEX_PROJECT = "deft-melody-503207-k8"
 VERTEX_LOCATION = "us-central1"
 VERTEX_MODEL = "gemini-2.5-flash"
-GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-              f"{GEMINI_MODEL}:generateContent")
 
 # Gemini takes the same fields but wants uppercase types and no additionalProperties.
 GEMINI_SCHEMA = {
@@ -197,17 +194,8 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     return hit
 
 
-def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str]:
+def propose_box(data: dict, per_box: dict, same_cat: set, category: str) -> tuple[int, str]:
     """An existing box of this category with room, else the lowest free number."""
-    per_box = {}
-    same_cat = set()
-
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400 and i.get("category") == category:
-            same_cat.add(b)
-
     full = set(data.get("fullBoxes") or [])     # marked physically full
     for b in sorted(same_cat - full):
         if per_box[b] < MAX_BOX_ITEMS:
@@ -221,41 +209,16 @@ def propose_box(data: dict, active: list[dict], category: str) -> tuple[int, str
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
-def _gemini(b64: str, media: str, prompt: str, key: str) -> dict:
-    """Fallback backend. Same job, same JSON shape — used when Claude is unavailable."""
-    import urllib.error
-    import urllib.request
 
-    body = json.dumps({
-        "systemInstruction": {"parts": [{"text": SYSTEM}]},
-        "contents": [{"role": "user", "parts": [
-            {"inline_data": {"mime_type": media, "data": b64}},
-            {"text": prompt},
-        ]}],
-        "generationConfig": {"responseMimeType": "application/json",
-                             "responseSchema": GEMINI_SCHEMA},
-    }).encode("utf-8")
-
-    req = urllib.request.Request(f"{GEMINI_URL}?key={key}", data=body,
-                                 headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            payload = json.loads(r.read())
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"gemini {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
-
-    candidates = payload.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"gemini returned no candidate: {json.dumps(payload)[:300]}")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    text = next((p["text"] for p in parts if "text" in p), None)
-    if not text:
-        raise RuntimeError(f"gemini returned no text: {json.dumps(candidates[0])[:300]}")
-    return json.loads(text)
-
+_vertex_token_cache: str | None = None
+_vertex_token_expiry: float = 0.0
 
 def vertex_token() -> str | None:
     """Access token for the credit-holding account, straight from gcloud."""
+    global _vertex_token_cache, _vertex_token_expiry
+    if _vertex_token_cache and time.monotonic() < _vertex_token_expiry:
+        return _vertex_token_cache
+
     try:
         out = subprocess.run(
             ["gcloud", "auth", "print-access-token", f"--account={VERTEX_ACCOUNT}"],
@@ -263,7 +226,11 @@ def vertex_token() -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     token = out.stdout.strip()
-    return token or None
+    if token:
+        _vertex_token_cache = token
+        _vertex_token_expiry = time.monotonic() + 3000  # 50 minutes
+        return token
+    return None
 
 
 def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
@@ -303,92 +270,17 @@ def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
     return json.loads(text)
 
 
-def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
-    """Second fallback. Same job, same JSON shape."""
-    import urllib.error
-    import urllib.request
-
-    body = json.dumps({
-        "model": OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:{media};base64,{b64}"}},
-            ]},
-        ],
-        "response_format": {"type": "json_schema", "json_schema": {
-            "name": "part", "strict": True, "schema": SCHEMA}},
-        "max_tokens": 900,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions", data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            payload = json.loads(r.read())
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"openai {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
-
-    choices = payload.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"openai returned no choice: {json.dumps(payload)[:300]}")
-    return json.loads(choices[0]["message"]["content"])
-
-
-@dataclasses.dataclass
-class IdentifyConfig:
-    client: typing.Any
-    context: str
-    provider: str
-    gemini_key: str | None
-    openai_key: str | None = None
-
 
 def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
         print(f"  skipped — {path.suffix} is not a supported image type")
         return None
-
     data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
     prompt = f"Identify this part.\n\n{config.context}"
-
-    if config.provider == "gemini":
-        return _gemini(data, media, prompt, config.gemini_key)
-    if config.provider == "openai":
-        return _openai(data, media, prompt, config.openai_key)
-    if config.provider == "vertex":
-        return _vertex(data, media, prompt, vertex_token())
-
-    # provider == "auto": Vertex first — it spends the credits on the separate
-    # Google account rather than a personal API key. Then walk the rest, skipping
-    # any account that turns out to be unfunded: a key being present in .env and
-    # a key being usable are different things.
-    chain = [(f"vertex/{VERTEX_MODEL}",
-              lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
-    chain.append(("claude", lambda: _claude(config.client, data, media, prompt), config.client))
-    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, config.gemini_key), config.gemini_key))
-    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, config.openai_key), config.openai_key))
-
-    last: Exception | None = None
-    for name, call, available in chain:
-        if not available:
-            continue
-        try:
-            if last is not None:
-                print(f"  trying {name}…")
-            return call()
-        except Exception as exc:                      # noqa: BLE001
-            if not _recoverable(exc):
-                raise
-            print(f"  {name} unavailable: {_reason(exc)}")
-            last = exc
-    if last:
-        raise last
-    raise RuntimeError("no vision API key available")
+    token = vertex_token()
+    if not token: raise RuntimeError("no gcloud token")
+    return _vertex(data, media, prompt, token)
 
 
 def _recoverable(exc: Exception) -> bool:
@@ -410,33 +302,8 @@ def _reason(exc: Exception) -> str:
     return text[:80]
 
 
-def _claude(client, data: str, media: str, prompt: str) -> dict | None:
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=8000,
-        output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
-        system=SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}},
-                {"type": "text", "text": prompt},
-            ],
-        }],
-    )
 
-    if response.stop_reason == "refusal":
-        print("  the model declined to answer for this image")
-        return None
-
-    text = next((b.text for b in response.content if b.type == "text"), None)
-    if not text:
-        print("  no answer came back")
-        return None
-    return json.loads(text)
-
-
-def decide(data: dict, active: list[dict], result: dict) -> dict:
+def decide(data: dict, active: list[dict], result: dict, per_box: dict, category_boxes: dict) -> dict:
     """Where the identified part goes, and what quantity the appended row carries.
 
     A part already on record must be written as the NEW TOTAL, never the delta:
@@ -458,7 +325,9 @@ def decide(data: dict, active: list[dict], result: dict) -> dict:
                 "existing": True, "from": None, "to": None,
                 "why": f"already in box {existing['box']} as a bulk pile — left as 'many'"}
 
-    box, why = propose_box(data, active, result["category"])
+    category = result.get("category")
+    same_cat = category_boxes.get(category, set())
+    box, why = propose_box(data, per_box, same_cat, category)
     return {"box": box, "name": result["name"], "quantity": qty,
             "existing": False, "from": None, "to": qty, "why": why}
 
@@ -622,26 +491,10 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
 
 
 def _create_config(provider: str, context: str) -> IdentifyConfig:
-    client = None
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    if provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            logging.warning("anthropic SDK not installed — skipping Claude")
-
-    return IdentifyConfig(
-        client=client,
-        context=context,
-        provider=provider,
-        gemini_key=read_key("GOOGLE_API_KEY"),
-        openai_key=read_key("OPENAI_API_KEY")
-    )
-
+    return IdentifyConfig(client=None, context=context, provider=provider, gemini_key=None, openai_key=None)
 
 def _process_single_photo(
-    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
 ) -> tuple[dict, dict | None]:
     try:
         result = identify(path, config)
@@ -651,7 +504,7 @@ def _process_single_photo(
     if result is None:
         return {"photo": path.name, "ok": False, "error": "no answer"}, None
 
-    plan = decide(data, active, result)
+    plan = decide(data, active, result, per_box, category_boxes)
     outcome = {"photo": path.name, "ok": True,
                "name": plan["name"], "box": plan["box"],
                "confidence": result["confidence"], "note": result["note"],
@@ -700,10 +553,18 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     context = context_for_prompt(data, active)
     config = _create_config(provider, context)
 
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+
     outcomes, rows = [], []
     for path in paths:
         path = pathlib.Path(path)
-        outcome, row = _process_single_photo(path, data, active, config, unattended)
+        outcome, row = _process_single_photo(path, data, active, config, unattended, per_box, category_boxes)
         outcomes.append(outcome)
         if row is not None:
             rows.append(row)
@@ -826,35 +687,6 @@ def run(args: argparse.Namespace) -> int:
     if not paths:
         sys.exit("no files matched")
 
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    gemini_key = read_key("GOOGLE_API_KEY")
-    openai_key = read_key("OPENAI_API_KEY")
-
-    # Vertex is deliberately absent here: it authenticates through gcloud, so it
-    # needs no key in .env at all.
-    required = {"anthropic": ("ANTHROPIC_API_KEY", anthropic_key),
-                "gemini": ("GOOGLE_API_KEY", gemini_key),
-                "openai": ("OPENAI_API_KEY", openai_key)}
-    if args.provider == "vertex":
-        if not vertex_token():
-            sys.exit(f"gcloud has no usable token for {VERTEX_ACCOUNT} — "
-                     f"run: gcloud auth login {VERTEX_ACCOUNT}")
-    elif args.provider != "auto":
-        name, value = required[args.provider]
-        if not value:
-            sys.exit(f"no {name} in {ENV}")
-    elif not any((anthropic_key, gemini_key, openai_key, vertex_token())):
-        sys.exit(f"no vision credentials at all (no gcloud token, no key in {ENV})")
-
-    client = None
-    if args.provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            if args.provider == "anthropic":
-                sys.exit("pip install anthropic")
-            print("  anthropic SDK not installed — skipping Claude")
 
     data = load_inventory()
     active = [i for i in data["items"] if i["status"] == "active"]
@@ -868,6 +700,14 @@ def run(args: argparse.Namespace) -> int:
         openai_key=openai_key
     )
 
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+
     for path in paths:
         print(f"\n{path.name}")
         try:
@@ -878,7 +718,7 @@ def run(args: argparse.Namespace) -> int:
         if result is None:
             continue
 
-        plan = decide(data, active, result)
+        plan = decide(data, active, result, per_box, category_boxes)
         print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
         if result["note"]:
             print(f"  note: {result['note']}")

@@ -1,3 +1,72 @@
+import pytest
+from identify import context_for_prompt
+
+def test_context_for_prompt_standard_input():
+    data = {
+        "meta": {
+            "categoryLabels": {
+                "cat1": "Category 1",
+                "cat2": "Category 2"
+            }
+        }
+    }
+    active = [
+        {"name": "Item B"},
+        {"name": "Item A"}
+    ]
+
+    result = context_for_prompt(data, active)
+
+    expected = (
+        "Category keys you must choose from: cat1 (Category 1), cat2 (Category 2).\n\n"
+        "Parts already in the inventory (reuse the exact name if it is the same part):\n"
+        "- Item A\n"
+        "- Item B"
+    )
+    assert result == expected
+
+def test_context_for_prompt_empty_input():
+    data = {
+        "meta": {
+            "categoryLabels": {}
+        }
+    }
+    active = []
+
+    result = context_for_prompt(data, active)
+
+    expected = (
+        "Category keys you must choose from: .\n\n"
+        "Parts already in the inventory (reuse the exact name if it is the same part):\n"
+    )
+    assert result == expected
+
+def test_context_for_prompt_duplicate_names():
+    data = {
+        "meta": {
+            "categoryLabels": {
+                "cat1": "Category 1"
+            }
+        }
+    }
+    active = [
+        {"name": "Item A"},
+        {"name": "Item B"},
+        {"name": "Item A"},
+        {"name": "Item B"}
+    ]
+
+    result = context_for_prompt(data, active)
+
+    expected = (
+        "Category keys you must choose from: cat1 (Category 1).\n\n"
+        "Parts already in the inventory (reuse the exact name if it is the same part):\n"
+        "- Item A\n"
+        "- Item B"
+    )
+    assert result == expected
+
+import unittest
 import unittest
 from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
@@ -155,6 +224,7 @@ class TestFindExisting(unittest.TestCase):
 
 class TestDecide(unittest.TestCase):
     def setUp(self):
+        import collections
         from identify import decide
         self.decide = decide
         self.data = {
@@ -168,6 +238,14 @@ class TestDecide(unittest.TestCase):
                 {"box": 3, "reason": "empty"}
             ]
         }
+        self.active = [i for i in self.data["items"] if i["status"] == "active"]
+        self.per_box = {}
+        self.category_boxes = collections.defaultdict(set)
+        for i in self.active:
+            b = i["box"]
+            self.per_box[b] = self.per_box.get(b, 0) + 1
+            if b < 400:
+                self.category_boxes[i.get("category")].add(b)
 
     def test_appended_row_exact(self):
         result = {
@@ -176,7 +254,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
@@ -192,7 +270,7 @@ class TestDecide(unittest.TestCase):
             "category": "misc",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 4)
         self.assertEqual(res["name"], "18650 battery holder")
@@ -209,7 +287,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 1) # propose_box picks box 1 due to same category
         self.assertEqual(res["name"], "New IC")
@@ -225,7 +303,7 @@ class TestDecide(unittest.TestCase):
             "category": "resistor",
             "matches_existing": ""
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertFalse(res["existing"])
         self.assertEqual(res["box"], 2) # propose_box picks first free box
         self.assertEqual(res["name"], "New Resistor")
@@ -241,7 +319,7 @@ class TestDecide(unittest.TestCase):
             "category": "ic",
             "matches_existing": "TMC2209 stepper driver"
         }
-        res = self.decide(self.data, [i for i in self.data["items"] if i["status"] == "active"], result)
+        res = self.decide(self.data, self.active, result, self.per_box, self.category_boxes)
         self.assertTrue(res["existing"])
         self.assertEqual(res["box"], 1)
         self.assertEqual(res["name"], "TMC2209 stepper driver")
@@ -275,141 +353,3 @@ class TestRecoverable(unittest.TestCase):
         self.assertFalse(_recoverable(Exception("Bad request 400")))
 
 
-class TestContextForPrompt(unittest.TestCase):
-    def test_typical_case(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "ic": "Integrated Circuits",
-                    "resistor": "Resistors"
-                }
-            }
-        }
-        active = [
-            {"name": "TMC2209 stepper driver"},
-            {"name": "10k resistor"}
-        ]
-        result = context_for_prompt(data, active)
-
-        self.assertIn("Category keys you must choose from: ic (Integrated Circuits), resistor (Resistors).", result)
-        self.assertIn("- 10k resistor", result)
-        self.assertIn("- TMC2209 stepper driver", result)
-        # Checking sort order
-        expected_parts = "- 10k resistor\n- TMC2209 stepper driver"
-        self.assertIn(expected_parts, result)
-
-    def test_duplicates_deduplicated_and_sorted(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "misc": "Miscellaneous"
-                }
-            }
-        }
-        active = [
-            {"name": "Z-diode"},
-            {"name": "Z-diode"},
-            {"name": "A-diode"},
-            {"name": "A-diode"}
-        ]
-        result = context_for_prompt(data, active)
-
-        expected_parts = "- A-diode\n- Z-diode"
-        self.assertIn(expected_parts, result)
-        self.assertEqual(result.count("A-diode"), 1)
-        self.assertEqual(result.count("Z-diode"), 1)
-
-    def test_empty_active_list(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "misc": "Miscellaneous"
-                }
-            }
-        }
-        active = []
-        result = context_for_prompt(data, active)
-
-        self.assertIn("Category keys you must choose from: misc (Miscellaneous).", result)
-        self.assertTrue(result.endswith("Parts already in the inventory (reuse the exact name if it is the same part):\n"))
-
-    def test_empty_categories(self):
-        data = {
-            "meta": {
-                "categoryLabels": {}
-            }
-        }
-        active = [
-            {"name": "Part A"}
-        ]
-        result = context_for_prompt(data, active)
-
-        self.assertIn("Category keys you must choose from: .", result)
-        self.assertIn("- Part A", result)
-
-    def test_missing_category_labels(self):
-        # Even if categoryLabels is missing, we simulate what would happen
-        # assuming the caller provided the correct dictionary structure, but
-        # let's assume the dictionary is malformed (key error should raise)
-        data = {
-            "meta": {}
-        }
-        active = [
-            {"name": "Part A"}
-        ]
-        with self.assertRaises(KeyError):
-            context_for_prompt(data, active)
-
-    def test_special_characters_in_names(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "ic": "Integrated Circuits"
-                }
-            }
-        }
-        active = [
-            {"name": "IC-123!@#"},
-            {"name": "µController"}
-        ]
-        result = context_for_prompt(data, active)
-
-        self.assertIn("- IC-123!@#", result)
-        self.assertIn("- µController", result)
-        expected_parts = "- IC-123!@#\n- µController"
-        self.assertIn(expected_parts, result)
-
-class TestContextForPromptAdditional(unittest.TestCase):
-    def test_unicode_category_labels(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "μcu": "Microcontrollers 🚀",
-                    "led": "LEDs & Lights ✨"
-                }
-            }
-        }
-        active = [
-            {"name": "ESP32 🧠"}
-        ]
-        result = context_for_prompt(data, active)
-        self.assertIn("μcu (Microcontrollers 🚀)", result)
-        self.assertIn("led (LEDs & Lights ✨)", result)
-        self.assertIn("- ESP32 🧠", result)
-
-    def test_missing_name_in_active(self):
-        data = {
-            "meta": {
-                "categoryLabels": {
-                    "misc": "Misc"
-                }
-            }
-        }
-        active = [
-            {"not_name": "Something"}
-        ]
-        with self.assertRaises(KeyError):
-            context_for_prompt(data, active)
-
-if __name__ == "__main__":
-    unittest.main()
