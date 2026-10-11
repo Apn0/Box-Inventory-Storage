@@ -83,8 +83,6 @@ SCHEMA = {
 # a photo does not raise a false "ambiguous quantity" every time.
 COUNTED_MARK = "photo-counted"
 
-OPENAI_MODEL = "gpt-4o"
-GEMINI_MODEL = "gemini-2.5-flash"
 
 # Vertex AI on the separate Google account that holds the credits. Auth comes
 # from gcloud, so no key for it lives in .env.
@@ -92,7 +90,6 @@ VERTEX_ACCOUNT = "peterfrissen123@gmail.com"
 VERTEX_PROJECT = "deft-melody-503207-k8"
 VERTEX_LOCATION = "us-central1"
 VERTEX_MODEL = "gemini-2.5-flash"
-GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
               f"{GEMINI_MODEL}:generateContent")
 
 # Gemini takes the same fields but wants uppercase types and no additionalProperties.
@@ -213,38 +210,6 @@ def propose_box(data: dict, per_box: dict, same_cat: set, category: str) -> tupl
     return nxt, f"box {nxt} is a new number (no free ones left)"
 
 
-def _gemini(b64: str, media: str, prompt: str, key: str) -> dict:
-    """Fallback backend. Same job, same JSON shape — used when Claude is unavailable."""
-    import urllib.error
-    import urllib.request
-
-    body = json.dumps({
-        "systemInstruction": {"parts": [{"text": SYSTEM}]},
-        "contents": [{"role": "user", "parts": [
-            {"inline_data": {"mime_type": media, "data": b64}},
-            {"text": prompt},
-        ]}],
-        "generationConfig": {"responseMimeType": "application/json",
-                             "responseSchema": GEMINI_SCHEMA},
-    }).encode("utf-8")
-
-    req = urllib.request.Request(f"{GEMINI_URL}?key={key}", data=body,
-                                 headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            payload = json.loads(r.read())
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"gemini {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
-
-    candidates = payload.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"gemini returned no candidate: {json.dumps(payload)[:300]}")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    text = next((p["text"] for p in parts if "text" in p), None)
-    if not text:
-        raise RuntimeError(f"gemini returned no text: {json.dumps(candidates[0])[:300]}")
-    return json.loads(text)
-
 
 _vertex_token_cache: str | None = None
 _vertex_token_expiry: float = 0.0
@@ -305,49 +270,6 @@ def _vertex(b64: str, media: str, prompt: str, token: str) -> dict:
         raise RuntimeError(f"vertex returned no text: {json.dumps(candidates[0])[:300]}")
     return json.loads(text)
 
-
-def _openai(b64: str, media: str, prompt: str, key: str) -> dict:
-    """Second fallback. Same job, same JSON shape."""
-    import urllib.error
-    import urllib.request
-
-    body = json.dumps({
-        "model": OPENAI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:{media};base64,{b64}"}},
-            ]},
-        ],
-        "response_format": {"type": "json_schema", "json_schema": {
-            "name": "part", "strict": True, "schema": SCHEMA}},
-        "max_tokens": 900,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions", data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            payload = json.loads(r.read())
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"openai {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
-
-    choices = payload.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"openai returned no choice: {json.dumps(payload)[:300]}")
-    return json.loads(choices[0]["message"]["content"])
-
-
-@dataclasses.dataclass
-class IdentifyConfig:
-    client: typing.Any
-    context: str
-    provider: str
-    gemini_key: str | None
-    openai_key: str | None = None
 
 
 def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
@@ -412,31 +334,6 @@ def _reason(exc: Exception) -> str:
             return probe
     return text[:80]
 
-
-def _claude(client, data: str, media: str, prompt: str) -> dict | None:
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=8000,
-        output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
-        system=SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}},
-                {"type": "text", "text": prompt},
-            ],
-        }],
-    )
-
-    if response.stop_reason == "refusal":
-        print("  the model declined to answer for this image")
-        return None
-
-    text = next((b.text for b in response.content if b.type == "text"), None)
-    if not text:
-        print("  no answer came back")
-        return None
-    return json.loads(text)
 
 
 def decide(data: dict, active: list[dict], result: dict, per_box: dict, category_boxes: dict) -> dict:
@@ -626,24 +523,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
-def _create_config(provider: str, context: str) -> IdentifyConfig:
-    client = None
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    if provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            logging.warning("anthropic SDK not installed — skipping Claude")
-
-    return IdentifyConfig(
-        client=client,
-        context=context,
-        provider=provider,
-        gemini_key=read_key("GOOGLE_API_KEY"),
-        openai_key=read_key("OPENAI_API_KEY")
-    )
-
+def _create_config(context: str) -> IdentifyConfig:
+    return IdentifyConfig(client=None, context=context)
 
 def _process_single_photo(
     path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
