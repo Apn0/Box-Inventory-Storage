@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  server.py speaks plain HTTP, which Android blocks by default since API 28.
+
+  Note: <domain> entries match hostnames only — the config format has no way to
+  express an IP range, so listing "192.168.0.0" would match that single address
+  and quietly block every other LAN address, including a Meshnet 100.x one.
+  Cleartext is therefore allowed outright. That is acceptable here because the
+  app only ever loads the one address you type into it, and never the open web.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+

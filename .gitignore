@@ -34,3 +34,4 @@ android/.last_version_code
 
 # Local secrets: API_KEY for the photo service in main.py. See .env.example.
 .env
+dist/

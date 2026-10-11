@@ -1,0 +1,1719 @@
+{
+  "generated": "2026-10-11",
+  "rules": {
+    "perBox": 3,
+    "row": 10,
+    "container": 30
+  },
+  "boxes": {
+    "1": {
+      "category": "mcu",
+      "parts": [
+        {
+          "name": "ESP32-C3 OLED module",
+          "oldBox": 14,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "XIAO ESP32-C6 microcontroller board",
+          "oldBox": 14,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "ESP8266MOD",
+          "oldBox": 14,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "4": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Coil-type vibration sensors (spring vibration switch modules)",
+          "oldBox": 71,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "5": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "MQ gas sensors (MQ-7/MQ-3/MQ-135)",
+          "oldBox": 6,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "6": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Two-wire voltage sensor modules + 7-seg display",
+          "oldBox": 8,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "7": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Heart-rate/BO sensor module",
+          "oldBox": 7,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "8": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Bar load cell (0.5 kg)",
+          "oldBox": 114,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Bar load cell (100 g)",
+          "oldBox": 114,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "MPS20N0040D pressure sensor module",
+          "oldBox": 116,
+          "qty": 3,
+          "countType": "exact"
+        }
+      ]
+    },
+    "9": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Pressure-sensitive strip",
+          "oldBox": 12,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "IR receiver module",
+          "oldBox": 43,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Laser sensor receiver module",
+          "oldBox": 84,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "10": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Magnetic switch",
+          "oldBox": 43,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Vibration switch module",
+          "oldBox": 39,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "INA219 current/voltage sensor",
+          "oldBox": 5,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "11": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "audio-wave sensor",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "BME280 Environmental Sensor",
+          "oldBox": 100,
+          "qty": 3,
+          "countType": "exact"
+        },
+        {
+          "name": "Capacitive touch sensor module",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "12": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Electronic candle light module",
+          "oldBox": 110,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "ENS160 + AHT2x air-quality sensor module",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "GUVA-S12SD UV sensor module",
+          "oldBox": 7,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "13": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "gyro+accelerometer (unknown)",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Hall sensor module",
+          "oldBox": 39,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "HC-SR04",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "14": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "LM393 comparator module (AO/DO, trimpot)",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "MPU6050",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "RD-03D",
+          "oldBox": 12,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "15": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "Reed sensor",
+          "oldBox": 43,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "tilt sensor",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "TOF200C-VL53L0X",
+          "oldBox": 11,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "16": {
+      "category": "sensor",
+      "parts": [
+        {
+          "name": "u-blox NEO-6M GPS module + patch antenna",
+          "oldBox": 7,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "VEML7700",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "19": {
+      "category": "interface",
+      "parts": [
+        {
+          "name": "PCM1808 I2S stereo ADC module",
+          "oldBox": 122,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "ADS1115 16-bit I2C ADC module (bi-sided, purple breakout)",
+          "oldBox": 12,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "ADS1115 16-bit I2C ADC module (linear, red breakout)",
+          "oldBox": 12,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "20": {
+      "category": "interface",
+      "parts": [
+        {
+          "name": "5-way navigation tactile switch breakout (UP/DOWN/LEFT/RIGHT/center)",
+          "oldBox": 11,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "I2C rotary encoder module (white breakout)",
+          "oldBox": 11,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "USB-C breakout boards",
+          "oldBox": 10,
+          "qty": 8,
+          "countType": "exact"
+        }
+      ]
+    },
+    "21": {
+      "category": "interface",
+      "parts": [
+        {
+          "name": "USB-C USB-to-TTL serial adapter module",
+          "oldBox": 10,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "HW-477 modules",
+          "oldBox": 39,
+          "qty": 5,
+          "countType": "exact"
+        },
+        {
+          "name": "HX711 load-cell amplifier module",
+          "oldBox": 12,
+          "qty": 5,
+          "countType": "exact"
+        }
+      ]
+    },
+    "22": {
+      "category": "interface",
+      "parts": [
+        {
+          "name": "SKU7810",
+          "oldBox": 12,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "25": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "HW-070 PWM controller (black)",
+          "oldBox": 29,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "26": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "Red DC motor speed controller",
+          "oldBox": 29,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "27": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "XY-MOS MOSFET module",
+          "oldBox": 22,
+          "qty": 6,
+          "countType": "exact"
+        },
+        {
+          "name": "XY-MOS MOSFET module",
+          "oldBox": 23,
+          "qty": 7,
+          "countType": "exact"
+        },
+        {
+          "name": "LR7843 MOSFET power switch module",
+          "oldBox": 23,
+          "qty": 6,
+          "countType": "exact"
+        }
+      ]
+    },
+    "28": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "TC1508A dual DC motor driver module (2-channel H-bridge)",
+          "oldBox": 45,
+          "qty": 6,
+          "countType": "exact"
+        },
+        {
+          "name": "12V relay module",
+          "oldBox": 71,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "5V relay module",
+          "oldBox": 71,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "29": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "Solid state relay (SSR) module",
+          "oldBox": 23,
+          "qty": 3,
+          "countType": "exact"
+        },
+        {
+          "name": "Bits from Bytes stepper driver",
+          "oldBox": 15,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "TMC2209 stepper driver",
+          "oldBox": 13,
+          "qty": 6,
+          "countType": "exact"
+        }
+      ]
+    },
+    "30": {
+      "category": "driver",
+      "parts": [
+        {
+          "name": "ULN2003",
+          "oldBox": 12,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "33": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "Solar charge module (outdoor lights)",
+          "oldBox": 23,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "34": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "18650 charger module",
+          "oldBox": 10,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "18650 Li-ion charger module",
+          "oldBox": 7,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "18650 modular holder",
+          "oldBox": 16,
+          "qty": 5,
+          "countType": "exact"
+        }
+      ]
+    },
+    "35": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "DC-DC step-down (buck) converter modules (Mini-360 / HW-187)",
+          "oldBox": 69,
+          "qty": 5,
+          "countType": "exact"
+        },
+        {
+          "name": "DC-DC step-down (buck) converter modules (MP1584)",
+          "oldBox": 70,
+          "qty": 5,
+          "countType": "exact"
+        },
+        {
+          "name": "PD65W step-down fast-charge module (USB-C + DC5521)",
+          "oldBox": 117,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "36": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "Step-down converter",
+          "oldBox": 9,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Li-ion battery level indicator module (4-LED)",
+          "oldBox": 127,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "1-cell lithium-ion charger modules (USB-C, 600mA)",
+          "oldBox": 36,
+          "qty": 10,
+          "countType": "exact"
+        }
+      ]
+    },
+    "37": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "2S lithium-ion charger module",
+          "oldBox": 36,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "3S lithium-ion charger module",
+          "oldBox": 36,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "CR6030L DC-DC buck converter module (1A max)",
+          "oldBox": 44,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "38": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "DC-DC buck converter module (CC/CV, max 35V)",
+          "oldBox": 43,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "USB-C power meter module (OLED, purple)",
+          "oldBox": 10,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "V meter with 7-seg display",
+          "oldBox": 8,
+          "qty": 8,
+          "countType": "exact"
+        }
+      ]
+    },
+    "39": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "USB-A power module (screw terminal + DIP)",
+          "oldBox": 10,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "MT3608 DC-DC step-up (boost) converter module",
+          "oldBox": 43,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Step-up converter",
+          "oldBox": 9,
+          "qty": 5,
+          "countType": "exact"
+        }
+      ]
+    },
+    "40": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "Micro USB-C PD trigger module",
+          "oldBox": 10,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "USB-C PD trigger module (switchable)",
+          "oldBox": 32,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "AAA batteries (brand new)",
+          "oldBox": 54,
+          "qty": 5,
+          "countType": "exact"
+        }
+      ]
+    },
+    "41": {
+      "category": "power",
+      "parts": [
+        {
+          "name": "AC/DC converter module (5V, 3.5W)",
+          "oldBox": 119,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "44": {
+      "category": "motor",
+      "parts": [
+        {
+          "name": "Small brushed DC motor",
+          "oldBox": 42,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Small brushed DC motor with pinion gear",
+          "oldBox": 42,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Micro DC gear motor",
+          "oldBox": 42,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "45": {
+      "category": "motor",
+      "parts": [
+        {
+          "name": "Micro DC gear motor w/ gearbox + encoder board",
+          "oldBox": 42,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Micro servo kit (SG90 9g + horns)",
+          "oldBox": 102,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Micro servo kit (SG90 9g + horns)",
+          "oldBox": 103,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "46": {
+      "category": "motor",
+      "parts": [
+        {
+          "name": "SG90 9g micro servo kit",
+          "oldBox": 42,
+          "qty": 3,
+          "countType": "exact"
+        },
+        {
+          "name": "CD/DVD drive optical head carriage with 4-wire stepper motor",
+          "oldBox": 95,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Micro stepper motor",
+          "oldBox": 40,
+          "qty": 9,
+          "countType": "exact"
+        }
+      ]
+    },
+    "47": {
+      "category": "motor",
+      "parts": [
+        {
+          "name": "Mini stepper motor (4-wire / 4-pole), 0.75 mm shaft, ~1.85 mm gear",
+          "oldBox": 40,
+          "qty": 6,
+          "countType": "exact"
+        },
+        {
+          "name": "12V 40mm 2-wire fan 0.10A",
+          "oldBox": 35,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Vibration motor module",
+          "oldBox": 5,
+          "qty": 4,
+          "countType": "exact"
+        }
+      ]
+    },
+    "50": {
+      "category": "display",
+      "parts": [
+        {
+          "name": "Rectangular LEDs (R/G/Y/B)",
+          "oldBox": 19,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "51": {
+      "category": "display",
+      "parts": [
+        {
+          "name": "COB LED module",
+          "oldBox": 104,
+          "qty": 6,
+          "countType": "exact"
+        },
+        {
+          "name": "COB LED light bar",
+          "oldBox": 47,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Traffic-light LED module (Red/Yellow/Green + GND, 4-pin)",
+          "oldBox": 46,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "52": {
+      "category": "display",
+      "parts": [
+        {
+          "name": "4-pin LED strip connector",
+          "oldBox": 16,
+          "qty": 5,
+          "countType": "exact"
+        },
+        {
+          "name": "COB LED filament (3V, 6500K, white)",
+          "oldBox": 47,
+          "qty": 10,
+          "countType": "exact"
+        },
+        {
+          "name": "I2C OLED display module (0.96\", 128×64, white)",
+          "oldBox": 120,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "53": {
+      "category": "display",
+      "parts": [
+        {
+          "name": "555 timer LED flasher module",
+          "oldBox": 39,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "RGB SMD LED board",
+          "oldBox": 39,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "56": {
+      "category": "comms",
+      "parts": [
+        {
+          "name": "IR transmitter module",
+          "oldBox": 7,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "57": {
+      "category": "comms",
+      "parts": [
+        {
+          "name": "UART Wi-Fi module",
+          "oldBox": 7,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "58": {
+      "category": "comms",
+      "parts": [
+        {
+          "name": "Laser diode module",
+          "oldBox": 84,
+          "qty": 8,
+          "countType": "exact"
+        },
+        {
+          "name": "Retractable RJ-45 cable reel",
+          "oldBox": 108,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "RJ-45 connector (single)",
+          "oldBox": 108,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "59": {
+      "category": "comms",
+      "parts": [
+        {
+          "name": "Walkie-talkie earpiece (in-ear bud)",
+          "oldBox": 111,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "62": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "Limit switches (roller-lever microswitches)",
+          "oldBox": 21,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "63": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "2-pin key lock toggle switch",
+          "oldBox": 33,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Key for key lock toggle",
+          "oldBox": 33,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Potentiometer knob (loose)",
+          "oldBox": 99,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "64": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "Potentiometer module w/ knob + screw terminals",
+          "oldBox": 34,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Limit switch (SIWIG microswitch, no lever)",
+          "oldBox": 21,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Linear slide switch (large)",
+          "oldBox": 31,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "65": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "Linear slide switch (small)",
+          "oldBox": 31,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "6-pin ON-OFF-ON toggle switch",
+          "oldBox": 31,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "DPDT latching pushbutton switch (push-on/push-off), 6-pin PCB mount",
+          "oldBox": 31,
+          "qty": 4,
+          "countType": "exact"
+        }
+      ]
+    },
+    "66": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "Panel-mount rotary potentiometer (small body)",
+          "oldBox": 105,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Panel-mount rotary potentiometer (unknown value)",
+          "oldBox": 34,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "Linear slide potentiometer (PCB-mount)",
+          "oldBox": 105,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "67": {
+      "category": "switch",
+      "parts": [
+        {
+          "name": "Rotary encoder module (KY-040, push-button)",
+          "oldBox": 41,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Illuminated panel-mount metal pushbutton switch",
+          "oldBox": 115,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "70": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Alligator clips",
+          "oldBox": 4,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "71": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Barrel nut / cross-dowel threaded connector (with spring ball detent)",
+          "oldBox": 84,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "72": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "D2 push-in wire connectors set 1",
+          "oldBox": 17,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "73": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "D2 push-in wire connectors set 2",
+          "oldBox": 18,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "74": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Header pins (straight + 90°)",
+          "oldBox": 10,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "75": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Terminal blocks (kroonsteentjes)",
+          "oldBox": 25,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "76": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "DC barrel connector (female)",
+          "oldBox": 38,
+          "qty": 10,
+          "countType": "exact"
+        },
+        {
+          "name": "DC barrel connector (male)",
+          "oldBox": 37,
+          "qty": 10,
+          "countType": "exact"
+        },
+        {
+          "name": "Alligator clip jumper wire (red)",
+          "oldBox": 57,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "77": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Alligator clip jumper wires (red, green)",
+          "oldBox": 56,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Flexible shaft coupling",
+          "oldBox": 55,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "USB-C solder coupling",
+          "oldBox": 10,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "78": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "HDMI male-only dongle (4K UHD branded)",
+          "oldBox": 107,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Micro HDMI male to HDMI female adapter",
+          "oldBox": 107,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Mini HDMI male to HDMI female adapter",
+          "oldBox": 107,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "79": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "IEC panel-mount AC power inlet (3-pin)",
+          "oldBox": 123,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "IEC panel-mount AC power inlet (3-pin)",
+          "oldBox": 124,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "XT60 panel-mount connector",
+          "oldBox": 125,
+          "qty": 4,
+          "countType": "exact"
+        }
+      ]
+    },
+    "80": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "XT60 panel-mount connector",
+          "oldBox": 126,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "3.5 mm audio plug adapter (male-to-male)",
+          "oldBox": 112,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "DC barrel plug adapters (same input, 8 assorted output sizes)",
+          "oldBox": 106,
+          "qty": 8,
+          "countType": "exact"
+        }
+      ]
+    },
+    "81": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "USB-A to USB-C adapter",
+          "oldBox": 107,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "XT60 connector (female, loose)",
+          "oldBox": 100,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "XT60 connector (male/female mixed)",
+          "oldBox": 24,
+          "qty": 3,
+          "countType": "exact"
+        }
+      ]
+    },
+    "91": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Large white plastic gears (assorted)",
+          "oldBox": 74,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "92": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Medium white plastic gears (assorted)",
+          "oldBox": 73,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "93": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Assorted mechanical parts (mixed, uncounted; includes brackets, rails, misc hardware)",
+          "oldBox": 30,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "94": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Small white plastic gears (assorted; includes 2 worm gears)",
+          "oldBox": 72,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "95": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Aluminum disk (~43×43 mm rounded square)",
+          "oldBox": 58,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "GT2 timing-belt pulley (aluminum, flanged)",
+          "oldBox": 48,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "Spur gear (black, plastic)",
+          "oldBox": 51,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "96": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Timing belt pulleys, black plastic (6 mm belt width)",
+          "oldBox": 77,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "GT2 timing-belt idler pulley (plastic, flanged)",
+          "oldBox": 49,
+          "qty": 6,
+          "countType": "exact"
+        },
+        {
+          "name": "GT2 timing-belt pulley (nylon, flanged)",
+          "oldBox": 48,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "97": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Conical gear (funnel-shaped, plastic)",
+          "oldBox": 50,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Timing belt loop (~150 mm), 6 mm width",
+          "oldBox": 78,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Timing belt loop (~250 mm), 6 mm width",
+          "oldBox": 78,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "98": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Spur gear (translucent, plastic)",
+          "oldBox": 51,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Spur gear (white, plastic)",
+          "oldBox": 51,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Brass 3D-printer nozzle tips (assorted)",
+          "oldBox": 83,
+          "qty": 4,
+          "countType": "exact"
+        }
+      ]
+    },
+    "99": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Flexible tubing (1.5 m, 0.8 mm ID, 1.6 mm OD)",
+          "oldBox": 97,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Heatsink (17.25 × 16.86 mm)",
+          "oldBox": 80,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Pillow-block bearing units (8mm bore)",
+          "oldBox": 3,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "100": {
+      "category": "mechanical",
+      "parts": [
+        {
+          "name": "Small clear elastic bands",
+          "oldBox": 96,
+          "qty": 8,
+          "countType": "exact"
+        },
+        {
+          "name": "Stainless steel 304 tube (OD 12 mm, ID 10 mm, L 32 mm)",
+          "oldBox": 79,
+          "qty": 1,
+          "countType": "exact"
+        }
+      ]
+    },
+    "103": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Drill-bit stoppers + flanges",
+          "oldBox": 2,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "104": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Scrap metal parts (broken/snapped drill bits and taps)",
+          "oldBox": 61,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "105": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Assorted mounting hardware (nylon washers/spacers, hex standoffs female-female M3.5×26mm total / 20mm body, assorted bolts)",
+          "oldBox": 53,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "106": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Screws <20 mm length",
+          "oldBox": 27,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "107": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Screws ≥20 mm length",
+          "oldBox": 94,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "108": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Like about the 10 mm nut and it's circular nut",
+          "oldBox": 52,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "109": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "M6 bolts + M6 nuts",
+          "oldBox": 28,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "110": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Small bolts (<=M5) + few M6",
+          "oldBox": 26,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "111": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Countersink bit (HSS 6, hex shank)",
+          "oldBox": 1,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "M8 countersunk (flat-head) bolts (Acer All-in-One)",
+          "oldBox": 85,
+          "qty": 3,
+          "countType": "exact"
+        },
+        {
+          "name": "M3 hex standoffs (female-female), incl. 2× M3 bolts",
+          "oldBox": 82,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "112": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Small flat washers",
+          "oldBox": 38,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "M6 bolts (mixed head styles)",
+          "oldBox": 65,
+          "qty": 4,
+          "countType": "exact"
+        },
+        {
+          "name": "M10 countersunk (flat-head) bolts",
+          "oldBox": 86,
+          "qty": 2,
+          "countType": "exact"
+        }
+      ]
+    },
+    "113": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "M10 countersunk (flat-head) bolts",
+          "oldBox": 87,
+          "qty": 5,
+          "countType": "exact"
+        },
+        {
+          "name": "M2 hex standoffs (metal, male-female)",
+          "oldBox": 88,
+          "qty": 20,
+          "countType": "exact"
+        },
+        {
+          "name": "Nut",
+          "oldBox": 38,
+          "qty": 10,
+          "countType": "exact"
+        }
+      ]
+    },
+    "114": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "M2 nuts (52) + M1 nuts (2)",
+          "oldBox": 67,
+          "qty": 54,
+          "countType": "exact"
+        },
+        {
+          "name": "M2×20 socket head cap screws (hex), grade 12.9, black, full thread",
+          "oldBox": 89,
+          "qty": 100,
+          "countType": "exact"
+        },
+        {
+          "name": "Tap bits (6-piece set)",
+          "oldBox": 1,
+          "qty": 5,
+          "countType": "exact"
+        }
+      ]
+    },
+    "115": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Tap bits (M2 + M2.5)",
+          "oldBox": 1,
+          "qty": 2,
+          "countType": "exact"
+        },
+        {
+          "name": "Large flat washers (unidentified)",
+          "oldBox": 38,
+          "qty": 3,
+          "countType": "exact"
+        },
+        {
+          "name": "Loose bolts (unidentified)",
+          "oldBox": 26,
+          "qty": 4,
+          "countType": "exact"
+        }
+      ]
+    },
+    "116": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "M2 lock washers (stainless)",
+          "oldBox": 90,
+          "qty": 100,
+          "countType": "exact"
+        },
+        {
+          "name": "M5 washers",
+          "oldBox": 38,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "M3 bolts",
+          "oldBox": 62,
+          "qty": 6,
+          "countType": "exact"
+        }
+      ]
+    },
+    "117": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "M4 bolt",
+          "oldBox": 63,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "M5 bolts",
+          "oldBox": 64,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "M8 bolts",
+          "oldBox": 66,
+          "qty": 3,
+          "countType": "exact"
+        }
+      ]
+    },
+    "118": {
+      "category": "fastener",
+      "parts": [
+        {
+          "name": "Washer",
+          "oldBox": 38,
+          "qty": 10,
+          "countType": "exact"
+        }
+      ]
+    },
+    "121": {
+      "category": "material",
+      "parts": [
+        {
+          "name": "Aluminum scraps (small pieces)",
+          "oldBox": 60,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "122": {
+      "category": "material",
+      "parts": [
+        {
+          "name": "Brass scraps (small pieces)",
+          "oldBox": 59,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "123": {
+      "category": "material",
+      "parts": [
+        {
+          "name": "Copper wire scraps (fine multi-strand)",
+          "oldBox": 61,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "124": {
+      "category": "material",
+      "parts": [
+        {
+          "name": "PVA flakes / granules",
+          "oldBox": 128,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "125": {
+      "category": "material",
+      "parts": [
+        {
+          "name": "Adhesive foam mounting strip for sensors",
+          "oldBox": 93,
+          "qty": 1,
+          "countType": "exact"
+        },
+        {
+          "name": "Foam earplugs",
+          "oldBox": 98,
+          "qty": 8,
+          "countType": "exact"
+        }
+      ]
+    },
+    "128": {
+      "category": "tool",
+      "parts": [
+        {
+          "name": "Assorted small tool accessories (hex/driver bits + retractable hook)",
+          "oldBox": 68,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "129": {
+      "category": "tool",
+      "parts": [
+        {
+          "name": "Iron-on hemming tape (fabric)",
+          "oldBox": 93,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
+    "130": {
+      "category": "tool",
+      "parts": [
+        {
+          "name": "Small tools bit set",
+          "oldBox": 20,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    }
+  }
+}

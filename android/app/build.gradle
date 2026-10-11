@@ -1,0 +1,63 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.arnodaamen.boxinventory'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.arnodaamen.boxinventory"
+        // 29 = Android 10. Above that, MediaStore takes a photo without needing
+        // WRITE_EXTERNAL_STORAGE, which keeps the app permission-free.
+        minSdk 29
+        // 34, not 35, on purpose. Targeting 35 makes Android 15 force edge-to-edge,
+        // so the WebView draws under the status bar and the camera cutout hid the
+        // app's header. At 34 the system lays out the status bar normally.
+        // The page also pads itself with env(safe-area-inset-*) for browsers that
+        // go edge-to-edge regardless.
+        targetSdk 34
+        // Must strictly increase every install or Android just silently reuses
+        // the old version. CI passes -PappVersionCode=$GITHUB_RUN_NUMBER; a local
+        // build falls back to 1 since it never ships.
+        versionCode (project.hasProperty('appVersionCode') ? project.appVersionCode.toInteger() : 1)
+        versionName "2.1"
+    }
+
+    signingConfigs {
+        debug {
+            // A committed keystore, not the auto-generated per-machine one.
+            // Every GitHub Actions run is a fresh container with no
+            // ~/.android/debug.keystore, so Gradle silently minted a brand-new
+            // random debug key each build. Installing a differently-signed APK
+            // over an already-installed one is exactly "App not installed" —
+            // that is what was hitting the phone, not the version number.
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            // The workflow ships the debug build: it is signed with the standard
+            // debug key, so it installs from a file without a Play account.
+            applicationIdSuffix ""
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// No dependencies on purpose — the framework WebView is all this needs, and an
+// empty dependency graph is one less thing that can break the CI build.
+dependencies {
+}

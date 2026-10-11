@@ -18,4 +18,16 @@ Base branch: `main`
 - **Categories**: Auto-assigned from part name (15 categories).
 - **Containers**: Boxes group in sets of 30.
 
+
+## Phone app (APK)
+- The Android project is **not optional scaffolding**: it is how the app reaches Arno's phone.
+  GitHub Actions cannot build it (account out of minutes, cannot be paid), so build locally:
+  `bash tools/build_apk_local.sh` -> signs with `android/app/debug.keystore` (same key as every
+  earlier build, so it installs as an update) and publishes to the `latest` release.
+- The APK opens the page from `file:///android_asset/`, where a browser refuses ES modules.
+  `tools/bundle_single_file.py` inlines snapshot/config/resolve/app into `dist/index.html`;
+  the build script calls it. Keep the import chain acyclic or the bundler will refuse.
+- Never delete `android/`, the keystore or these scripts: losing the keystore means the phone
+  can no longer update the app, only reinstall it.
+
 > Sessions opened inside this repo load NO cross-project memory. Update this file as the app evolves.
