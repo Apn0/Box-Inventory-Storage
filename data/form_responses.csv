@@ -2,3 +2,7 @@ Timestamp,Box,Item,Qty,Note
 16/08/2026 02:51:18,13,TMC2209 stepper driver,6,restatement test via form (photo-counted)
 16/08/2026 02:59:28,13,TMC2209 stepper driver,7,cloud write test (photo-counted)
 16/08/2026 02:59:33,13,TMC2209 stepper driver,6,undo (photo-counted)
+22/09/2026 14:56:48,123,[BOX FULL],1,box is physically full
+22/09/2026 14:56:57,124,[BOX FULL],1,box is physically full
+22/09/2026 15:12:59,124,[BOX FULL],1,box is physically full
+22/09/2026 15:14:30,52,Like about the 10 mm nut and it's circular nut,99,(photo-counted)

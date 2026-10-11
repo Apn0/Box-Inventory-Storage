@@ -1,8 +1,8 @@
 {
   "meta": {
     "source": "Google Sheet export (Box, Item, Qty, Note, UpdatedAt)",
-    "generated": "2026-09-22",
-    "rawRows": 266,
+    "generated": "2026-10-02",
+    "rawRows": 269,
     "containerSize": 30,
     "bulkSentinel": 99,
     "categoryLabels": {
@@ -1891,21 +1891,10 @@
       "status": "gone",
       "note": "Remove both from Box 46",
       "category": "sensor",
-      "updated": "2026-02-16",
+      "updated": "2026-01-25",
       "conflict": false,
-      "restated": true,
-      "history": [
-        {
-          "qty": "0",
-          "date": "2026-01-25",
-          "note": "Remove both from Box 46"
-        },
-        {
-          "qty": "0",
-          "date": "2026-02-16",
-          "note": ""
-        }
-      ]
+      "restated": false,
+      "history": []
     },
     {
       "id": "46-traffic light led module red yellow green gnd 4 pin",
@@ -2074,6 +2063,22 @@
       "note": "",
       "category": "mechanical",
       "updated": "2026-04-13",
+      "conflict": false,
+      "restated": false,
+      "history": []
+    },
+    {
+      "id": "52-like about the 10 mm nut and it s circular nut",
+      "box": 52,
+      "container": "2",
+      "name": "Like about the 10 mm nut and it's circular nut",
+      "qty": null,
+      "peak": null,
+      "countType": "bulk",
+      "status": "active",
+      "note": "(photo-counted)",
+      "category": "fastener",
+      "updated": "2026-09-22",
       "conflict": false,
       "restated": false,
       "history": []
@@ -4189,11 +4194,6 @@
   ],
   "freeBoxes": [
     {
-      "box": 52,
-      "container": "2",
-      "reason": "never used"
-    },
-    {
       "box": 55,
       "container": "2",
       "reason": "never used"
@@ -4312,5 +4312,8 @@
       ]
     }
   ],
-  "fullBoxes": []
+  "fullBoxes": [
+    123,
+    124
+  ]
 }
