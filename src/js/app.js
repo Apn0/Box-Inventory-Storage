@@ -1,367 +1,13 @@
-<!doctype html>
-<html lang="en-US">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Box Inventory</title>
-<style>
-:root{
-  --bg:#f6f7f9; --panel:#ffffff; --panel-2:#eef1f5; --line:#d8dee7;
-  --ink:#141821; --ink-2:#5b6675; --ink-3:#8a93a2;
-  --accent:#1d5cff; --accent-ink:#ffffff;
-  --ok:#0f8a4d; --warn:#b06f00; --bad:#c0392b; --bulk:#6b4fc9;
-  --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 6px 18px rgba(16,24,40,.06);
-  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#0e1117; --panel:#161b24; --panel-2:#1e2530; --line:#2b3442;
-    --ink:#e8ecf3; --ink-2:#a4b0c0; --ink-3:#71809a;
-    --accent:#5b8cff; --accent-ink:#0b0f16;
-    --ok:#3fbf7f; --warn:#e0a33a; --bad:#ff6b5e; --bulk:#a48bff;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0e1117; --panel:#161b24; --panel-2:#1e2530; --line:#2b3442;
-  --ink:#e8ecf3; --ink-2:#a4b0c0; --ink-3:#71809a;
-  --accent:#5b8cff; --accent-ink:#0b0f16;
-  --ok:#3fbf7f; --warn:#e0a33a; --bad:#ff6b5e; --bulk:#a48bff;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:var(--bg); color:var(--ink); font-family:var(--sans);
-  font-size:15px; line-height:1.45; -webkit-text-size-adjust:100%;
-  padding-bottom:env(safe-area-inset-bottom);
-}
-button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer}
-a{color:var(--accent)}
+import { loadConfig, getConfig } from "./config.js";
+import { snapshot } from "../../data/snapshot.js";
+import { resolveSheet, parseCSV, containerOf, containerRange, categorize, slugName, BOX_FULL, BOX_FULL_SLUG } from "./resolve.js";
 
-/* ---------------------------------------------------------------- layout */
-.wrap{max-width:1080px;margin:0 auto;padding:0 12px 72px}
-header.top{
-  position:sticky; top:0; z-index:20; background:var(--bg);
-  /* Phones draw the page under the status bar and the camera cutout when the
-     app runs edge-to-edge (Android 15, and Chrome in standalone mode), which
-     hid the stats line behind the punch-hole. */
-  padding:calc(10px + env(safe-area-inset-top)) 0 8px;
-  border-bottom:1px solid var(--line);
-}
-.wrap{padding-left:max(12px, env(safe-area-inset-left));
-      padding-right:max(12px, env(safe-area-inset-right))}
-.titlerow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.titlerow h1{font-size:17px;margin:0;letter-spacing:-.01em;white-space:nowrap}
-.titlerow .spacer{flex:1}
-.iconbtn{
-  background:var(--panel); border:1px solid var(--line); border-radius:9px;
-  padding:6px 10px; font-size:13px; color:var(--ink-2);
-}
-.iconbtn:hover{border-color:var(--accent);color:var(--ink)}
+let SEED = snapshot;
+let SHEET = null;
 
-.searchrow{display:flex;gap:8px}
-#q{
-  flex:1; padding:11px 13px; border-radius:10px; border:1px solid var(--line);
-  background:var(--panel); font-size:16px; box-shadow:var(--shadow);
-}
-#q:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
-.clearq{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px}
-
-nav.tabs{display:flex;gap:4px;overflow-x:auto;margin-top:8px;scrollbar-width:none}
-nav.tabs::-webkit-scrollbar{display:none}
-nav.tabs button{
-  background:transparent;border:1px solid transparent;border-radius:8px;
-  padding:6px 11px;font-size:13.5px;color:var(--ink-2);white-space:nowrap;
-}
-nav.tabs button[aria-selected="true"]{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:600}
-nav.tabs .badge{
-  display:inline-block;min-width:17px;margin-left:5px;padding:0 5px;
-  background:var(--bad);color:#fff;border-radius:9px;font-size:11px;font-weight:700;text-align:center
-}
-
-/* ---------------------------------------------------------------- chips */
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 4px}
-.chip{
-  background:var(--panel);border:1px solid var(--line);border-radius:999px;
-  padding:4px 10px;font-size:12.5px;color:var(--ink-2);
-}
-.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
-.chip .n{opacity:.6;margin-left:5px;font-variant-numeric:tabular-nums}
-
-.hint{color:var(--ink-3);font-size:12.5px;margin:8px 2px}
-
-/* ---------------------------------------------------------------- items */
-.list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.item{
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow); overflow:hidden;
-}
-.item{display:flex;flex-wrap:wrap;align-items:stretch}
-.item>.row{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;flex:1;min-width:0;
-  background:none;border:0;text-align:left}
-.item>.editor{width:100%}
-.boxno{
-  flex:none;min-width:46px;height:40px;border-radius:9px;background:var(--panel-2);
-  border:1px solid var(--line); display:flex;flex-direction:column;align-items:center;justify-content:center;
-  font-family:var(--mono); line-height:1;
-}
-.boxno b{font-size:16px;font-weight:700;letter-spacing:-.02em}
-.boxno span{font-size:8.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-.itemmain{flex:1;min-width:0}
-.itemname{font-weight:600;font-size:14.5px;overflow-wrap:anywhere}
-.itemmeta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:3px;font-size:12px;color:var(--ink-2)}
-.tag{background:var(--panel-2);border-radius:5px;padding:1px 6px;font-size:11px;color:var(--ink-2);white-space:nowrap}
-.tag.flag{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);font-weight:600}
-.tag.err{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad);font-weight:600}
-.note{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
-.qty{
-  flex:none;min-width:52px;text-align:right;font-family:var(--mono);
-  font-size:17px;font-weight:700;letter-spacing:-.02em;
-}
-.qty small{display:block;font-size:9.5px;font-weight:600;letter-spacing:.06em;
-  text-transform:uppercase;color:var(--ink-3);font-family:var(--sans)}
-.qty.bulk{color:var(--bulk)} .qty.unknown{color:var(--ink-3)} .qty.zero{color:var(--bad)}
-
-/* take one out / put one back, straight from the list */
-.tally{flex:none;display:flex;flex-direction:column;gap:4px;padding:6px 10px 6px 0;
-  justify-content:center}
-.tally button{width:40px;height:32px;border-radius:8px;background:var(--panel-2);
-  border:1px solid var(--line);font-size:17px;font-weight:700;line-height:1;color:var(--ink-2)}
-.tally button:active{background:var(--accent);color:var(--accent-ink)}
-.tally button:disabled{opacity:.3}
-.item.low .boxno{border-color:var(--warn)}
-.item.low .qty{color:var(--warn)}
-#undobar{position:fixed;left:12px;right:12px;bottom:calc(92px + env(safe-area-inset-bottom));
-  z-index:45;background:var(--ink);color:var(--bg);border-radius:12px;padding:11px 14px;
-  display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);font-size:13.5px}
-#undobar b{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#undobar button{background:var(--bg);color:var(--ink);border:0;border-radius:8px;
-  padding:7px 14px;font-weight:700;font-size:13px}
-
-/* editor */
-.editor{border-top:1px dashed var(--line);padding:11px 12px;background:var(--panel-2)}
-.eline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
-.eline label{font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;min-width:62px}
-.editor input,.editor select,.editor textarea{
-  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:14px
-}
-.editor input[type=number]{width:78px;font-family:var(--mono)}
-.editor .grow{flex:1;min-width:150px}
-.step{background:var(--panel);border:1px solid var(--line);border-radius:8px;width:34px;height:34px;font-size:17px;font-weight:700;line-height:1}
-.ebtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
-.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:9px;padding:8px 14px;font-weight:600;font-size:13.5px}
-.btn.ghost{background:var(--panel);color:var(--ink-2);border:1px solid var(--line)}
-.btn.danger{background:var(--panel);color:var(--bad);border:1px solid var(--bad)}
-.hist{margin-top:9px;font-size:12px;color:var(--ink-3);font-family:var(--mono)}
-.hist div{padding:1px 0}
-
-/* ---------------------------------------------------------------- boxes */
-.container-h{margin:18px 0 7px;font-size:12.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em;font-weight:700}
-.boxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px}
-.boxcell{
-  background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 4px;
-  text-align:center;font-family:var(--mono);position:relative
-}
-.boxcell b{display:block;font-size:15px;font-weight:700}
-.boxcell span{display:block;font-size:10px;color:var(--ink-3);font-family:var(--sans);margin-top:2px}
-.boxcell.free{border-style:dashed;border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent)}
-.boxcell.free span{color:var(--ok);font-weight:700}
-.boxcell.hit{outline:2px solid var(--accent)}
-.boxcell.full{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,transparent)}
-.boxcell.full span{color:var(--bad);font-weight:700}
-.fullrow{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0 10px}
-.fullrow input{width:18px;height:18px}
-.fullwarn{color:var(--bad);font-size:13px;font-weight:600;margin:0 0 8px}
-.boxcell:hover{border-color:var(--accent)}
-
-/* ---------------------------------------------------------------- panels */
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:14px;margin-top:10px}
-.panel h2{margin:0 0 4px;font-size:14.5px}
-.panel h2 .count{color:var(--ink-3);font-weight:500;font-size:13px}
-.panel p.sub{margin:0 0 10px;color:var(--ink-2);font-size:13px}
-.panel ul{margin:0;padding-left:18px}
-.panel li{margin:3px 0;font-size:13.5px}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13.5px}
-.kv b{font-family:var(--mono);font-weight:700;text-align:right}
-textarea.bom{width:100%;min-height:130px;background:var(--panel-2);border:1px solid var(--line);
-  border-radius:9px;padding:10px;font-family:var(--mono);font-size:13px;resize:vertical}
-.bomrow{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
-.bomrow:first-child{border-top:0}
-.bomq{flex:none;font-family:var(--mono);font-weight:700;min-width:34px}
-.bomhit{flex:1;min-width:0;font-size:13.5px}
-.bomhit .alt{color:var(--ink-3);font-size:12px}
-.pill{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:700;font-family:var(--sans)}
-.pill.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
-.pill.no{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
-.pill.maybe{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
-
-/* camera — only rendered when served over http (i.e. from the phone) */
-#cam{
-  position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom));
-  z-index:40; width:64px; height:64px; border-radius:50%;
-  background:var(--accent); color:var(--accent-ink); border:0; font-size:26px;
-  box-shadow:0 4px 16px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
-}
-/* Beside the camera, not above it: stacked, it sat where a toast or the
-   keyboard could cover it, and it read as part of the page rather than a
-   control. Side by side, both are always on screen together. */
-#gal{
-  position:fixed; right:92px; bottom:calc(23px + env(safe-area-inset-bottom));
-  z-index:40; width:50px; height:50px; border-radius:50%;
-  background:var(--panel); color:var(--ink-2); border:1px solid var(--line); font-size:21px;
-  box-shadow:0 2px 10px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center;
-}
-#cam:active,#gal:active{transform:scale(.94)}
-#cam[data-busy="1"],#gal[data-busy="1"]{opacity:.55}
-#cam .n{
-  position:absolute; top:-3px; right:-3px; min-width:21px; height:21px; padding:0 5px;
-  background:var(--warn); color:#fff; border-radius:11px; font-size:12px; font-weight:700;
-  display:flex; align-items:center; justify-content:center; font-family:var(--sans);
-}
-/* ranked to-do cards */
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:13px 14px;margin-top:9px;position:relative;overflow:hidden}
-.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ink-3)}
-.card.now::before{background:var(--bad)}
-.card.soon::before{background:var(--warn)}
-.card.later::before{background:var(--ok)}
-.card h3{margin:0 0 3px;font-size:15px;letter-spacing:-.01em}
-.card .why{margin:0 0 9px;color:var(--ink-2);font-size:13.5px;line-height:1.45}
-.cardtop{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
-.cardtop .when{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
-.card.now .cardtop .when{color:var(--bad)}
-.card.soon .cardtop .when{color:var(--warn)}
-.card.later .cardtop .when{color:var(--ok)}
-.cardtop .effort{margin-left:auto;font-size:11.5px;color:var(--ink-3);white-space:nowrap}
-.card ul.targets{margin:0 0 10px;padding:0;list-style:none}
-.card ul.targets li{padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}
-.card ul.targets li:first-child{border-top:0}
-.card ul.targets a{text-decoration:none}
-.card .more{background:none;border:0;color:var(--ink-3);font-size:12.5px;padding:2px 0}
-.donebar{text-align:center;color:var(--ink-3);font-size:13px;padding:20px 12px 4px}
-
-/* count confirmation */
-#sheetwrap{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);
-  display:flex;align-items:flex-end;justify-content:center}
-#sheet{background:var(--panel);border-top-left-radius:18px;border-top-right-radius:18px;
-  width:100%;max-width:520px;padding:16px 16px calc(18px + env(safe-area-inset-bottom));
-  box-shadow:0 -6px 30px rgba(0,0,0,.4);max-height:92vh;overflow:auto}
-#sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px}
-#sheet .shot{width:100%;max-height:34vh;object-fit:contain;border-radius:10px;
-  background:var(--panel-2);margin-bottom:12px}
-#sheet h2{margin:0 0 2px;font-size:17px;letter-spacing:-.01em}
-#sheet .sub2{margin:0 0 12px;color:var(--ink-2);font-size:13px}
-#sheet .ask{font-size:14px;font-weight:600;margin:0 0 8px}
-.counter{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.counter button{width:52px;height:52px;border-radius:12px;background:var(--panel-2);
-  border:1px solid var(--line);font-size:24px;font-weight:700;line-height:1}
-.counter input{flex:1;min-width:0;height:52px;text-align:center;font-size:26px;
-  font-weight:700;font-family:var(--mono);border-radius:12px;border:1px solid var(--line);
-  background:var(--panel-2)}
-.quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
-.quick button{border:1px solid var(--line);background:var(--panel-2);border-radius:9px;
-  padding:7px 12px;font-size:13px;color:var(--ink-2)}
-.quick button.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
-#sheet .row2{display:flex;gap:8px}
-#sheet .row2 .btn{flex:1}
-#sheet .wrongname{width:100%;margin-bottom:10px;padding:9px 10px;border-radius:9px;
-  border:1px solid var(--line);background:var(--panel-2);font-size:14px}
-#sheet .queued{text-align:center;color:var(--ink-3);font-size:12px;margin-top:10px}
-
-/* typed / spoken entry */
-#say{
-  position:fixed; right:168px; bottom:calc(23px + env(safe-area-inset-bottom));
-  z-index:40; width:50px; height:50px; border-radius:50%;
-  background:var(--panel); color:var(--ink-2); border:1px solid var(--line); font-size:20px;
-  box-shadow:0 2px 10px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center;
-}
-#say:active{transform:scale(.94)}
-#say.live{background:var(--bad);color:#fff;border-color:var(--bad)}
-.namerow{display:flex;gap:8px;margin-bottom:10px}
-.namerow input{flex:1;min-width:0;padding:12px 12px;font-size:16px;border-radius:10px;
-  border:1px solid var(--line);background:var(--panel-2)}
-.namerow button{width:52px;border-radius:10px;border:1px solid var(--line);
-  background:var(--panel-2);font-size:20px}
-.namerow button.live{background:var(--bad);color:#fff;border-color:var(--bad)}
-.matches{margin:0 0 12px;padding:0;list-style:none;max-height:44vh;overflow:auto}
-.matches li{border-top:1px solid var(--line)}
-.matches li:first-child{border-top:0}
-.matches button{width:100%;text-align:left;background:none;border:0;padding:10px 2px;
-  display:flex;gap:10px;align-items:baseline}
-.matches .nm{flex:1;font-size:14.5px}
-.matches .bx{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);white-space:nowrap}
-.matches .qt{font-family:var(--mono);font-weight:700;font-size:14px}
-.heard{font-size:12.5px;color:var(--ink-3);min-height:17px;margin:-4px 0 8px}
-
-/* voice mode banner */
-#vbanner{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--panel);
-  border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(0,0,0,.3);
-  padding:14px 16px calc(14px + env(safe-area-inset-bottom));
-  display:flex;align-items:center;gap:12px}
-#vbanner .vtext{flex:1;font-size:15px;font-weight:600;line-height:1.35}
-#vbanner .vsub{position:absolute;left:16px;bottom:calc(4px + env(safe-area-inset-bottom));
-  font-size:11.5px;color:var(--ink-3)}
-#vbanner button{background:var(--bad);color:#fff;border:0;border-radius:10px;
-  padding:10px 16px;font-weight:700;font-size:14px}
-.empty{text-align:center;color:var(--ink-3);padding:38px 12px;font-size:14px}
-.toast{
-  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
-  background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;
-  font-size:13.5px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;
-  transition:opacity .18s
-}
-.toast.show{opacity:1}
-
-/* ---------------------------------------------------------------- labels */
-.labelsheet{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}
-.label{border:1px solid var(--line);border-radius:7px;padding:7px 8px;background:var(--panel);
-  min-height:74px;font-size:10.5px;line-height:1.3}
-.label b{display:block;font-family:var(--mono);font-size:17px;line-height:1}
-.label .c{color:var(--ink-3);font-size:9px;text-transform:uppercase;letter-spacing:.07em}
-.label ul{margin:4px 0 0;padding-left:13px}
-.label li{margin:0;font-size:10px}
-@media print{
-  header.top,nav.tabs,.chips,.hint,.noprint{display:none!important}
-  body{background:#fff;color:#000}
-  .wrap{max-width:none;padding:0}
-  .labelsheet{grid-template-columns:repeat(4,1fr);gap:3px}
-  .label{border:1px solid #999;break-inside:avoid;background:#fff}
-}
-@media (max-width:520px){
-  .titlerow h1{font-size:15px}
-  .qty{min-width:44px;font-size:15px}
-  .boxno{min-width:42px}
-}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header class="top">
-    <div class="titlerow">
-      <h1>Box Inventory</h1>
-      <span class="tag" id="stat-line"></span>
-      <span class="spacer"></span>
-      <button class="iconbtn" id="theme-btn" title="Light / dark">◐</button>
-    </div>
-    <div class="searchrow">
-      <input id="q" type="search" placeholder="Search parts, boxes, notes…  (press /)" autocomplete="off" spellcheck="false">
-      <button class="clearq" id="clearq" title="Clear">✕</button>
-    </div>
-    <nav class="tabs" id="tabs"></nav>
-  </header>
-  <main id="view"></main>
-</div>
-<div class="toast" id="toast"></div>
-
-<script>
-"use strict";
 // `let`, not `const`: the baked-in data is only the instant first paint — the
 // live truth is the Google Sheet, fetched right after boot and after every save.
-let SEED = /*__INVENTORY_DATA__*/null;
+
 
 /* ----------------------------------------------------------- sheet backend
    The Google Sheet IS the database and a Google Form is the write API, so the
@@ -371,159 +17,28 @@ let SEED = /*__INVENTORY_DATA__*/null;
    Appends resolve newest-wins, so a correction is just another row — which is
    also why single-user "collisions" are a non-issue: Google serializes form
    submits, and the later row simply wins. */
-const SHEET = {
-  id: "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ",
-  boxGid: 788564724,
-  formGid: 677102738,
-  formAction: "https://docs.google.com/forms/d/e/1FAIpQLSfaLSRumcvZL1JtLMCsILnac0PIuKb9kEePiOvndgu1jlUsIQ/formResponse",
-  entries: {box: "entry.2127766863", name: "entry.957000781",
-            qty: "entry.971108864", note: "entry.1227292805"},
-};
+
 
 /* Category rules ported from build.py — keep the two lists in step when a rule
    changes (same order, first match wins). */
-const CATEGORY_RULES = [
-  ["mcu",        /esp32|esp8266|xiao|microcontroller|\bmcu\b/],
-  ["sensor",     /\bmq-|mq gas|guva|heart-rate|neo-6m|gps|ens160|aht2|gyro|accelerom|mpu6050|hc-sr04|tilt sensor|tof|vl53|veml|hall sensor|reed |vibration (sensor|switch)|pressure sensor|load cell|current sensor|current transformer|ina219|audio-wave|lm393|magnetic switch|rd-03d|capacitive touch|ir receiver|laser sensor|mps20n|voltage sensor|coil-type vibration|pressure-sensitive/],
-  ["power",      /charger|converter|buck|boost|step-up|step-down|mt3608|mini-360|hw-187|mp1584|cr6030|pd trigger|fast-charge|solar charge|18650|battery|batteries|lr44|\bac\/dc\b|power module|power meter|v meter|level indicator|usb-a power/],
-  ["driver",     /tmc2209|uln2003|motor driver|h-bridge|tc1508|mosfet|relay|\bssr\b|pwm controller|speed controller|stepper driver|xy-mos|lr7843/],
-  ["motor",      /stepper motor|servo|dc motor|gear motor|brushed dc|vibration motor|\bfan\b|micro dc/],
-  ["display",    /oled|7-seg|\bled\b|leds|cob|rgb|traffic-light|candle|flasher|display/],
-  ["comms",      /wi-fi|wifi|uart|ir transmitter|nfc|sim card|rj-45|tracker tag|walkie|receiver \(dongle\)|wireless mouse|laser diode/],
-  ["interface",  /ads1115|\badc\b|hx711|pcm1808|i2s|555 timer|breakout|serial adapter|usb-to-ttl|hw-477|sku7810/],
-  ["switch",     /switch|button|potentiometer|encoder|knob|key lock|\bkeys?\b|navigation tactile|piezoelectric spark/],
-  ["connector",  /xt60|usb|hdmi|barrel|header pin|terminal|alligator|wire connector|kroonsteentje|audio plug|adapter|coupling|connector|iec panel|strip connector|cable reel/],
-  ["fastener",   /bolt|screw|\bnuts?\b|washer|standoff|tap bits|drill|countersink|barrel nut|mounting hardware|lock nut|lock washer/],
-  ["mechanical", /gear|pulley|belt|bearing|idler|rail|carriage|tube|tubing|heatsink|disk|bracket|mechanical parts|nozzle|clamp|padlock|clip|elastic band|spacer/],
-  ["tool",       /tool|bit set|measuring tape|keycap remover|radiator valve|tape|lens kit|hemming/],
-  ["material",   /scrap|shavings|sawdust|flakes|granules|seeds|salts|foam|earplug|popsicle|hot-glue|shoelace|gemstone|coil|sticker|label/],
-];
 
-function categorize(name, note){
-  const hay = (name + " " + (note || "")).toLowerCase();
-  for(const [cat, re] of CATEGORY_RULES) if(re.test(hay)) return cat;
-  return "misc";
-}
 
-const slugName = s => String(s).normalize("NFKD").replace(/[̀-ͯ]/g, "")
-  .replace(/[^a-z0-9]+/gi, " ").toLowerCase().trim();
+
+
+
 
 /** dd/mm/yyyy [hh:mm:ss] -> sortable ISO-ish string, or null. */
-function parseSheetDate(text){
-  const m = String(text || "").trim()
-    .match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?$/);
-  if(!m) return null;
-  const p = n => String(n).padStart(2, "0");
-  return `${m[3]}-${p(m[2])}-${p(m[1])}T${p(m[4]||0)}:${m[5]||"00"}:${m[6]||"00"}`;
-}
+
 
 /** The resolver, ported from build.py: newest row wins per (box, item).
     Form rows carry a real time of day, main-tab rows only a date — so a form
     write on the same day as a hand edit deliberately wins. Form rows are also
     deliberate recounts by definition, so they never raise the ambiguity flag. */
-function resolveSheet(boxCsv, formCsv){
-  const raw = [];
-  const boxRows = parseCSV(boxCsv);
-  for(let i = 1; i < boxRows.length; i++){
-    const [box, name, qty, note, updated] = boxRows[i];
-    if(!String(box || "").trim()) continue;
-    raw.push({line: i, src: 0, box: parseInt(box, 10), name: (name||"").trim(),
-              qtyTxt: (qty||"").trim(), note: (note||"").trim(),
-              when: parseSheetDate(updated)});
-  }
-  const formRows = parseCSV(formCsv || "");
-  for(let i = 1; i < formRows.length; i++){
-    const [ts, box, name, qty, note] = formRows[i];
-    if(!String(box || "").trim() || !String(name || "").trim()) continue;
-    const b = parseInt(box, 10);
-    if(!Number.isFinite(b)) continue;
-    raw.push({line: i, src: 1, box: b, name: (name||"").trim(),
-              qtyTxt: (qty||"").trim(), note: (note||"").trim(),
-              when: parseSheetDate(ts)});
-  }
 
-  const groups = new Map();
-  const flags = new Map();                       // box -> newest BOX_FULL row
-  const newer = (a, b) => (a.when||"").localeCompare(b.when||"") || a.src - b.src || a.line - b.line;
-  for(const r of raw){
-    if(slugName(r.name) === BOX_FULL_SLUG){
-      if(!flags.has(r.box) || newer(r, flags.get(r.box)) >= 0) flags.set(r.box, r);
-      continue;
-    }
-    const k = r.box + "|" + slugName(r.name);
-    if(!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(r);
-  }
-
-  const items = [];
-  for(const [key, history] of groups){
-    history.sort((a, b) => (a.when||"").localeCompare(b.when||"")
-                        || a.src - b.src || a.line - b.line);
-    const latest = history[history.length - 1];
-    if(!latest.name) continue;
-
-    let countType, qty;
-    const qt = latest.qtyTxt.toLowerCase();
-    if(qt === "") { countType = "unknown"; qty = null; }
-    else if(qt === "many" || parseInt(qt, 10) === 99){ countType = "bulk"; qty = null; }
-    else if(/^-?\d+$/.test(qt)){ countType = "exact"; qty = parseInt(qt, 10); }
-    else { countType = "unknown"; qty = null; }
-
-    let peak = countType === "exact" ? qty : null;
-    for(const r of history){
-      const n = parseInt(r.qtyTxt, 10);
-      if(/^\d+$/.test(r.qtyTxt) && n !== 99) peak = Math.max(peak ?? 0, n);
-    }
-
-    const distinct = new Set(history.map(r => r.qtyTxt.toLowerCase()));
-    const deliberate = latest.src === 1
-        || (latest.note || "").toLowerCase().includes("photo-counted");
-    const conflict = history.length > 1 && distinct.size > 1 && !deliberate;
-
-    items.push({
-      id: `${latest.box}-${slugName(latest.name)}`,
-      box: latest.box, name: latest.name, qty, peak, countType,
-      status: (countType === "exact" && qty === 0) ? "gone" : "active",
-      note: latest.note || [...history].reverse().find(r => r.note)?.note || "",
-      category: categorize(latest.name, latest.note),
-      updated: latest.when ? latest.when.slice(0, 10) : null,
-      conflict, restated: history.length > 1 && distinct.size === 1,
-      history: history.length > 1
-        ? history.map(r => ({qty: r.qtyTxt, date: r.when ? r.when.slice(0,10) : null,
-                             note: r.note}))
-        : [],
-    });
-  }
-  items.sort((a, b) => a.box - b.box || a.name.localeCompare(b.name));
-
-  const used = new Set(items.filter(i => i.status === "active").map(i => i.box));
-  // Same rule as find_full_boxes() in build.py: newest flag row wins, and an
-  // emptied box is never full.
-  const fullBoxes = [...flags].filter(([b, r]) => used.has(b)
-      && /^-?\d+$/.test(r.qtyTxt) && parseInt(r.qtyTxt, 10) !== 0)
-    .map(([b]) => b).sort((a, b) => a - b);
-  const known = new Set(items.map(i => i.box));
-  const freeBoxes = [];
-  const lows = [...known].filter(b => b < 400), highs = [...known].filter(b => b >= 400);
-  for(const [lo, hi] of [[1, Math.max(0, ...lows)], [400, Math.max(0, ...highs)]])
-    for(let b = lo; b <= hi; b++)
-      if(!used.has(b)) freeBoxes.push({box: b, container: containerOf(b),
-        reason: known.has(b) ? "emptied" : "never used"});
-
-  return {meta: Object.assign({}, SEED?.meta, {
-            source: "Google Sheet (live)", rawRows: raw.length,
-            generated: new Date().toISOString().slice(0, 10)}),
-          items, freeBoxes, splitItems: [], fullBoxes};
-}
 
 /** Where the photo server lives when this page is NOT served by it.
     The APK injects window.BOXINV_SERVER; localStorage can override. */
-function serverBase(){
-  if(location.protocol === "http:" || location.protocol === "https:") return "";
-  try{
-    return window.BOXINV_SERVER || localStorage.getItem("boxinv.server")
-        || "http://192.168.1.140:8781";
-  }catch(e){ return "http://192.168.1.140:8781"; }
+catch(e){ return "http://192.168.1.140:8781"; }
 }
 
 function sheetCsvUrl(gid){
@@ -587,11 +102,11 @@ function sheetAppend({box, name, qty, note}){
 /* "This box is physically full" — a box flag stored as an ordinary sheet row
    (Qty 1 = full, 0 = has room again), so it syncs like any count and newest
    wins. Must match BOX_FULL_ITEM in build.py. Never treated as a part. */
-const BOX_FULL = "[BOX FULL]";
-const BOX_FULL_SLUG = "box full";
+
+
 const STORE_KEY = "boxinv.v1";
 const CAT = SEED.meta.categoryLabels;
-const CONTAINER_SIZE = SEED.meta.containerSize;
+
 const STALE_DAYS = 150;
 // At or below this, a part is worth reordering before a build stalls on it.
 const LOW_STOCK = 2;
@@ -625,16 +140,8 @@ function save(){
 }
 /* Boxes 1..399 and 400+ are two physically separate sets of containers,
    so each set is numbered from its own start. */
-function containerOf(box){
-  const base = box >= 400 ? 400 : 0;
-  const n = Math.floor((box - base - 1) / CONTAINER_SIZE) + 1;
-  return (base ? "H" : "") + n;
-}
-function containerRange(box){
-  const base = box >= 400 ? 400 : 0;
-  const c = Math.floor((box - base - 1) / CONTAINER_SIZE);
-  return [base + c * CONTAINER_SIZE + 1, base + (c + 1) * CONTAINER_SIZE];
-}
+
+
 function rebuild(){
   const out = [];
   for(const it of SEED.items){
@@ -647,7 +154,7 @@ function rebuild(){
       out.push(Object.assign({}, it, overlay.edits[it.id]||{}, {added:true}));
   }
   for(const it of out){
-    it.container = containerOf(it.box);
+    it.container = containerOf(it.box, SEED?.meta?.containerSize || 30);
     it.status = (it.countType === "exact" && Number(it.qty) === 0) ? "gone" : "active";
     const text = it.name + " " + (it.note||"") + " " + (CAT[it.category]||it.category);
     it._hay = (text + " " + glueNumbers(text) + " box " + it.box).toLowerCase();
@@ -828,7 +335,7 @@ function planMoves(level, cap){
       const before = moves.length;
       const byCC = new Map();
       for(const r of list){
-        const k = containerOf(r.box) + "|" + r.it.category;
+        const k = containerOf(r.box, SEED?.meta?.containerSize || 30) + "|" + r.it.category;
         if(!byCC.has(k)) byCC.set(k, []);
         byCC.get(k).push(r);
       }
@@ -859,15 +366,15 @@ function planMoves(level, cap){
       const elec = rows.filter(r => r.box < 400);
       if(elec.length < 3) continue;                 // not worth moving crates for
       const tally = {};
-      for(const r of elec) tally[containerOf(r.box)] = (tally[containerOf(r.box)]||0) + 1;
+      for(const r of elec) tally[containerOf(r.box, SEED?.meta?.containerSize || 30)] = (tally[containerOf(r.box, SEED?.meta?.containerSize || 30)]||0) + 1;
       const home = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
-      const inHome = elec.filter(r => containerOf(r.box) === home).map(r => r.box);
+      const inHome = elec.filter(r => containerOf(r.box, SEED?.meta?.containerSize || 30) === home).map(r => r.box);
       if(!inHome.length) continue;
       const targets = [...new Set(inHome)].filter(b => !full.has(b)).sort((a,b)=>a-b);
       const l = load();
       let ti = 0;
       for(const r of elec.sort((a,b)=>a.box-b.box)){
-        if(containerOf(r.box) === home) continue;
+        if(containerOf(r.box, SEED?.meta?.containerSize || 30) === home) continue;
         if(!mergeable(r)) continue;                 // piles stay where they are
         while(ti < targets.length &&
               (l.get(targets[ti])||[]).length + moves.filter(m=>m.to===targets[ti]).length >= cap) ti++;
@@ -884,7 +391,7 @@ function planMoves(level, cap){
     const m = {};
     for(const r of rows){
       const c = r.it.category;
-      (m[c] = m[c] || new Set()).add(containerOf(r.box));
+      (m[c] = m[c] || new Set()).add(containerOf(r.box, SEED?.meta?.containerSize || 30));
     }
     return Object.values(m).reduce((a,s)=>a+s.size, 0) / Math.max(1, Object.keys(m).length);
   };
@@ -1082,10 +589,10 @@ function viewBoxes(){
   for(const [lo,hi,name] of boxRanges()){
     let last = null;
     for(let b=lo; b<=hi; b++){
-      const c = containerOf(b);
+      const c = containerOf(b, SEED?.meta?.containerSize || 30);
       if(c !== last){
         if(last!==null) html += `</div>`;
-        const [rlo,rhi] = containerRange(b);
+        const [rlo,rhi] = containerRange(b, SEED?.meta?.containerSize || 30);
         html += `<div class="container-h">${name} · container ${c} (boxes ${rlo}–${rhi})</div><div class="boxgrid">`;
         last = c;
       }
@@ -1337,7 +844,7 @@ function viewReorg(){
       ${ms.sort((a,b)=>a.from-b.from).map(m => `<div class="bomrow">
         <div class="bomq">${m.from}→${m.to}</div>
         <div class="bomhit">${esc(m.name)}
-          <span class="alt">container ${containerOf(m.from)} → ${containerOf(m.to)}</span></div>
+          <span class="alt">container ${containerOf(m.from, SEED?.meta?.containerSize || 30)} → ${containerOf(m.to, SEED?.meta?.containerSize || 30)}</span></div>
       </div>`).join("")}
     </div>`).join("")}`;
 }
@@ -1357,7 +864,7 @@ function viewLabels(){
     <div class="labelsheet">${boxes.map(b => {
       const c = byBox.get(b);
       return `<div class="label"><b>${b}</b>
-        <span class="c">container ${Math.floor((b-1)/CONTAINER_SIZE)+1}</span>
+        <span class="c">container ${Math.floor((b-1)/(SEED?.meta?.containerSize || 30))+1}</span>
         <ul>${c.slice(0,4).map(i => `<li>${esc(i.name.slice(0,42))}${
           i.countType==="exact"?" ("+i.qty+")":""}</li>`).join("")}
         ${c.length>4?`<li>+${c.length-4} more</li>`:""}</ul></div>`;
@@ -1436,22 +943,7 @@ function download(name, text, mime){
   a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 4000);
   toast("Saved " + name);
 }
-function parseCSV(text){
-  const rows = []; let row = [], cell = "", inQ = false;
-  text = text.replace(/^﻿/, "");
-  for(let i=0;i<text.length;i++){
-    const c = text[i];
-    if(inQ){
-      if(c === '"'){ if(text[i+1] === '"'){ cell += '"'; i++; } else inQ = false; }
-      else cell += c;
-    } else if(c === '"') inQ = true;
-    else if(c === ","){ row.push(cell); cell = ""; }
-    else if(c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
-    else if(c !== "\r") cell += c;
-  }
-  if(cell.length || row.length){ row.push(cell); rows.push(row); }
-  return rows.filter(r => r.some(c => c.trim() !== ""));
-}
+
 
 /* ------------------------------------------------------------------ wiring */
 function wire(){
@@ -2109,213 +1601,7 @@ function askCount(q){
           headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
         const out = await res.json();
         if(!res.ok) throw new Error(out.error || res.status);
-        toast(`${out.name} → box ${out.box} = ${isBulk ? "many" : body.qty}`);
-        confirmQueue.shift();
-        wrap.remove();
-        await refreshSeed();
-        if(wantFull !== isFull(out.box)) await setBoxFull(out.box, wantFull);
-        showConfirm();
-      } else {
-        // Typed or spoken: straight to the sheet — no server involved.
-        wrap.remove();
-        toast("Saving…");
-        const ok = await appendRow({name: body.name, box: body.box, qty: body.qty,
-                                    note: "(photo-counted)",
-                                    prev: q.recorded ?? undefined});
-        if(ok) toast(`${body.name} → box ${body.box} = ${isBulk ? "many" : body.qty}`);
-        if(ok && wantFull !== isFull(body.box)) await setBoxFull(body.box, wantFull);
-        if(typeof q.then === "function") q.then(body);
-      }
-    }catch(err){
-      toast("Could not save: " + err.message);
-      wrap.querySelector("#csave").disabled = false;
-    }
-  };
-
-  wrap.querySelector("#cskip").onclick = async () => {
-    if(q.id){
-      await fetch(serverBase() + "/dismiss",
-                  {method:"POST", headers:{"Content-Type":"application/json"},
-                   body: JSON.stringify({id:q.id})}).catch(()=>{});
-      confirmQueue.shift();
-      wrap.remove();
-      showConfirm();
-    } else {
-      wrap.remove();
-      if(typeof q.then === "function") q.then(null);
-    }
-  };
-}
-
-/* ------------------------------------------------------------------- undo
-   Every count is one append to the CSV, so taking the last one back off is
-   exact. The server refuses if the file no longer ends with what it wrote —
-   better to decline than to delete a line somebody else added. */
-let undoTimer = null;
-
-function showUndo(what, revert){
-  document.getElementById("undobar")?.remove();
-  const bar = document.createElement("div");
-  bar.id = "undobar";
-  bar.innerHTML = `<b>${esc(what)}</b><button>Undo</button>`;
-  bar.querySelector("button").onclick = async () => {
-    bar.querySelector("button").disabled = true;
-    // Undo = append the previous value again. A form response cannot be
-    // deleted without auth, but under newest-wins it does not need to be.
-    const qty = (revert.qty === undefined || revert.qty === null) ? 0 : revert.qty;
-    await appendRow({name: revert.name, box: revert.box, qty,
-                     note: "undo (photo-counted)"});
-    toast("Undone");
-    bar.remove();
-  };
-  document.body.appendChild(bar);
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => bar.remove(), 12000);
-}
-
-/** Pull the live inventory from the Google Sheet, keeping local edits on top.
-    Falls back to the server's JSON (served mode) or the baked snapshot. */
-async function refreshSeed(){
-  try{
-    const [boxCsv, formCsv] = await Promise.all(
-      [fetchTab(SHEET.boxGid), fetchTab(SHEET.formGid).catch(() => "")]);
-    const fresh = resolveSheet(boxCsv, formCsv);
-    if(fresh.items.length){ SEED = fresh; rebuild(); render(); return true; }
-  }catch(e){ /* sheet unreachable — try the server copy below */ }
-  try{
-    const fresh = await (await fetch("/data/inventory.json", {cache:"no-store"})).json();
-    if(fresh && Array.isArray(fresh.items)){ SEED = fresh; rebuild(); render(); }
-  }catch(e){ /* offline — keep the snapshot on screen */ }
-  return false;
-}
-
-/** THE write path — every count from every flow goes through here.
-    Appends to the sheet via the form, then refetches until the row is visible.
-    `prev` enables undo: undoing is appending the previous value again
-    (newest-wins makes a compensating row an exact undo — and unlike deleting,
-    it works even though a form response cannot be deleted without auth). */
-async function appendRow({name, box, qty, note, prev}){
-  const qtyOut = (qty === "many" || qty === null) ? "many" : String(qty);
-  const before = SEED.meta.rawRows || 0;
-  await sheetAppend({box, name, qty: qtyOut, note: note || ""});
-  // The form returns no readable result; the refetch is the receipt.
-  for(const delay of [1200, 2500, 5000]){
-    await new Promise(r => setTimeout(r, delay));
-    if(await refreshSeed() && (SEED.meta.rawRows || 0) > before){
-      if(prev !== undefined) showUndo(`${name}: ${prev ?? "new"} → ${qtyOut}`,
-                                      {name, box, qty: prev});
-      return true;
-    }
-  }
-  toast("Could not confirm the save — check the connection");
-  return false;
-}
-
-// Photo identification runs in the cloud, not on any PC — a stateless service
-// that reads the live sheet, asks Vertex to identify the photo, and returns a
-// proposal. It writes nothing itself; the phone confirms and appends to the
-// sheet exactly like a typed entry (see askCount). No PC needs to be running.
-const IDENTIFY_URL = "https://box-identify-463126624138.us-central1.run.app/identify";
-
-function setupCamera(){
-  if(SERVED){
-    const link = document.createElement("link");
-    link.rel = "manifest"; link.href = "/manifest.webmanifest";
-    document.head.appendChild(link);
-  }
-
-  // Two inputs, two buttons. An earlier version used one button where a tap
-  // meant camera and a long-press meant gallery — undiscoverable, and the host
-  // app cannot tell the two apart reliably. Separate controls, no hidden gesture.
-  const mkInput = (capture) => {
-    const i = document.createElement("input");
-    i.type = "file"; i.accept = "image/*"; i.multiple = true;
-    // Must be an attribute, not a property — the property does not reflect.
-    if(capture) i.setAttribute("capture", "environment");
-    i.style.display = "none";
-    document.body.appendChild(i);
-    return i;
-  };
-  const camInput = mkInput(true);
-  const galInput = mkInput(false);
-
-  const btn = document.createElement("button");
-  btn.id = "cam"; btn.title = "Take a photo of a part";
-  btn.innerHTML = `<span>📷</span>`;
-  document.body.appendChild(btn);
-
-  const gal = document.createElement("button");
-  gal.id = "gal"; gal.title = "Pick photos you already took";
-  gal.innerHTML = `<span>🖼️</span>`;
-  document.body.appendChild(gal);
-
-  // For a part you can name, typing beats photographing it — no vision call,
-  // no waiting, and it works with no credit on any account.
-  const sayBtn = document.createElement("button");
-  sayBtn.id = "say"; sayBtn.title = "Type a part name — hold for voice mode";
-  sayBtn.innerHTML = `<span>⌨️</span>`;
-  document.body.appendChild(sayBtn);
-
-  // Tap types, hold talks. Voice mode is the bigger commitment of the two, so
-  // it is the deliberate gesture.
-  let holdTimer = null, wentVoice = false;
-  const armHold = () => {
-    wentVoice = false;
-    holdTimer = setTimeout(() => {
-      wentVoice = true;
-      if(navigator.vibrate) navigator.vibrate(30);
-      startVoice();
-    }, 550);
-  };
-  const releaseHold = ev => {
-    clearTimeout(holdTimer);
-    if(!wentVoice){ ev.preventDefault(); showAdd(); }
-  };
-  sayBtn.addEventListener("touchstart", armHold, {passive:true});
-  sayBtn.addEventListener("touchend", releaseHold);
-  sayBtn.addEventListener("mousedown", armHold);
-  sayBtn.addEventListener("mouseup", releaseHold);
-
-  // A plain click handler: on Android a tap also synthesises mousedown/mouseup,
-  // so listening to touch *and* mouse events fired the picker twice.
-  btn.onclick = () => { camInput.value = ""; camInput.click(); };
-  gal.onclick = () => { galInput.value = ""; galInput.click(); };
-
-  // One photo at a time, straight to the cloud, straight into the same count
-  // sheet a typed entry uses (askCount is called with no q.id, so it writes
-  // through appendRow — no server round trip involved at all).
-  const upload = async (input) => {
-    const files = [...input.files];
-    if(!files.length) return;
-
-    let apiKey = localStorage.getItem("IDENTIFY_API_KEY");
-    if(!apiKey){
-      apiKey = prompt("Please enter the API Key to identify photos:");
-      if(!apiKey) return;
-      localStorage.setItem("IDENTIFY_API_KEY", apiKey);
-    }
-
-    btn.dataset.busy = gal.dataset.busy = "1";
-    for(const f of files){
-      toast("Identifying…");
-      try{
-        const headers = {
-          "X-Filename": f.name || "photo.jpg",
-          "Content-Type": f.type || "image/jpeg"
-        };
-        if(apiKey) headers["Authorization"] = "Bearer " + apiKey;
-
-        const res = await fetch(IDENTIFY_URL, {
-          method: "POST",
-          headers: headers,
-          body: f,
-        });
-
-        if (res.status === 401) {
-          localStorage.removeItem("IDENTIFY_API_KEY");
-        }
-        const out = await res.json();
-        if(!res.ok) throw new Error(out.error || res.status);
+        out.photo = URL.createObjectURL(f);
         await new Promise(resolve => askCount(Object.assign({}, out, {then: resolve})));
       }catch(err){
         toast("Could not identify: " + err.message);
@@ -2357,10 +1643,19 @@ document.addEventListener("keydown", e => {
   }
 });
 
-rebuild();
-render();               // instant paint from the baked snapshot…
-refreshSeed();          // …then the live sheet replaces it within a second or two
-setupCamera();
-</script>
-</body>
-</html>
+(async function init() {
+  const cfg = await loadConfig();
+  SHEET = {
+    id: cfg.sheet_id,
+    boxGid: cfg.box_gid,
+    formGid: cfg.form_gid,
+    formAction: cfg.form_url,
+    entries: cfg.form_entries,
+  };
+  IDENTIFY_URL = cfg.identify_endpoint || "https://box-identify-463126624138.us-central1.run.app/identify";
+  
+  rebuild();
+  render();
+  refreshSeed();
+  setupCamera();
+})();
