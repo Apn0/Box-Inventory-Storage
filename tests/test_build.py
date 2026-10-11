@@ -358,7 +358,7 @@ def test_build_items_empty_input():
 
 def test_build_items_mocked(mocker):
     # Mock group_rows to return predefined out-of-order groups
-    mock_group_rows = mocker.patch("build.group_rows")
+    mock_group_rows = mocker.patch("inventory_core.resolver.group_rows")
     mock_group_rows.return_value = {
         (2, "b-slug"): [{"history": "b"}],
         (1, "a-slug"): [{"history": "a"}],
@@ -371,7 +371,7 @@ def test_build_items_mocked(mocker):
             return None
         return {"box": box, "name": key_slug, "slug": key_slug, "resolved": True}
 
-    mock_resolve_item = mocker.patch("build.resolve_item", side_effect=side_effect_resolve_item)
+    mock_resolve_item = mocker.patch("inventory_core.resolver.resolve_item", side_effect=side_effect_resolve_item)
 
     # Call build_items with dummy raw rows
     raw_rows = [{"dummy": "row"}]
