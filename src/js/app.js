@@ -36,9 +36,12 @@ let SHEET = null;
     deliberate recounts by definition, so they never raise the ambiguity flag. */
 
 
-/** Where the photo server lives when this page is NOT served by it.
-    The APK injects window.BOXINV_SERVER; localStorage can override. */
-catch(e){ return "http://192.168.1.140:8781"; }
+function serverBase(){
+  if(location.protocol === "http:" || location.protocol === "https:") return "";
+  try{
+    return window.BOXINV_SERVER || localStorage.getItem("boxinv.server")
+        || "http://192.168.1.140:8781";
+  }catch(e){ return "http://192.168.1.140:8781"; }
 }
 
 function sheetCsvUrl(gid){
@@ -1601,17 +1604,40 @@ function askCount(q){
           headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
         const out = await res.json();
         if(!res.ok) throw new Error(out.error || res.status);
-        out.photo = URL.createObjectURL(f);
-        await new Promise(resolve => askCount(Object.assign({}, out, {then: resolve})));
-      }catch(err){
-        toast("Could not identify: " + err.message);
+        toast(`${out.name} → box ${out.box} = ${isBulk ? "many" : body.qty}`);
+        confirmQueue.shift();
+        wrap.remove();
+        await refreshSeed();
+        if(wantFull !== isFull(out.box)) await setBoxFull(out.box, wantFull);
+        showConfirm();
+      } else {
+        toast("Saving…");
+        const ok = await appendRow({name: body.name, box: body.box, qty: body.qty,
+                                    note: "(photo-counted)",
+                                    prev: q.recorded ?? undefined});
+        if(ok) toast(`${body.name} → box ${body.box} = ${isBulk ? "many" : body.qty}`);
+        if(ok && wantFull !== isFull(body.box)) await setBoxFull(body.box, wantFull);
+        if(typeof q.then === "function") q.then(body);
       }
+    }catch(err){
+      toast("Could not save: " + err.message);
+      wrap.querySelector("#csave").disabled = false;
     }
-    delete btn.dataset.busy; delete gal.dataset.busy;
   };
 
-  camInput.onchange = () => upload(camInput);
-  galInput.onchange = () => upload(galInput);
+  wrap.querySelector("#cskip").onclick = async () => {
+    if(q.id){
+      await fetch(serverBase() + "/dismiss",
+                  {method:"POST", headers:{"Content-Type":"application/json"},
+                   body: JSON.stringify({id:q.id})}).catch(()=>{});
+      confirmQueue.shift();
+      wrap.remove();
+      showConfirm();
+    } else {
+      wrap.remove();
+      if(typeof q.then === "function") q.then(null);
+    }
+  };
 }
 
 /* ------------------------------------------------------------------- boot */
