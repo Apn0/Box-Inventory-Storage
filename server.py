@@ -39,9 +39,16 @@ INBOX = ROOT / "data" / "inbox"
 REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
-SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
-BOX_GID = "788564724"
-FORM_GID = "677102738"
+config_file = ROOT / "config.json"
+if config_file.exists():
+    _config = json.loads(config_file.read_text(encoding="utf-8"))
+    SHEET_ID = _config.get("sheet_id", "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ")
+    BOX_GID = _config.get("box_gid", "788564724")
+    FORM_GID = _config.get("form_gid", "677102738")
+else:
+    SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+    BOX_GID = "788564724"
+    FORM_GID = "677102738"
 
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
@@ -246,34 +253,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "changes": changes[-12:][::-1],
                                 "activity": recent})
 
-    def _handle_get_proxy(self) -> None:
-        import urllib.request
-        qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-        gid = (qs.get("gid") or [""])[0]
-        if not gid.isdigit():
-            return self._json(400, {"error": "gid must be a number"})
-        url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-               f"/export?format=csv&gid={gid}")
-        try:
-            with urllib.request.urlopen(url, timeout=20) as r:
-                body = r.read()
-        except Exception as exc:                   # noqa: BLE001
-            return self._json(502, {"error": str(exc)[:200]})
-        return self._send(Response(200, body, "text/csv; charset=utf-8"))
-
     def _handle_get_inventory(self) -> None:
         target = ROOT / "data" / "inventory.json"
         if target.is_file():
             return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
         return self._json(404, {"error": "not built yet"})
-
-    def _handle_get_media(self, path: str, folder: pathlib.Path) -> None:
-        name = pathlib.PurePosixPath(urllib.parse.unquote(path)).name
-        target = folder / name
-        if target.is_file() and folder.resolve() in target.resolve().parents:
-            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-            return self._send(Response(200, target.read_bytes(), ctype))
-        return self._json(404, {"error": "not found"})
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -305,7 +289,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with urllib.request.urlopen(url, timeout=20) as r:
                     body = r.read()
             except Exception as exc:                   # noqa: BLE001
-                return self._json(502, {"error": str(exc)[:200]})
+                print(f"  proxy error: {exc}")
+                return self._json(502, {"error": "Bad Gateway"})
             return self._send(Response(200, body, "text/csv; charset=utf-8"))
 
         # the freshly built inventory, so the page can update without a reload
@@ -369,7 +354,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                         "note": body.get("note", "")},
                                        body.get("qty"), box, name)
             except Exception as exc:               # noqa: BLE001
-                return self._json(500, {"error": str(exc)[:200]})
+                print(f"  quickadd error: {exc}")
+                return self._json(500, {"error": "Internal server error"})
         record({"photo": None, "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
         print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
@@ -407,7 +393,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 done = identify.commit(entry, body.get("qty"),
                                        body.get("box"), body.get("name"))
             except Exception as exc:               # noqa: BLE001
-                return self._json(500, {"error": str(exc)[:200]})
+                print(f"  quickadd error: {exc}")
+                return self._json(500, {"error": "Internal server error"})
             identify.save_pending(entries)
         record({"photo": entry["photo"], "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
