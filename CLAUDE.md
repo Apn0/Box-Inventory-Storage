@@ -1,7 +1,7 @@
 # Box Inventory - Agent Guide
 
 GitHub: `Apn0/Box-Inventory-Storage`.
-Base branch: `rebuild`
+Base branch: `main`
 
 ## Agent Rules
 - Work ONLY in your assigned git worktree (`bis-wt/<area>`) on your specific branch. 
