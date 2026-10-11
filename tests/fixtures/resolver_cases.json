@@ -1,0 +1,71 @@
+[
+  {
+    "name": "basic newest wins",
+    "box_csv": "Box,Item,Qty,Note,UpdatedAt\n1,Resistor,10,,2026-01-01\n1,Resistor,20,,2026-01-02\n",
+    "form_csv": "",
+    "expected_items": [
+      {
+        "box": 1,
+        "name": "Resistor",
+        "qty": 20,
+        "countType": "exact",
+        "status": "active",
+        "conflict": true
+      }
+    ]
+  },
+  {
+    "name": "unknown qty (?)",
+    "box_csv": "Box,Item,Qty,Note,UpdatedAt\n1,Capacitor,?,,2026-01-01\n",
+    "form_csv": "",
+    "expected_items": [
+      {
+        "box": 1,
+        "name": "Capacitor",
+        "qty": null,
+        "countType": "unknown",
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "bulk qty (99 or many)",
+    "box_csv": "Box,Item,Qty,Note,UpdatedAt\n1,Screws,99,,2026-01-01\n2,Nails,many,,2026-01-02\n",
+    "form_csv": "",
+    "expected_items": [
+      {
+        "box": 1,
+        "name": "Screws",
+        "qty": null,
+        "countType": "bulk",
+        "status": "active"
+      },
+      {
+        "box": 2,
+        "name": "Nails",
+        "qty": null,
+        "countType": "bulk",
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "name": "skip box full",
+    "box_csv": "Box,Item,Qty,Note,UpdatedAt\n1,[BOX FULL],1,,2026-01-01\n",
+    "form_csv": "",
+    "expected_items": []
+  },
+  {
+    "name": "deliberate recount no conflict",
+    "box_csv": "Box,Item,Qty,Note,UpdatedAt\n1,LED,10,,2026-01-01\n1,LED,5,photo-counted,2026-01-02\n",
+    "form_csv": "",
+    "expected_items": [
+      {
+        "box": 1,
+        "name": "LED",
+        "qty": 5,
+        "conflict": false
+      }
+    ]
+  }
+]

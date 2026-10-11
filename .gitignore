@@ -26,6 +26,9 @@ test_photo.jpg
 # coverage
 .coverage
 
+# pytest cache
+.pytest_cache/
+
 # local APK builds (tools/build_apk_local.sh)
 android/.last_version_code
 

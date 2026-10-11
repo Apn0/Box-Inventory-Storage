@@ -13,6 +13,7 @@ API has no credit. Nothing is deleted — identified photos move to data/photos/
 
 Standard library only: no pip install, no build step.
 """
+from __future__ import annotations
 
 import argparse
 import dataclasses
@@ -38,9 +39,16 @@ INBOX = ROOT / "data" / "inbox"
 REVIEW = ROOT / "data" / "review"
 PHOTOS = ROOT / "data" / "photos"
 
-SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
-BOX_GID = "788564724"
-FORM_GID = "677102738"
+config_file = ROOT / "config.json"
+if config_file.exists():
+    _config = json.loads(config_file.read_text(encoding="utf-8"))
+    SHEET_ID = _config.get("sheet_id", "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ")
+    BOX_GID = _config.get("box_gid", "788564724")
+    FORM_GID = _config.get("form_gid", "677102738")
+else:
+    SHEET_ID = "1ZVVkmA7tI_kqIUi5O-6cw5Az_qfGmKhydgy2QrFWFDQ"
+    BOX_GID = "788564724"
+    FORM_GID = "677102738"
 
 ALLOWED_SUFFIX = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 MAX_UPLOAD = 25 * 1024 * 1024          # a phone photo is ~2-8 MB
@@ -93,7 +101,7 @@ def worker() -> None:
                 record(out)
         except Exception as exc:                        # noqa: BLE001
             record({"photo": path.name, "state": "failed", "ok": False,
-                    "error": "internal error"})
+                    "error": str(exc)[:200]})
             print(f"   worker error: {exc}")
         finally:
             _work.task_done()
@@ -245,35 +253,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "changes": changes[-12:][::-1],
                                 "activity": recent})
 
-    def _handle_get_proxy(self) -> None:
-        import urllib.request
-        qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
-        gid = (qs.get("gid") or [""])[0]
-        if gid not in {BOX_GID, FORM_GID}:
-            return self._json(403, {"error": "forbidden gid"})
-        url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
-               f"/export?format=csv&gid={gid}")
-        try:
-            with urllib.request.urlopen(url, timeout=20) as r:
-                body = r.read()
-        except Exception as exc:                   # noqa: BLE001
-            return self._json(502, {"error": "upstream error"})
-        return self._send(Response(200, body, "text/csv; charset=utf-8"))
-
     def _handle_get_inventory(self) -> None:
         target = ROOT / "data" / "inventory.json"
         if target.is_file():
             return self._send(Response(200, target.read_bytes(), "application/json; charset=utf-8"))
         return self._json(404, {"error": "not built yet"})
-
-    def _handle_get_media(self, path: str, folder: pathlib.Path) -> None:
-        name = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
-        target = folder / name
-        import os
-        if target.is_file() and os.path.commonpath([target.resolve(), folder.resolve()]) == str(folder.resolve()):
-            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
-            return self._send(Response(200, target.read_bytes(), ctype))
-        return self._json(404, {"error": "not found"})
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -294,7 +278,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # CORS headers, so a served page cannot read it directly — this makes
         # the read same-origin. Locked to our sheet: gid is the only input.
         if path == "/proxy":
-            return self._handle_get_proxy()
+            import urllib.request
+            qs = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            gid = (qs.get("gid") or [""])[0]
+            if gid not in {BOX_GID, FORM_GID}:
+                return self._json(403, {"error": "forbidden gid"})
+            url = (f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+                   f"/export?format=csv&gid={gid}")
+            try:
+                with urllib.request.urlopen(url, timeout=20) as r:
+                    body = r.read()
+            except Exception as exc:                   # noqa: BLE001
+                print(f"  proxy error: {exc}")
+                return self._json(502, {"error": "Bad Gateway"})
+            return self._send(Response(200, body, "text/csv; charset=utf-8"))
 
         # the freshly built inventory, so the page can update without a reload
         if path == "/data/inventory.json":
@@ -303,7 +300,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # photos, so the confirmation card can show what it is asking about
         for prefix, folder in (("/data/photos/", PHOTOS), ("/data/review/", REVIEW)):
             if path.startswith(prefix):
-                return self._handle_get_media(path, folder)
+                import urllib.parse
+                name = pathlib.PurePosixPath(urllib.parse.unquote(path).replace("\\", "/")).name
+                target = folder / name
+                if target.is_file() and target.absolute().is_relative_to(folder.absolute()):
+                    ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+                    return self._send(Response(200, target.read_bytes(), ctype))
+                return self._json(404, {"error": "not found"})
 
         return self._json(404, {"error": "not found"})
 
@@ -352,7 +355,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                        body.get("qty"), box, name)
             except Exception as exc:               # noqa: BLE001
                 print(f"  quickadd error: {exc}")
-                return self._json(500, {"error": "internal error"})
+                return self._json(500, {"error": "Internal server error"})
         record({"photo": None, "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
         print(f"  typed: {done['name']} -> box {done['box']} = {done['quantity']}")
@@ -390,8 +393,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 done = identify.commit(entry, body.get("qty"),
                                        body.get("box"), body.get("name"))
             except Exception as exc:               # noqa: BLE001
-                print(f"  confirm error: {exc}")
-                return self._json(500, {"error": "internal error"})
+                print(f"  quickadd error: {exc}")
+                return self._json(500, {"error": "Internal server error"})
             identify.save_pending(entries)
         record({"photo": entry["photo"], "state": "done", "ok": True,
                 "name": done["name"], "box": done["box"], "to": done["quantity"]})
@@ -404,8 +407,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 undone = identify.undo_last()
             except Exception as exc:               # noqa: BLE001
-                print(f"  undo error: {exc}")
-                return self._json(409, {"error": "undo failed"})
+                return self._json(409, {"error": str(exc)[:200]})
         if not undone:
             return self._json(200, {"ok": False, "message": "nothing to undo"})
         names = ", ".join(r["name"] for r in undone["rows"])
@@ -481,19 +483,17 @@ def lan_ips() -> list[str]:
     return found
 
 
-def parse_args() -> argparse.Namespace:
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8781)
     ap.add_argument("--host", default="127.0.0.1", help="bind address (default: 127.0.0.1)")
     ap.add_argument("--no-auto", action="store_true",
                     help="just queue photos; do not identify them on arrival")
-    return ap.parse_args()
+    args = ap.parse_args()
 
-
-def setup_worker(auto: bool) -> None:
     global AUTO
-    AUTO = auto
+    AUTO = not args.no_auto
 
     if not INDEX.exists():
         sys.exit("index.html missing — run build.py first")
@@ -504,8 +504,6 @@ def setup_worker(auto: bool) -> None:
         for entry in inbox_list():        # anything left over from last time
             _work.put(INBOX / entry["name"])
 
-
-def start_server(args: argparse.Namespace) -> None:
     # Binding alone is not a reliable conflict check on Windows: a server on the
     # IPv6 wildcard and one on the IPv4 wildcard both bind the same port happily,
     # and "localhost" then reaches whichever the resolver picks. Probe instead.
@@ -535,12 +533,6 @@ def start_server(args: argparse.Namespace) -> None:
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\nstopped")
-
-
-def main() -> int:
-    args = parse_args()
-    setup_worker(not args.no_auto)
-    start_server(args)
     return 0
 
 

@@ -117,7 +117,6 @@ Box,Item,Qty,Note,UpdatedAt
 45,TC1508A dual DC motor driver module (2-channel H-bridge),6,,15/01/2026
 46,AC current transformer current sensor module (ZMCT103C-type),0,Remove both from Box 46,25/01/2026
 46,"Traffic-light LED module (Red/Yellow/Green + GND, 4-pin)",1,Add 1x traffic-light LED module (as photo),25/01/2026
-46,AC current transformer current sensor module (ZMCT103C-type),0,,16/02/2026
 46,"Traffic-light LED module (Red/Yellow/Green + GND, 4-pin)",1,,16/02/2026
 47,"COB LED filament (3V, 6500K, white)",10,,15/01/2026
 47,COB LED light bar,2,Aluminum strip module,03/03/2026

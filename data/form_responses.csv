@@ -2,3 +2,23 @@ Timestamp,Box,Item,Qty,Note
 16/08/2026 02:51:18,13,TMC2209 stepper driver,6,restatement test via form (photo-counted)
 16/08/2026 02:59:28,13,TMC2209 stepper driver,7,cloud write test (photo-counted)
 16/08/2026 02:59:33,13,TMC2209 stepper driver,6,undo (photo-counted)
+22/09/2026 14:56:48,123,[BOX FULL],1,box is physically full
+22/09/2026 14:56:57,124,[BOX FULL],1,box is physically full
+22/09/2026 15:12:59,124,[BOX FULL],1,box is physically full
+22/09/2026 15:14:30,52,Like about the 10 mm nut and it's circular nut,many,(photo-counted)
+04/10/2026 05:11:14,3,Flexible shaft coupling,0,(photo-counted)
+04/10/2026 05:11:17,3,[BOX FULL],1,box is physically full
+04/10/2026 05:12:18,30,Flexible shaft coupling,0,(photo-counted)
+04/10/2026 05:12:22,30,[BOX FULL],1,box is physically full
+04/10/2026 05:12:53,48,Flexible shaft coupler,0,(photo-counted)
+04/10/2026 05:12:55,48,[BOX FULL],1,box is physically full
+04/10/2026 05:13:45,49,Flexible shaft coupling,0,(photo-counted)
+04/10/2026 05:13:48,49,[BOX FULL],1,box is physically full
+04/10/2026 05:14:05,50,Flexible shaft coupler,0,(photo-counted)
+04/10/2026 05:14:08,50,[BOX FULL],1,box is physically full
+04/10/2026 05:17:24,51,Helical shaft coupling,0,(photo-counted)
+04/10/2026 05:17:27,51,[BOX FULL],1,box is physically full
+04/10/2026 05:17:58,58,Flexible shaft coupler,0,(photo-counted)
+04/10/2026 05:18:00,58,[BOX FULL],1,box is physically full
+04/10/2026 05:21:08,55,Flexible shaft coupling,2,(photo-counted)
+05/10/2026 01:39:00,78,[BOX FULL],1,box is physically full
