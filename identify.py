@@ -90,7 +90,6 @@ VERTEX_ACCOUNT = "peterfrissen123@gmail.com"
 VERTEX_PROJECT = "deft-melody-503207-k8"
 VERTEX_LOCATION = "us-central1"
 VERTEX_MODEL = "gemini-2.5-flash"
-              f"{GEMINI_MODEL}:generateContent")
 
 # Gemini takes the same fields but wants uppercase types and no additionalProperties.
 GEMINI_SCHEMA = {
@@ -277,43 +276,11 @@ def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     if media not in SUPPORTED.values():
         print(f"  skipped — {path.suffix} is not a supported image type")
         return None
-
     data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
     prompt = f"Identify this part.\n\n{config.context}"
-
-    if config.provider == "gemini":
-        return _gemini(data, media, prompt, config.gemini_key)
-    if config.provider == "openai":
-        return _openai(data, media, prompt, config.openai_key)
-    if config.provider == "vertex":
-        return _vertex(data, media, prompt, vertex_token())
-
-    # provider == "auto": Vertex first — it spends the credits on the separate
-    # Google account rather than a personal API key. Then walk the rest, skipping
-    # any account that turns out to be unfunded: a key being present in .env and
-    # a key being usable are different things.
-    chain = [(f"vertex/{VERTEX_MODEL}",
-              lambda: _vertex(data, media, prompt, vertex_token()), vertex_token())]
-    chain.append(("claude", lambda: _claude(config.client, data, media, prompt), config.client))
-    chain.append((GEMINI_MODEL, lambda: _gemini(data, media, prompt, config.gemini_key), config.gemini_key))
-    chain.append((OPENAI_MODEL, lambda: _openai(data, media, prompt, config.openai_key), config.openai_key))
-
-    last: Exception | None = None
-    for name, call, available in chain:
-        if not available:
-            continue
-        try:
-            if last is not None:
-                print(f"  trying {name}…")
-            return call()
-        except Exception as exc:                      # noqa: BLE001
-            if not _recoverable(exc):
-                raise
-            print(f"  {name} unavailable: {_reason(exc)}")
-            last = exc
-    if last:
-        raise last
-    raise RuntimeError("no vision API key available")
+    token = vertex_token()
+    if not token: raise RuntimeError("no gcloud token")
+    return _vertex(data, media, prompt, token)
 
 
 def _recoverable(exc: Exception) -> bool:
@@ -523,8 +490,8 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
-def _create_config(context: str) -> IdentifyConfig:
-    return IdentifyConfig(client=None, context=context)
+def _create_config(provider: str, context: str) -> IdentifyConfig:
+    return IdentifyConfig(client=None, context=context, provider=provider, gemini_key=None, openai_key=None)
 
 def _process_single_photo(
     path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
@@ -720,35 +687,6 @@ def run(args: argparse.Namespace) -> int:
     if not paths:
         sys.exit("no files matched")
 
-    anthropic_key = read_key("ANTHROPIC_API_KEY")
-    gemini_key = read_key("GOOGLE_API_KEY")
-    openai_key = read_key("OPENAI_API_KEY")
-
-    # Vertex is deliberately absent here: it authenticates through gcloud, so it
-    # needs no key in .env at all.
-    required = {"anthropic": ("ANTHROPIC_API_KEY", anthropic_key),
-                "gemini": ("GOOGLE_API_KEY", gemini_key),
-                "openai": ("OPENAI_API_KEY", openai_key)}
-    if args.provider == "vertex":
-        if not vertex_token():
-            sys.exit(f"gcloud has no usable token for {VERTEX_ACCOUNT} — "
-                     f"run: gcloud auth login {VERTEX_ACCOUNT}")
-    elif args.provider != "auto":
-        name, value = required[args.provider]
-        if not value:
-            sys.exit(f"no {name} in {ENV}")
-    elif not any((anthropic_key, gemini_key, openai_key, vertex_token())):
-        sys.exit(f"no vision credentials at all (no gcloud token, no key in {ENV})")
-
-    client = None
-    if args.provider in {"auto", "anthropic"} and anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-        except ImportError:
-            if args.provider == "anthropic":
-                sys.exit("pip install anthropic")
-            print("  anthropic SDK not installed — skipping Claude")
 
     data = load_inventory()
     active = [i for i in data["items"] if i["status"] == "active"]
