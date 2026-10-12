@@ -427,14 +427,17 @@ function planMoves(level, cap){
       if(!inHome.length) continue;
       const targets = [...new Set(inHome)].filter(b => !full.has(b)).sort((a,b)=>a-b);
       const l = load();
+      const movedCounts = {};
+      for(const m of moves) movedCounts[m.to] = (movedCounts[m.to] || 0) + 1;
       let ti = 0;
       for(const r of elec.sort((a,b)=>a.box-b.box)){
         if(containerOf(r.box, SEED?.meta?.containerSize || 30) === home) continue;
         if(!mergeable(r)) continue;                 // piles stay where they are
         while(ti < targets.length &&
-              (l.get(targets[ti])||[]).length + moves.filter(m=>m.to===targets[ti]).length >= cap) ti++;
+              (l.get(targets[ti])||[]).length + (movedCounts[targets[ti]] || 0) >= cap) ti++;
         if(ti >= targets.length) break;
         move(r, targets[ti], `${esc(CAT[cat]||cat)} belongs in container ${home}`);
+        movedCounts[targets[ti]] = (movedCounts[targets[ti]] || 0) + 1;
       }
     }
     consolidate();   // regrouping leaves new one-item boxes behind; sweep them up
