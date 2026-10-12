@@ -4,7 +4,7 @@ import datetime
 import operator
 import re
 from io import StringIO
-from typing import Iterable, Any, Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set
 
 from utils import slug
 
@@ -55,7 +55,8 @@ _CATEGORY_RULES_RAW: List[Tuple[str, str]] = [
     ("material",   r"scrap|shavings|sawdust|flakes|granules|seeds|salts|foam|earplug|"
                    r"popsicle|hot-glue|shoelace|gemstone|coil|sticker|label"),
 ]
-CATEGORY_RULES = [(cat, re.compile(pattern)) for cat, pattern in _CATEGORY_RULES_RAW]
+CATEGORY_RULES = [(cat, re.compile(pattern))
+                  for cat, pattern in _CATEGORY_RULES_RAW]
 DEFAULT_CATEGORY = "misc"
 
 CATEGORY_LABELS = {
@@ -78,8 +79,10 @@ CATEGORY_LABELS = {
 
 PART_NUMBER = re.compile(r"^(?:[a-z]{2,}\d{2,}[a-z0-9]*|\d{4,})$")
 
+
 def part_numbers(name: str) -> Set[str]:
     return {t for t in slug(name).split() if PART_NUMBER.match(t)}
+
 
 def categorise(name: str, note: str) -> str:
     hay = f"{name} {note}".lower()
@@ -87,6 +90,7 @@ def categorise(name: str, note: str) -> str:
         if pattern.search(hay):
             return cat
     return DEFAULT_CATEGORY
+
 
 def parse_date(value: str) -> Optional[str]:
     value = (value or "").strip()
@@ -99,15 +103,17 @@ def parse_date(value: str) -> Optional[str]:
             continue
     raise ValueError(f"unparseable date: {value!r}")
 
+
 def container_of(box: int) -> str:
     base = 400 if box >= 400 else 0
     n = (box - base - 1) // CONTAINER_SIZE + 1
     return ("H" if base else "") + str(n)
 
+
 def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> List[Dict]:
     """Parse CSV text into the common raw_rows format."""
     raw_rows = []
-    
+
     box_reader = csv.DictReader(StringIO(box_csv_text))
     for line_no, row in enumerate(box_reader, start=2):
         box_txt = (row.get("Box") or "").strip()
@@ -157,54 +163,85 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
                     "src": 1,
                 }
             )
-            
+
     return raw_rows
 
-def resolve_item(box: int, key_slug: str, history: List[Dict]) -> Optional[Dict]:
-    history_sort_key = lambda r: (r["date"] or "", r["time"], r["src"], r["line"])
-    history.sort(key=history_sort_key)
-    latest = history[-1]
 
-    if not latest["name"]:
-        return None
+def _norm_qty(q: str) -> str:
+    s = (q or "").strip().lower()
+    if s == "99" or s == "many":
+        return "many"
+    if s == "" or s == "?":
+        return "?"
+    return s
 
-    def norm_qty(q: str) -> str:
-        s = (q or "").strip().lower()
-        if s == "99" or s == "many":
-            return "many"
-        if s == "" or s == "?":
-            return "?"
-        return s
 
-    qty_values = [norm_qty(r["qty_txt"]) for r in history]
-    distinct = {q for q in qty_values}
+def _analyze_history(history: List[Dict], latest: Dict) -> Tuple[bool, bool]:
+    qty_values = [_norm_qty(r["qty_txt"]) for r in history]
+    distinct = set(qty_values)
     restated = len(history) > 1 and len(distinct) == 1
-    
+
     deliberate = (latest.get("src", 0) == 1
                   or COUNTED_MARK in (latest["note"] or "").lower())
     conflict = len(history) > 1 and len(distinct) > 1 and not deliberate
 
-    qty_txt = latest["qty_txt"].strip().lower()
+    return restated, conflict
+
+
+def _parse_qty(qty_txt: str) -> Tuple[str, Optional[int]]:
+    qty_txt = qty_txt.strip().lower()
     if qty_txt == "" or qty_txt == "?":
-        count_type, qty = "unknown", None
-    elif qty_txt == "many" or (qty_txt.lstrip('-').isdigit() and int(qty_txt) == BULK_SENTINEL):
-        count_type, qty = "bulk", None
-    else:
-        try:
-            qty = int(qty_txt)
-            count_type = "exact"
-        except ValueError:
-            count_type, qty = "unknown", None
+        return "unknown", None
 
-    status = "gone" if (count_type == "exact" and qty == 0) else "active"
+    is_bulk = qty_txt == "many" or (
+        qty_txt.lstrip('-').isdigit() and int(qty_txt) == BULK_SENTINEL
+    )
+    if is_bulk:
+        return "bulk", None
 
+    try:
+        qty = int(qty_txt)
+        return "exact", qty
+    except ValueError:
+        return "unknown", None
+
+
+def _calculate_peak(
+    history: List[Dict],
+    qty: Optional[int],
+    count_type: str
+) -> Optional[int]:
     peak = qty if count_type == "exact" else None
     for r in history:
         qt = r["qty_txt"].strip().lower()
         if qt.lstrip('-').isdigit() and int(qt) != BULK_SENTINEL:
             peak = max(peak or 0, int(qt))
+    return peak
 
-    note = latest["note"] or next((r["note"] for r in reversed(history) if r["note"]), "")
+
+def _history_sort_key(r: Dict) -> Tuple[str, str, int, int]:
+    return (r["date"] or "", r["time"], r.get("src", 0), r["line"])
+
+
+def resolve_item(
+    box: int,
+    key_slug: str,
+    history: List[Dict]
+) -> Optional[Dict]:
+    history.sort(key=_history_sort_key)
+    latest = history[-1]
+
+    if not latest["name"]:
+        return None
+
+    restated, conflict = _analyze_history(history, latest)
+    count_type, qty = _parse_qty(latest["qty_txt"])
+    status = "gone" if (count_type == "exact" and qty == 0) else "active"
+    peak = _calculate_peak(history, qty, count_type)
+
+    note = latest["note"] or next(
+        (r["note"] for r in reversed(history) if r["note"]), ""
+    )
 
     return {
         "id": f"{box}-{key_slug}" if key_slug else f"{box}-item",
@@ -228,12 +265,14 @@ def resolve_item(box: int, key_slug: str, history: List[Dict]) -> Optional[Dict]
         else [],
     }
 
+
 def group_rows(raw_rows: List[Dict]) -> Dict[Tuple[int, str], List[Dict]]:
     groups: Dict[Tuple[int, str], List[Dict]] = {}
     for row in raw_rows:
         key = (row["box"], slug(row["name"]))
         groups.setdefault(key, []).append(row)
     return groups
+
 
 def build_items(raw_rows: List[Dict]) -> List[Dict]:
     groups = group_rows(raw_rows)
@@ -249,6 +288,7 @@ def build_items(raw_rows: List[Dict]) -> List[Dict]:
 
     return items
 
+
 def find_free_boxes(items: List[Dict]) -> List[Dict]:
     used_boxes_set = {i["box"] for i in items}
     used_boxes = sorted(used_boxes_set)
@@ -263,15 +303,18 @@ def find_free_boxes(items: List[Dict]) -> List[Dict]:
         free_box_nums = set(range(lo, hi + 1)) - active_keys
         for b in sorted(free_box_nums):
             reason = "emptied" if b in used_boxes_set else "never used"
-            free_boxes.append({"box": b, "container": container_of(b), "reason": reason})
+            free_boxes.append(
+                {"box": b, "container": container_of(b), "reason": reason})
     return free_boxes
+
 
 def find_full_boxes(raw_rows: List[Dict], items: List[Dict]) -> List[int]:
     newest: Dict[int, Dict] = {}
     for r in raw_rows:
         if slug(r["name"]) != BOX_FULL_SLUG:
             continue
-        key = (r["date"] or "", r.get("time", "00:00:00"), r.get("src", 0), r["line"])
+        key = (r["date"] or "", r.get("time", "00:00:00"),
+               r.get("src", 0), r["line"])
         if r["box"] not in newest or key >= newest[r["box"]][0]:
             newest[r["box"]] = (key, r)
     occupied = {i["box"] for i in items if i["status"] == "active"}
@@ -281,6 +324,7 @@ def find_full_boxes(raw_rows: List[Dict], items: List[Dict]) -> List[int]:
         if txt.lstrip("-").isdigit() and int(txt) != 0 and box in occupied:
             full.append(box)
     return sorted(full)
+
 
 def find_split_items(items: List[Dict]) -> List[Dict]:
     by_name: Dict[str, List[int]] = {}
@@ -299,4 +343,3 @@ def find_split_items(items: List[Dict]) -> List[Dict]:
     ]
     split_items.sort(key=lambda s: s["name"].lower())
     return split_items
-
