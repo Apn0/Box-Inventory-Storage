@@ -4,6 +4,9 @@ from unittest.mock import patch
 from identify import commit
 from identify import context_for_prompt
 
+import json
+import identify
+from unittest.mock import patch
 def test_context_for_prompt_standard_input():
     data = {
         "meta": {
