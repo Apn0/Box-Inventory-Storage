@@ -13,8 +13,8 @@ import shutil
 import subprocess
 import sys
 import json
-import urllib.error
-import urllib.request
+from urllib.error import URLError
+from urllib.request import urlopen
 
 ROOT = pathlib.Path(__file__).resolve().parent
 RAW = ROOT / "data" / "inventory_raw.csv"
@@ -43,9 +43,9 @@ FORM_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv
 def main() -> int:
     print(f"downloading {URL}")
     try:
-        with urllib.request.urlopen(URL, timeout=60) as r:
+        with urlopen(URL, timeout=60) as r:
             body = r.read()
-    except urllib.error.URLError as exc:
+    except URLError as exc:
         print(f"download failed: {exc}", file=sys.stderr)
         print("(is the sheet still shared as 'anyone with the link'?)", file=sys.stderr)
         return 1
@@ -81,12 +81,12 @@ def main() -> int:
     # with the cloud copy is safe: the cloud is the superset (post_to_form
     # mirrors locally only after the cloud accepted the row).
     try:
-        with urllib.request.urlopen(FORM_URL, timeout=60) as r:
+        with urlopen(FORM_URL, timeout=60) as r:
             form_body = r.read()
         if form_body.decode("utf-8-sig", errors="replace").startswith("Timestamp"):
             FORM_CSV.write_bytes(form_body)
             print(f"wrote {FORM_CSV}  ({form_body.count(b'\n')} rows)")
-    except (urllib.error.URLError, OSError) as exc:
+    except (URLError, OSError) as exc:
         print(f"form tab skipped: {exc}")
 
     return subprocess.call([sys.executable, str(ROOT / "build.py")])
