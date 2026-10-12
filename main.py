@@ -125,21 +125,38 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     return hit
 
 
+_propose_cache = {}
+
 def propose_box(active: list[dict], category: str) -> int:
-    per_box: dict[int, int] = {}
-    same_cat = set()
-    full = set()
+    global _propose_cache
+    if _propose_cache.get("active") is not active:
+        per_box: dict[int, int] = {}
+        category_boxes: dict[str, set[int]] = {}
+        full = set()
 
-    for i in active:
-        box = i["box"]
-        per_box[box] = per_box.get(box, 0) + 1
+        for i in active:
+            box = i["box"]
+            per_box[box] = per_box.get(box, 0) + 1
 
-        if i.get("boxFull"):
-            full.add(box)
+            if i.get("boxFull"):
+                full.add(box)
 
-        if box < 400:
-            if i["category"] == category:
-                same_cat.add(box)
+            if box < 400:
+                cat = i.get("category", "")
+                if cat not in category_boxes:
+                    category_boxes[cat] = set()
+                category_boxes[cat].add(box)
+
+        _propose_cache = {
+            "active": active,
+            "per_box": per_box,
+            "category_boxes": category_boxes,
+            "full": full,
+        }
+
+    per_box = _propose_cache["per_box"]
+    full = _propose_cache["full"]
+    same_cat = _propose_cache["category_boxes"].get(category, set())
 
     for b in sorted(same_cat - full):     # a box marked full takes nothing more
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
