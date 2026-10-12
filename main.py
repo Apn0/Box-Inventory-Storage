@@ -22,7 +22,6 @@ import mimetypes
 import pathlib
 import threading
 import urllib.error
-import urllib.request
 import time
 
 import google.auth
