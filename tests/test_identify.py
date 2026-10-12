@@ -1,6 +1,9 @@
 import pytest
 from identify import context_for_prompt
 
+import json
+import identify
+from unittest.mock import patch
 def test_context_for_prompt_standard_input():
     data = {
         "meta": {
@@ -353,3 +356,23 @@ class TestRecoverable(unittest.TestCase):
         self.assertFalse(_recoverable(Exception("Bad request 400")))
 
 
+
+class TestSavePending(unittest.TestCase):
+    def setUp(self):
+        self.original_pending_cache = identify._pending_cache
+        identify._pending_cache = []
+
+    def tearDown(self):
+        identify._pending_cache = self.original_pending_cache
+
+    @patch("identify.PENDING")
+    def test_save_pending(self, mock_pending):
+        entries = [{"id": 1, "status": "pending"}, {"id": 2, "status": "pending"}]
+        identify.save_pending(entries)
+
+        self.assertEqual(identify._pending_cache, entries)
+        mock_pending.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+        mock_pending.write_text.assert_called_once_with(
+            json.dumps(entries, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
