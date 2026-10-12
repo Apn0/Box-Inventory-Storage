@@ -1,8 +1,11 @@
 import pytest
 from build import (
     parse_date, find_split_items, container_of, part_numbers, categorise, build_items,
-    parse_raw_rows, resolve_item,
+    parse_raw_rows, resolve_item, write_outputs, OUT_JSON, OUT_SNAPSHOT_JS
 )
+import json
+import datetime
+from unittest.mock import patch, MagicMock
 
 def test_parse_date_happy_paths():
     assert parse_date("01/12/2023") == "2023-12-01"
@@ -464,3 +467,63 @@ def test_resolve_item_note_inheritance():
     assert res["note"] == "temperature and pressure"
     assert res["category"] == "sensor"
 
+@patch('build.OUT_JSON')
+@patch('build.OUT_SNAPSHOT_JS')
+def test_write_outputs_basic(mock_snapshot, mock_out_json):
+    raw_rows = [{"box": 1, "name": "Item A", "qty_txt": "10", "note": "", "date": "2023-10-01", "time": "10:00:00", "src": 0, "line": 1}]
+    items = [{"box": 1, "name": "Item A", "qty": 10}]
+    free_boxes = [{"box": 2, "label": "2"}]
+    split_items = [{"name": "Item A", "boxes": [1, 3]}]
+    full_boxes = [1]
+
+    result = write_outputs(raw_rows, items, free_boxes, split_items, full_boxes)
+
+    assert result is True
+
+    mock_out_json.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+    # Check that OUT_JSON.write_text was called
+    assert mock_out_json.write_text.called
+    written_json = mock_out_json.write_text.call_args[0][0]
+    parsed_json = json.loads(written_json)
+
+    assert parsed_json["items"] == items
+    assert parsed_json["freeBoxes"] == free_boxes
+    assert parsed_json["splitItems"] == split_items
+    assert parsed_json["fullBoxes"] == full_boxes
+    assert parsed_json["meta"]["rawRows"] == 1
+    assert parsed_json["meta"]["generated"] == datetime.date.today().isoformat()
+
+    # Check that OUT_SNAPSHOT_JS.write_text was called
+    assert mock_snapshot.write_text.called
+    written_js = mock_snapshot.write_text.call_args[0][0]
+    assert written_js.startswith("export const snapshot = {")
+    assert written_js.endswith("};\n")
+
+@patch('build.OUT_JSON')
+@patch('build.OUT_SNAPSHOT_JS')
+def test_write_outputs_empty_and_defaults(mock_snapshot, mock_out_json):
+    raw_rows = []
+    items = []
+    free_boxes = []
+    split_items = []
+    # full_boxes is implicitly None
+
+    result = write_outputs(raw_rows, items, free_boxes, split_items)
+
+    assert result is True
+
+    mock_out_json.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+    # Check that OUT_JSON.write_text was called
+    assert mock_out_json.write_text.called
+    written_json = mock_out_json.write_text.call_args[0][0]
+    parsed_json = json.loads(written_json)
+
+    assert parsed_json["items"] == items
+    assert parsed_json["freeBoxes"] == free_boxes
+    assert parsed_json["splitItems"] == split_items
+    assert parsed_json["fullBoxes"] == []  # defaulted to []
+    assert parsed_json["meta"]["rawRows"] == 0
+
+    assert mock_snapshot.write_text.called
