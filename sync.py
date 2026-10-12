@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import json
-import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent
