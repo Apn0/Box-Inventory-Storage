@@ -22,17 +22,14 @@ import mimetypes
 import pathlib
 import threading
 import urllib.error
-import urllib.request
 import time
 
-import google.auth
 import google.auth.transport.requests
-import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
 from inventory_core.resolver import (
-    CATEGORY_LABELS, categorise, find_full_boxes, part_numbers,
+    CATEGORY_LABELS, find_full_boxes, part_numbers,
     parse_raw_rows, build_items
 )
 from utils import slug
@@ -128,21 +125,38 @@ def find_existing_part(active: list[dict], name: str) -> dict | None:
     return hit
 
 
+_propose_cache = {}
+
 def propose_box(active: list[dict], category: str) -> int:
-    per_box: dict[int, int] = {}
-    same_cat = set()
-    full = set()
+    global _propose_cache
+    if _propose_cache.get("active") is not active:
+        per_box: dict[int, int] = {}
+        category_boxes: dict[str, set[int]] = {}
+        full = set()
 
-    for i in active:
-        box = i["box"]
-        per_box[box] = per_box.get(box, 0) + 1
+        for i in active:
+            box = i["box"]
+            per_box[box] = per_box.get(box, 0) + 1
 
-        if i.get("boxFull"):
-            full.add(box)
+            if i.get("boxFull"):
+                full.add(box)
 
-        if box < 400:
-            if i["category"] == category:
-                same_cat.add(box)
+            if box < 400:
+                cat = i.get("category", "")
+                if cat not in category_boxes:
+                    category_boxes[cat] = set()
+                category_boxes[cat].add(box)
+
+        _propose_cache = {
+            "active": active,
+            "per_box": per_box,
+            "category_boxes": category_boxes,
+            "full": full,
+        }
+
+    per_box = _propose_cache["per_box"]
+    full = _propose_cache["full"]
+    same_cat = _propose_cache["category_boxes"].get(category, set())
 
     for b in sorted(same_cat - full):     # a box marked full takes nothing more
         if per_box.get(b, 0) < MAX_BOX_ITEMS:
@@ -217,50 +231,7 @@ def health():
     return "ok"
 
 
-@app.route("/identify", methods=["POST", "OPTIONS"])
-def identify():
-    if request.method == "OPTIONS":
-        return "", 204
-
-    expected_key = os.environ.get("API_KEY")
-    auth_header = request.headers.get("Authorization", "")
-    if not expected_key or not auth_header.startswith("Bearer ") \
-            or not hmac.compare_digest(auth_header[7:], expected_key):
-        # We read and discard the body so gunicorn does not drop the connection
-        # with an unread body, which would result in a 502/503 for the client.
-        _ = request.get_data()
-        return jsonify(error="unauthorized"), 401
-
-    body = request.get_data()
-    media = (request.headers.get("Content-Type") or "").split(";")[0].strip()
-    if media not in SUPPORTED:
-        media = mimetypes.guess_type(request.headers.get("X-Filename", ""))[0] or "image/jpeg"
-    if not body:
-        return jsonify(error="no image"), 400
-    b64 = base64.standard_b64encode(body).decode("ascii")
-
-    try:
-        items = resolve_items()
-    except (urllib.error.URLError, ValueError) as exc:
-        logging.error("could not read the sheet: %s", exc)
-        return jsonify(error="could not read the sheet"), 502
-
-    cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
-    active = [i for i in items if i["status"] == "active"]
-    names = sorted({i["name"] for i in active})
-    context = (f"Category keys you must choose from: {cats}.\n\n"
-              f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
-              + "\n".join(f"- {n}" for n in names))
-    prompt = f"Identify this part.\n\n{context}"
-
-    try:
-        result = call_vertex(b64, media, prompt, vertex_token())
-    except (google.auth.exceptions.GoogleAuthError, urllib.error.URLError, RuntimeError, ValueError) as exc:
-        logging.error("identification failed: %s", exc)
-        return jsonify(error="identification failed"), 502
-
-    seen = max(0, int(result.get("quantity") or 0))
-
+def _format_result(result: dict, active: list[dict], seen: int) -> tuple:
     existing = find_existing_part(active, result["name"]) or (
         find_existing_part(active, result["matches_existing"]) if result.get("matches_existing") else None)
 
@@ -275,3 +246,67 @@ def identify():
     return jsonify(name=result["name"], recordedName=result["name"], box=box,
                    recorded=None, seen=seen, isNew=True,
                    confidence=result.get("confidence"), note=result.get("note", ""))
+
+
+def _build_prompt(items: list[dict]) -> tuple[str, list[dict]]:
+    cats = ", ".join(f"{k} ({v})" for k, v in CATEGORY_LABELS.items())
+    active = [i for i in items if i["status"] == "active"]
+    names = sorted({i["name"] for i in active})
+    context = (f"Category keys you must choose from: {cats}.\n\n"
+              f"Parts already in the inventory (reuse the exact name if it is the same part):\n"
+              + "\n".join(f"- {n}" for n in names))
+    prompt = f"Identify this part.\n\n{context}"
+    return prompt, active
+
+
+def _get_media_and_b64(req) -> tuple[str, str, None] | tuple[None, None, tuple]:
+    body = req.get_data()
+    media = (req.headers.get("Content-Type") or "").split(";")[0].strip()
+    if media not in SUPPORTED:
+        media = mimetypes.guess_type(req.headers.get("X-Filename", ""))[0] or "image/jpeg"
+    if not body:
+        return None, None, (jsonify(error="no image"), 400)
+    b64 = base64.standard_b64encode(body).decode("ascii")
+    return media, b64, None
+
+
+def _check_auth(req) -> tuple | None:
+    expected_key = os.environ.get("API_KEY")
+    auth_header = req.headers.get("Authorization", "")
+    if not expected_key or not auth_header.startswith("Bearer ") \
+            or not hmac.compare_digest(auth_header[7:], expected_key):
+        # We read and discard the body so gunicorn does not drop the connection
+        # with an unread body, which would result in a 502/503 for the client.
+        _ = req.get_data()
+        return jsonify(error="unauthorized"), 401
+    return None
+
+
+@app.route("/identify", methods=["POST", "OPTIONS"])
+def identify():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    if err := _check_auth(request):
+        return err
+
+    media, b64, err = _get_media_and_b64(request)
+    if err:
+        return err
+
+    try:
+        items = resolve_items()
+    except (urllib.error.URLError, ValueError) as exc:
+        logging.error("could not read the sheet: %s", exc)
+        return jsonify(error="could not read the sheet"), 502
+
+    prompt, active = _build_prompt(items)
+
+    try:
+        result = call_vertex(b64, media, prompt, vertex_token())
+    except (google.auth.exceptions.GoogleAuthError, urllib.error.URLError, RuntimeError, ValueError) as exc:
+        logging.error("identification failed: %s", exc)
+        return jsonify(error="identification failed"), 502
+
+    seen = max(0, int(result.get("quantity") or 0))
+    return _format_result(result, active, seen)

@@ -417,6 +417,7 @@ function planMoves(level, cap){
       if(!cats.has(r.it.category)) cats.set(r.it.category, []);
       cats.get(r.it.category).push(r);
     }
+    const l = load();
     for(const [cat, rows] of cats){
       const elec = rows.filter(r => r.box < 400);
       if(elec.length < 3) continue;                 // not worth moving crates for
