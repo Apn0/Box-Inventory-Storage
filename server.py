@@ -18,9 +18,11 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import functools
 import http.server
 import json
 import mimetypes
+import os
 import pathlib
 import queue
 import urllib.parse
@@ -178,14 +180,31 @@ def safe_name(raw: str) -> str:
     return f"{stamp}_{clean}{suffix}"
 
 
+@functools.lru_cache(maxsize=4)
+def _photos_in_cached(folder: pathlib.Path, mtime: float) -> tuple[dict, ...]:
+    entries = []
+    with os.scandir(folder) as it:
+        for entry in it:
+            if entry.is_file():
+                name = entry.name
+                ext_idx = name.rfind(".")
+                if ext_idx != -1 and name[ext_idx:].lower() in ALLOWED_SUFFIX:
+                    st = entry.stat()
+                    entries.append({
+                        "name": name,
+                        "size": st.st_size,
+                        "at": datetime.datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")
+                    })
+    entries.sort(key=lambda d: d["at"], reverse=True)
+    return tuple(entries)
+
+
 def _photos_in(folder: pathlib.Path) -> list[dict]:
-    if not folder.exists():
+    try:
+        st = folder.stat()
+    except OSError:
         return []
-    return sorted(
-        ({"name": p.name, "size": p.stat().st_size,
-          "at": datetime.datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
-         for p in folder.iterdir() if p.is_file() and p.suffix.lower() in ALLOWED_SUFFIX),
-        key=lambda d: d["at"], reverse=True)
+    return list(_photos_in_cached(folder, st.st_mtime))
 
 
 def inbox_list() -> list[dict]:
