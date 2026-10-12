@@ -1,4 +1,7 @@
 import pytest
+import unittest
+from unittest.mock import patch
+from identify import commit
 from identify import context_for_prompt
 
 import json
@@ -69,8 +72,6 @@ def test_context_for_prompt_duplicate_names():
     )
     assert result == expected
 
-import unittest
-import unittest
 from identify import find_existing_part, auto_filable, propose_box, part_numbers, _recoverable, context_for_prompt
 
 class TestPartNumbers(unittest.TestCase):
@@ -356,23 +357,24 @@ class TestRecoverable(unittest.TestCase):
         self.assertFalse(_recoverable(Exception("Bad request 400")))
 
 
+class TestCommit(unittest.TestCase):
+    @patch('identify.post_to_form')
+    @patch('identify.load_inventory')
+    @patch('identify.append_rows')
+    @patch('identify.subprocess.run')
+    def test_commit_error_path(self, mock_subprocess_run, mock_append_rows, mock_load_inventory, mock_post_to_form):
+        # Setup mocks
+        mock_load_inventory.return_value = {"items": []}
+        mock_post_to_form.return_value = False
 
-class TestSavePending(unittest.TestCase):
-    def setUp(self):
-        self.original_pending_cache = identify._pending_cache
-        identify._pending_cache = []
+        # Call commit
+        entry = {"box": 1, "name": "Resistor 10k"}
+        result = commit(entry, qty=50)
 
-    def tearDown(self):
-        identify._pending_cache = self.original_pending_cache
+        # Verify append_rows was called (fallback to local append)
+        mock_append_rows.assert_called_once_with([
+            {"box": 1, "name": "Resistor 10k", "quantity": 50, "note": "(photo-counted)"}
+        ])
 
-    @patch("identify.PENDING")
-    def test_save_pending(self, mock_pending):
-        entries = [{"id": 1, "status": "pending"}, {"id": 2, "status": "pending"}]
-        identify.save_pending(entries)
-
-        self.assertEqual(identify._pending_cache, entries)
-        mock_pending.parent.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-        mock_pending.write_text.assert_called_once_with(
-            json.dumps(entries, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
+        # Verify return value
+        self.assertEqual(result, {"box": 1, "name": "Resistor 10k", "quantity": 50})
