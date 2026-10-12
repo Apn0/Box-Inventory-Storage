@@ -394,8 +394,8 @@ function planMoves(level, cap){
         if(!byCC.has(k)) byCC.set(k, []);
         byCC.get(k).push(r);
       }
+      const l = load();                       // recomputed per pass
       for(const [,rows] of byCC){
-        const l = load();                       // recomputed per group, per pass
         const singles = rows.filter(r => mergeable(r) && (l.get(r.box)||[]).length === 1);
         if(singles.length < 2) continue;
         const home = Math.min(...singles.map(r => r.box));
