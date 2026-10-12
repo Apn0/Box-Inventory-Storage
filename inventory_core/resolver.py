@@ -107,39 +107,17 @@ def container_of(box: int) -> str:
 def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> List[Dict]:
     """Parse CSV text into the common raw_rows format."""
     raw_rows = []
-    
-    box_reader = csv.DictReader(StringIO(box_csv_text))
-    for line_no, row in enumerate(box_reader, start=2):
-        box_txt = (row.get("Box") or "").strip()
-        if not box_txt or not box_txt.lstrip("-").isdigit():
-            continue
-        updated_txt = (row.get("UpdatedAt") or "").strip()
-        date_part, _, _ = updated_txt.partition(" ")
-        try:
-            box_date = parse_date(date_part)
-        except ValueError:
-            box_date = None
-        raw_rows.append(
-            {
-                "line": line_no,
-                "box": int(box_txt),
-                "name": (row.get("Item") or "").strip(),
-                "qty_txt": (row.get("Qty") or "").strip(),
-                "note": (row.get("Note") or "").strip(),
-                "date": box_date,
-                "time": "00:00:00",
-                "src": 0,
-            }
-        )
 
-    if form_csv_text:
-        form_reader = csv.DictReader(StringIO(form_csv_text))
-        for line_no, row in enumerate(form_reader, start=2):
+    def _process_csv(csv_text: str, src: int, ts_col: str, default_time: str, req_name: bool, parse_time: bool):
+        reader = csv.DictReader(StringIO(csv_text))
+        for line_no, row in enumerate(reader, start=2):
             box_txt = (row.get("Box") or "").strip()
             name = (row.get("Item") or "").strip()
-            if not box_txt or not name or not box_txt.lstrip("-").isdigit():
+            if not box_txt or not box_txt.lstrip("-").isdigit():
                 continue
-            ts = (row.get("Timestamp") or "").strip()
+            if req_name and not name:
+                continue
+            ts = (row.get(ts_col) or "").strip()
             date_part, _, time_part = ts.partition(" ")
             try:
                 date = parse_date(date_part)
@@ -153,11 +131,15 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
                     "qty_txt": (row.get("Qty") or "").strip(),
                     "note": (row.get("Note") or "").strip(),
                     "date": date,
-                    "time": time_part or "00:00:01",
-                    "src": 1,
+                    "time": time_part if (parse_time and time_part) else default_time,
+                    "src": src,
                 }
             )
-            
+
+    _process_csv(box_csv_text, src=0, ts_col="UpdatedAt", default_time="00:00:00", req_name=False, parse_time=False)
+    if form_csv_text:
+        _process_csv(form_csv_text, src=1, ts_col="Timestamp", default_time="00:00:01", req_name=True, parse_time=True)
+
     return raw_rows
 
 def resolve_item(box: int, key_slug: str, history: List[Dict]) -> Optional[Dict]:
