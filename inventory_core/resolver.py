@@ -138,14 +138,16 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
             }
         )
 
-    if form_csv_text:
-        form_reader = csv.DictReader(StringIO(form_csv_text))
-        for line_no, row in enumerate(form_reader, start=2):
+    def _process_csv(csv_text: str, src: int, ts_col: str, default_time: str, req_name: bool, parse_time: bool):
+        reader = csv.DictReader(StringIO(csv_text))
+        for line_no, row in enumerate(reader, start=2):
             box_txt = (row.get("Box") or "").strip()
             name = (row.get("Item") or "").strip()
-            if not box_txt or not name or not box_txt.lstrip("-").isdigit():
+            if not box_txt or not box_txt.lstrip("-").isdigit():
                 continue
-            ts = (row.get("Timestamp") or "").strip()
+            if req_name and not name:
+                continue
+            ts = (row.get(ts_col) or "").strip()
             date_part, _, time_part = ts.partition(" ")
             try:
                 date = parse_date(date_part)
@@ -159,8 +161,8 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
                     "qty_txt": (row.get("Qty") or "").strip(),
                     "note": (row.get("Note") or "").strip(),
                     "date": date,
-                    "time": time_part or "00:00:01",
-                    "src": 1,
+                    "time": time_part if (parse_time and time_part) else default_time,
+                    "src": src,
                 }
             )
 

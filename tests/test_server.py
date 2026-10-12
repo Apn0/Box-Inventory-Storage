@@ -21,9 +21,9 @@ def test_safe_name_path_sanitization(mock_datetime):
     assert safe_name("../../etc/passwd.jpg") == "20231024-153045-123_passwd.jpg"
 
 def test_safe_name_special_characters(mock_datetime):
-    assert safe_name("my photo!.jpg") == "20231024-153045-123_my_photo_.jpg"
+    assert safe_name("my photo!.jpg") == "20231024-153045-123_my_photo.jpg"
     assert safe_name("file_with-dashes.and.dots.jpg") == "20231024-153045-123_file_with-dashes.and.dots.jpg"
-    assert safe_name("😀emoji.png") == "20231024-153045-123__emoji.png"
+    assert safe_name("😀emoji.png") == "20231024-153045-123_emoji.png"
 
 def test_safe_name_unallowed_extensions(mock_datetime):
     # Unallowed extensions default to .jpg
@@ -37,8 +37,8 @@ def test_safe_name_length_truncation(mock_datetime):
     assert safe_name(long_name) == expected
 
 def test_safe_name_empty_or_invalid_stem(mock_datetime):
-    assert safe_name("!!!.jpg") == "20231024-153045-123__.jpg"
-    assert safe_name(".jpg") == "20231024-153045-123_.jpg.jpg"
+    assert safe_name("!!!.jpg") == "20231024-153045-123_photo.jpg"
+    assert safe_name(".jpg") == "20231024-153045-123_jpg.jpg"
     assert safe_name("") == "20231024-153045-123_photo.jpg"
 
 def test_handler_path_sanitization(mocker):

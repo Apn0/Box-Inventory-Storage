@@ -27,6 +27,7 @@ import urllib.parse
 import urllib.request
 import re
 import shutil
+import werkzeug.utils
 import socket
 import socketserver
 import struct
@@ -172,7 +173,7 @@ def safe_name(raw: str) -> str:
     suffix = pathlib.PurePosixPath(stem).suffix.lower()
     if suffix not in ALLOWED_SUFFIX:
         suffix = ".jpg"
-    clean = re.sub(r"[^A-Za-z0-9._-]+", "_", pathlib.PurePosixPath(stem).stem)[:60] or "photo"
+    clean = werkzeug.utils.secure_filename(pathlib.PurePosixPath(stem).stem)[:60] or "photo"
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
     return f"{stamp}_{clean}{suffix}"
 

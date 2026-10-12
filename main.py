@@ -21,18 +21,15 @@ import logging
 import mimetypes
 import pathlib
 import threading
-import urllib.error
 import urllib.request
-import time
 
 import google.auth
 import google.auth.transport.requests
-import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
 from inventory_core.resolver import (
-    CATEGORY_LABELS, categorise, find_full_boxes, part_numbers,
+    CATEGORY_LABELS, find_full_boxes, part_numbers,
     parse_raw_rows, build_items
 )
 from utils import slug
