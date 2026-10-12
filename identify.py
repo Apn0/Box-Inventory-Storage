@@ -279,6 +279,17 @@ class IdentifyConfig:
     openai_key: str | None = None
 
 
+@dataclasses.dataclass
+class IdentifyContext:
+    data: dict
+    active: list[dict]
+    config: IdentifyConfig
+    unattended: bool
+    per_box: dict
+    category_boxes: dict
+
+
+
 def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
@@ -511,21 +522,62 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
+def _process_interactive_photo(
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig,
+    per_box: dict, category_boxes: dict, dry_run: bool, yes_flag: bool
+) -> dict | None:
+    print(f"\n{path.name}")
+    try:
+        result = identify(path, config)
+    except Exception as exc:                     # noqa: BLE001 - report and continue
+        print(f"  failed: {exc}")
+        return None
+    if result is None:
+        return None
+
+    plan = decide(data, active, result, per_box, category_boxes)
+    print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
+    if result["note"]:
+        print(f"  note: {result['note']}")
+    print(f"  -> box {plan['box']}  ({plan['why']})")
+
+    if dry_run:
+        return None
+    if not yes_flag:
+        answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
+        if answer in {"n", "no"}:
+            return None
+        if answer.isdigit():
+            plan["box"] = int(answer)
+
+    return file_one(path, result, plan)
+
+
+def _build_box_indexes(active: list[dict]) -> tuple[dict, collections.defaultdict]:
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+    return per_box, category_boxes
+
 def _create_config(provider: str, context: str) -> IdentifyConfig:
     return IdentifyConfig(client=None, context=context, provider=provider, gemini_key=None, openai_key=None)
 
 def _process_single_photo(
-    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
+    path: pathlib.Path, ctx: IdentifyContext
 ) -> tuple[dict, dict | None]:
     try:
-        result = identify(path, config)
+        result = identify(path, ctx.config)
     except Exception as exc:                          # noqa: BLE001
         return {"photo": path.name, "ok": False, "error": str(exc)[:200]}, None
 
     if result is None:
         return {"photo": path.name, "ok": False, "error": "no answer"}, None
 
-    plan = decide(data, active, result, per_box, category_boxes)
+    plan = decide(ctx.data, ctx.active, result, ctx.per_box, ctx.category_boxes)
     outcome = {"photo": path.name, "ok": True,
                "name": plan["name"], "box": plan["box"],
                "confidence": result["confidence"], "note": result["note"],
@@ -534,7 +586,7 @@ def _process_single_photo(
                "why": plan["why"]}
 
     row = None
-    if unattended:
+    if ctx.unattended:
         # Never write a count unattended. What is actually in the box is
         # something only you can see — you may have taken parts out without
         # logging it, so an increment would quietly drift from reality.
@@ -543,8 +595,8 @@ def _process_single_photo(
         if INBOX in path.resolve().parents:
             shutil.move(str(path), str(REVIEW / path.name))
 
-        existing = find_existing_part(active, result["name"]) or (
-            find_existing_part(active, result["matches_existing"])
+        existing = find_existing_part(ctx.active, result["name"]) or (
+            find_existing_part(ctx.active, result["matches_existing"])
             if result["matches_existing"] else None)
         outcome.update(
             filed=False,
@@ -574,18 +626,13 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     context = context_for_prompt(data, active)
     config = _create_config(provider, context)
 
-    per_box = {}
-    category_boxes = collections.defaultdict(set)
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400:
-            category_boxes[i.get("category")].add(b)
+    per_box, category_boxes = _build_box_indexes(active)
 
+    ctx = IdentifyContext(data, active, config, unattended, per_box, category_boxes)
     outcomes, rows = [], []
     for path in paths:
         path = pathlib.Path(path)
-        outcome, row = _process_single_photo(path, data, active, config, unattended, per_box, category_boxes)
+        outcome, row = _process_single_photo(path, ctx)
         outcomes.append(outcome)
         if row is not None:
             rows.append(row)
@@ -718,40 +765,14 @@ def run(args: argparse.Namespace) -> int:
         provider=args.provider,
     )
 
-    per_box = {}
-    category_boxes = collections.defaultdict(set)
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400:
-            category_boxes[i.get("category")].add(b)
+    per_box, category_boxes = _build_box_indexes(active)
 
     for path in paths:
-        print(f"\n{path.name}")
-        try:
-            result = identify(path, config)
-        except Exception as exc:                     # noqa: BLE001 - report and continue
-            print(f"  failed: {exc}")
-            continue
-        if result is None:
-            continue
-
-        plan = decide(data, active, result, per_box, category_boxes)
-        print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
-        if result["note"]:
-            print(f"  note: {result['note']}")
-        print(f"  -> box {plan['box']}  ({plan['why']})")
-
-        if args.dry_run:
-            continue
-        if not args.yes:
-            answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
-            if answer in {"n", "no"}:
-                continue
-            if answer.isdigit():
-                plan["box"] = int(answer)
-
-        accepted.append(file_one(path, result, plan))
+        filed_item = _process_interactive_photo(
+            path, data, active, config, per_box, category_boxes, args.dry_run, args.yes
+        )
+        if filed_item is not None:
+            accepted.append(filed_item)
 
     if not accepted:
         print("\nnothing filed")

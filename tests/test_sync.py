@@ -12,7 +12,7 @@ import pytest
 
 def test_sync_download_failure(mocker, capsys):
     # Mock urllib.request.urlopen to raise a URLError (or any exception)
-    mocker.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("mock error"))
+    mocker.patch("sync.urlopen", side_effect=urllib.error.URLError("mock error"))
 
     # Call main
     result = sync.main()
@@ -32,7 +32,7 @@ def test_sync_invalid_content(mocker, capsys, tmp_path):
 
     mock_resp = MagicMock()
     mock_resp.read.return_value = b"Not Bx\nSome content"
-    mocker.patch("urllib.request.urlopen", return_value=MagicMock(__enter__=MagicMock(return_value=mock_resp)))
+    mocker.patch("sync.urlopen", return_value=MagicMock(__enter__=MagicMock(return_value=mock_resp)))
 
     result = sync.main()
 
@@ -53,7 +53,7 @@ def test_sync_success_with_form_failure(mocker, capsys, tmp_path):
         else:
             raise OSError("mock os error")
 
-    mocker.patch("urllib.request.urlopen", side_effect=mock_urlopen)
+    mocker.patch("sync.urlopen", side_effect=mock_urlopen)
     mocker.patch("subprocess.call", return_value=0)
 
     result = sync.main()
@@ -75,7 +75,7 @@ def test_sync_success(mocker, capsys, tmp_path):
             mock_resp.read.return_value = b"Timestamp,Col2\nVal1,Val2"
             return MagicMock(__enter__=MagicMock(return_value=mock_resp))
 
-    mocker.patch("urllib.request.urlopen", side_effect=mock_urlopen)
+    mocker.patch("sync.urlopen", side_effect=mock_urlopen)
     mocker.patch("subprocess.call", return_value=0)
 
     result = sync.main()
