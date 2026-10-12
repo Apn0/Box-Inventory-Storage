@@ -26,7 +26,6 @@ import urllib.request
 
 import google.auth
 import google.auth.transport.requests
-import google.auth.exceptions
 from flask import Flask, jsonify, request
 from concurrent.futures import ThreadPoolExecutor
 
