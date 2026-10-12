@@ -417,6 +417,7 @@ function planMoves(level, cap){
       if(!cats.has(r.it.category)) cats.set(r.it.category, []);
       cats.get(r.it.category).push(r);
     }
+    const l = load();
     for(const [cat, rows] of cats){
       const elec = rows.filter(r => r.box < 400);
       if(elec.length < 3) continue;                 // not worth moving crates for
@@ -426,7 +427,6 @@ function planMoves(level, cap){
       const inHome = elec.filter(r => containerOf(r.box, SEED?.meta?.containerSize || 30) === home).map(r => r.box);
       if(!inHome.length) continue;
       const targets = [...new Set(inHome)].filter(b => !full.has(b)).sort((a,b)=>a-b);
-      const l = load();
       let ti = 0;
       for(const r of elec.sort((a,b)=>a.box-b.box)){
         if(containerOf(r.box, SEED?.meta?.containerSize || 30) === home) continue;
