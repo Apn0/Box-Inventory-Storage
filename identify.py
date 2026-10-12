@@ -511,6 +511,47 @@ def commit(entry: dict, qty, box: int | None = None, name: str | None = None) ->
     return {"box": box, "name": name, "quantity": qty}
 
 
+def _process_interactive_photo(
+    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig,
+    per_box: dict, category_boxes: dict, dry_run: bool, yes_flag: bool
+) -> dict | None:
+    print(f"\n{path.name}")
+    try:
+        result = identify(path, config)
+    except Exception as exc:                     # noqa: BLE001 - report and continue
+        print(f"  failed: {exc}")
+        return None
+    if result is None:
+        return None
+
+    plan = decide(data, active, result, per_box, category_boxes)
+    print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
+    if result["note"]:
+        print(f"  note: {result['note']}")
+    print(f"  -> box {plan['box']}  ({plan['why']})")
+
+    if dry_run:
+        return None
+    if not yes_flag:
+        answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
+        if answer in {"n", "no"}:
+            return None
+        if answer.isdigit():
+            plan["box"] = int(answer)
+
+    return file_one(path, result, plan)
+
+
+def _build_box_indexes(active: list[dict]) -> tuple[dict, collections.defaultdict]:
+    per_box = {}
+    category_boxes = collections.defaultdict(set)
+    for i in active:
+        b = i["box"]
+        per_box[b] = per_box.get(b, 0) + 1
+        if b < 400:
+            category_boxes[i.get("category")].add(b)
+    return per_box, category_boxes
+
 def _create_config(provider: str, context: str) -> IdentifyConfig:
     return IdentifyConfig(client=None, context=context, provider=provider, gemini_key=None, openai_key=None)
 
@@ -574,13 +615,7 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
     context = context_for_prompt(data, active)
     config = _create_config(provider, context)
 
-    per_box = {}
-    category_boxes = collections.defaultdict(set)
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400:
-            category_boxes[i.get("category")].add(b)
+    per_box, category_boxes = _build_box_indexes(active)
 
     outcomes, rows = [], []
     for path in paths:
@@ -718,40 +753,14 @@ def run(args: argparse.Namespace) -> int:
         provider=args.provider,
     )
 
-    per_box = {}
-    category_boxes = collections.defaultdict(set)
-    for i in active:
-        b = i["box"]
-        per_box[b] = per_box.get(b, 0) + 1
-        if b < 400:
-            category_boxes[i.get("category")].add(b)
+    per_box, category_boxes = _build_box_indexes(active)
 
     for path in paths:
-        print(f"\n{path.name}")
-        try:
-            result = identify(path, config)
-        except Exception as exc:                     # noqa: BLE001 - report and continue
-            print(f"  failed: {exc}")
-            continue
-        if result is None:
-            continue
-
-        plan = decide(data, active, result, per_box, category_boxes)
-        print(f"  {result['name']}  x{result['quantity']}  [{result['confidence']} confidence]")
-        if result["note"]:
-            print(f"  note: {result['note']}")
-        print(f"  -> box {plan['box']}  ({plan['why']})")
-
-        if args.dry_run:
-            continue
-        if not args.yes:
-            answer = input("  file it? [Y]es / [n]o / other box number: ").strip().lower()
-            if answer in {"n", "no"}:
-                continue
-            if answer.isdigit():
-                plan["box"] = int(answer)
-
-        accepted.append(file_one(path, result, plan))
+        filed_item = _process_interactive_photo(
+            path, data, active, config, per_box, category_boxes, args.dry_run, args.yes
+        )
+        if filed_item is not None:
+            accepted.append(filed_item)
 
     if not accepted:
         print("\nnothing filed")
