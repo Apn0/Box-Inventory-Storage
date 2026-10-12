@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import functools
 import http.server
 import json
 import mimetypes
@@ -468,6 +469,7 @@ def port_in_use(port: int) -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=1)
 def lan_ips() -> list[str]:
     """Best-effort list of addresses the phone might actually be able to reach."""
     found = []
