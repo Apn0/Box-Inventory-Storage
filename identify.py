@@ -279,6 +279,17 @@ class IdentifyConfig:
     openai_key: str | None = None
 
 
+@dataclasses.dataclass
+class IdentifyContext:
+    data: dict
+    active: list[dict]
+    config: IdentifyConfig
+    unattended: bool
+    per_box: dict
+    category_boxes: dict
+
+
+
 def identify(path: pathlib.Path, config: IdentifyConfig) -> dict | None:
     media = SUPPORTED.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0]
     if media not in SUPPORTED.values():
@@ -515,17 +526,17 @@ def _create_config(provider: str, context: str) -> IdentifyConfig:
     return IdentifyConfig(client=None, context=context, provider=provider, gemini_key=None, openai_key=None)
 
 def _process_single_photo(
-    path: pathlib.Path, data: dict, active: list[dict], config: IdentifyConfig, unattended: bool, per_box: dict, category_boxes: dict
+    path: pathlib.Path, ctx: IdentifyContext
 ) -> tuple[dict, dict | None]:
     try:
-        result = identify(path, config)
+        result = identify(path, ctx.config)
     except Exception as exc:                          # noqa: BLE001
         return {"photo": path.name, "ok": False, "error": str(exc)[:200]}, None
 
     if result is None:
         return {"photo": path.name, "ok": False, "error": "no answer"}, None
 
-    plan = decide(data, active, result, per_box, category_boxes)
+    plan = decide(ctx.data, ctx.active, result, ctx.per_box, ctx.category_boxes)
     outcome = {"photo": path.name, "ok": True,
                "name": plan["name"], "box": plan["box"],
                "confidence": result["confidence"], "note": result["note"],
@@ -534,7 +545,7 @@ def _process_single_photo(
                "why": plan["why"]}
 
     row = None
-    if unattended:
+    if ctx.unattended:
         # Never write a count unattended. What is actually in the box is
         # something only you can see — you may have taken parts out without
         # logging it, so an increment would quietly drift from reality.
@@ -543,8 +554,8 @@ def _process_single_photo(
         if INBOX in path.resolve().parents:
             shutil.move(str(path), str(REVIEW / path.name))
 
-        existing = find_existing_part(active, result["name"]) or (
-            find_existing_part(active, result["matches_existing"])
+        existing = find_existing_part(ctx.active, result["name"]) or (
+            find_existing_part(ctx.active, result["matches_existing"])
             if result["matches_existing"] else None)
         outcome.update(
             filed=False,
@@ -582,10 +593,11 @@ def process(paths, provider: str = "auto", unattended: bool = False) -> list[dic
         if b < 400:
             category_boxes[i.get("category")].add(b)
 
+    ctx = IdentifyContext(data, active, config, unattended, per_box, category_boxes)
     outcomes, rows = [], []
     for path in paths:
         path = pathlib.Path(path)
-        outcome, row = _process_single_photo(path, data, active, config, unattended, per_box, category_boxes)
+        outcome, row = _process_single_photo(path, ctx)
         outcomes.append(outcome)
         if row is not None:
             rows.append(row)
