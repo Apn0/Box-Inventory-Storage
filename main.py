@@ -23,7 +23,6 @@ import pathlib
 import threading
 import urllib.error
 import urllib.request
-import time
 
 import google.auth
 import google.auth.transport.requests
