@@ -981,6 +981,17 @@
         }
       ]
     },
+    "69": {
+      "category": "connector",
+      "parts": [
+        {
+          "name": "Alligator clips",
+          "oldBox": 4,
+          "qty": null,
+          "countType": "bulk"
+        }
+      ]
+    },
     "70": {
       "category": "connector",
       "parts": [

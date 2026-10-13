@@ -189,14 +189,14 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="true" data-pane="pull">Haallijst<span class="n" id="n-pull"></span></button>
       <button class="tab" role="tab" aria-selected="false" data-pane="new">Nieuwe dozen<span class="n" id="n-new"></span></button>
-      <button class="tab" role="tab" aria-selected="false" data-pane="hold">Blijft staan<span class="n" id="n-hold"></span></button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="hold"><span id="hold-tab">Blijft staan</span><span class="n" id="n-hold"></span></button>
     </div>
   </header>
 
   <section id="pane-pull" role="tabpanel">
-    <p class="lead">Pak <b>&eacute;&eacute;n oude doos</b>, leg de genoemde onderdelen in de nieuwe
-      genummerde doos, en tik elke regel aan. De lijst staat op de volgorde van de
-      oude dozen, dus je hoeft elke doos maar &eacute;&eacute;n keer te pakken.</p>
+    <p class="lead">Pak <b>&eacute;&eacute;n oude doos</b> en verdeel de inhoud over de nieuwe
+      genummerde dozen. Als alle regels van die doos aangevinkt zijn is de oude doos
+      <b>leeg</b> en kun je hem weg doen &mdash; er blijft niets in staan.</p>
     <div class="controls">
       <label class="switch"><input type="checkbox" id="f-hide"><i></i><span>verberg wat klaar is</span></label>
       <span class="sync" id="sync" data-s="wait">verbinden&hellip;</span>
@@ -214,12 +214,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px
   </section>
 
   <section id="pane-hold" role="tabpanel" hidden>
-    <p class="lead">Deze onderdelen horen bij een categorie die later komt. Ze
-      blijven in de oude, met de hand beschreven dozen staan.</p>
-    <p class="note"><b>Let op de nummers.</b> Die oude dozen hebben een nummer dat nu
-      ook op een nieuw label staat. In de app krijgen ze er daarom voorlopig 300 bij:
-      <b>oude doos 12 wordt 312</b>. Zodra hun eigen container aan de beurt is,
-      verdwijnt dat nummer weer.</p>
+    <p class="lead" id="hold-intro"></p>
+    <p class="note" id="hold-note"></p>
     <div class="panel" id="holds"></div>
   </section>
 </div>
@@ -251,6 +247,11 @@ el("n-pull").textContent = DATA.pull.length;
 el("n-new").textContent = DATA.newBoxes.length;
 el("n-hold").textContent = DATA.hold.reduce(function (n, h) { return n + h.names.length; }, 0);
 if (!DATA.hold.length) document.querySelector('[data-pane="hold"]').hidden = true;
+if (DATA.holdCopy) {
+  el("hold-tab").textContent = DATA.holdCopy.tab;
+  el("hold-intro").innerHTML = DATA.holdCopy.intro;
+  el("hold-note").innerHTML = DATA.holdCopy.note;
+}
 
 el("cards").innerHTML = DATA.oldBoxes.map(function (ob) {
   var rows = DATA.pull.filter(function (r) { return r.oldBox === ob; });
