@@ -386,13 +386,25 @@ function planMoves(level, cap){
   // level 2 — merge one-item boxes of the same category inside one container.
   // Repeat until stable: each pass empties boxes, which can leave new singles.
   const consolidate = () => {
+    const containerSize = SEED?.meta?.containerSize || 30;
+
+    const containerCache = [];
+
     for(let pass = 0; pass < 8; pass++){
       const before = moves.length;
       const byCC = new Map();
       for(const r of list){
-        const k = containerOf(r.box, SEED?.meta?.containerSize || 30) + "|" + r.it.category;
-        if(!byCC.has(k)) byCC.set(k, []);
-        byCC.get(k).push(r);
+        let c = containerCache[r.box];
+        if (c === undefined) {
+           c = containerOf(r.box, containerSize);
+           containerCache[r.box] = c;
+        }
+
+        const k = c + "|" + r.it.category;
+
+        let arr = byCC.get(k);
+        if(arr === undefined){ arr = []; byCC.set(k, arr); }
+        arr.push(r);
       }
       for(const [,rows] of byCC){
         const l = load();                       // recomputed per group, per pass
