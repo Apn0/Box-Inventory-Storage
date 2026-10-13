@@ -166,6 +166,13 @@ def parse_raw_rows(box_csv_text: str, form_csv_text: Optional[str] = None) -> Li
                 }
             )
 
+    # The form tab is the live append-log: every edit, undo and [BOX FULL] flag
+    # the app posts lands there, so it must be parsed too. It was dropped when
+    # this function was refactored (e2ea4b6) and nothing noticed.
+    if form_csv_text:
+        _process_csv(form_csv_text, src=1, ts_col="Timestamp",
+                     default_time="00:00:01", req_name=True, parse_time=True)
+
     return raw_rows
 
 
