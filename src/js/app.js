@@ -148,7 +148,7 @@ const LOW_STOCK = 2;
 /** Low means "you had more and now you don't", not "you own one of these".
     Owning a single GPS module is not a shortage; going from five TMC2209s to
     one is. Without the peak this flagged 128 of 242 parts and meant nothing. */
-function isRunningLow(i){
+export function isRunningLow(i){
   if(i.countType !== "exact") return false;
   const now = Number(i.qty);
   if(!(now > 0 && now <= LOW_STOCK)) return false;
