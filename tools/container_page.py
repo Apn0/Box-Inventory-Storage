@@ -8,8 +8,8 @@ Eén werkblad per oude container (doos 1-30 = container 1). Per oude doos staat
 één keer pakken leeg en vrij, in plaats van dat er restjes blijven staan die een
 tijdelijk 3xx-nummer nodig hebben (Arno, 2026-10-14).
 
-Wat niet geplaatst kan worden omdat het nummer boven de labels uitkomt, gaat naar
-één wachtbak (doos 300) tot die categorie aan de beurt is.
+Onderdelen waarvan het nummer boven de gemaakte labels uitkomt houden gewoon hun
+echte nummer; ze zijn alleen nog niet te plaatsen. Geen verzonnen bakken.
 
 De HTML is tools/container_page.template.html met "__DATA__" als plek voor de
 gegevens. Hij mist met opzet doctype/html/head/body: die zet het publiceren eromheen.
@@ -30,8 +30,7 @@ from inventory_core.resolver import CATEGORY_LABELS, CONTAINER_SIZE  # noqa: E40
 
 PLAN = ROOT / "data" / "reorg_plan.json"
 TEMPLATE = ROOT / "tools" / "container_page.template.html"
-WAIT_BOX = 300          # de wachtbak voor nummers waar nog geen label voor is
-MAX_LABEL = 90          # labels die Arno heeft
+MAX_LABEL = 90          # labels die Arno heeft; het plan loopt door tot 130
 
 
 def slug(name: str) -> str:
@@ -56,8 +55,7 @@ def build(container: int, max_label: int) -> dict:
             while key in seen:                      # twee namen die hetzelfde slugen
                 key += "-2"
             seen.add(key)
-            rows.append({"k": key, "oldBox": p["oldBox"],
-                         "newBox": WAIT_BOX if waits else target,
+            rows.append({"k": key, "oldBox": p["oldBox"], "newBox": target,
                          "finalBox": target, "waits": waits,
                          "category": b["category"],
                          "categoryLabel": CATEGORY_LABELS.get(b["category"], b["category"]),
@@ -86,17 +84,20 @@ def build(container: int, max_label: int) -> dict:
         "pull": pull + waiting,
         "oldBoxes": sorted({r["oldBox"] for r in rows}),
         "newBoxes": new_boxes,
-        "hold": [{"oldBox": b, "newBox": WAIT_BOX,
-                  "names": [f"{r['name']}  (hoort in {r['finalBox']})" for r in sorted(rs, key=lambda r: r["name"])]}
+        "hold": [{"oldBox": b, "newBox": rs[0]["finalBox"],
+                  "names": [f"{r['name']}  → doos {r['finalBox']}"
+                            for r in sorted(rs, key=lambda r: r["finalBox"])]}
                  for b, rs in sorted(wait_by_old.items())],
         "holdCopy": {
-            "tab": "Wachtbak",
-            "intro": f"Deze onderdelen horen in doos {min((r['finalBox'] for r in waiting), default=0)}"
-                     f"–{max((r['finalBox'] for r in waiting), default=0)}. Daar heb je nog geen "
-                     f"labels voor, dus ze gaan samen in één wachtbak.",
-            "note": f"Plak <b>{WAIT_BOX}</b> op die bak. In de app staan ze dan in doos {WAIT_BOX}, "
-                    f"dus je kunt ze gewoon terugvinden. Zodra je de labels boven de "
-                    f"{max_label} hebt, leg ik ze alsnog op hun eigen nummer.",
+            "tab": "Geen label",
+            "intro": f"Bouten, schroeven, tappen, lagers en gereedschap. Ze horen in "
+                     f"container 4 en 5 — doos "
+                     f"{min((r['finalBox'] for r in waiting), default=0)} tot "
+                     f"{max((r['finalBox'] for r in waiting), default=0)}, netjes achter de "
+                     f"elektronica aan.",
+            "note": f"Je labels lopen tot {max_label}, dus deze dozen bestaan nog niet. "
+                    f"Laat ze staan waar ze staan tot je die labels maakt; dan gaan ze in "
+                    f"één keer op hun eigen nummer. Er is geen tussenbak nodig.",
         },
     }
 
@@ -121,7 +122,7 @@ def main() -> int:
     print(f"wrote {out}  ({len(page) / 1024:.0f} KB)\n"
           f"  oude dozen {data['lo']}-{data['hi']}: {len(data['oldBoxes'])} dozen leeg te maken, "
           f"{len(data['pull'])} onderdelen\n"
-          f"  {len(data['newBoxes'])} nieuwe dozen te vullen, {waiting} naar de wachtbak {WAIT_BOX}")
+          f"  {len(data['newBoxes'])} nieuwe dozen te vullen, {waiting} wachten op een label")
     return 0
 
 

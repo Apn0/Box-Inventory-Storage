@@ -127,6 +127,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px
 .to .arrow{color:var(--muted);font-size:15px}
 .to .no{font-family:var(--font-display);font-weight:700;font-size:26px;line-height:1;
   color:var(--accent);font-variant-numeric:tabular-nums}
+.row.waits .to .no{color:var(--gold)}
+.row.waits .box{border-style:dashed}
 .hide-done .row.is-done{display:none}
 .hide-done .card.all-done .row{display:none}
 
@@ -264,10 +266,12 @@ el("cards").innerHTML = DATA.oldBoxes.map(function (ob) {
     + " nieuwe doos" + (targets === 1 ? "" : "zen") + "</span>"
     + '<span class="stamp">klaar</span></div>';
   rows.forEach(function (r) {
-    html += '<button type="button" class="row" data-k="' + r.k + '" aria-pressed="false">'
+    html += '<button type="button" class="row' + (r.waits ? " waits" : "")
+      + '" data-k="' + r.k + '" aria-pressed="false">'
       + '<span class="box"></span>'
       + '<span class="name">' + esc(r.name)
-      + (r.sameNumber ? '<span class="tag">zelfde nummer</span>' : "") + "</span>"
+      + (r.sameNumber ? '<span class="tag">zelfde nummer</span>' : "")
+      + (r.waits ? '<span class="tag">nog geen label</span>' : "") + "</span>"
       + '<span class="qty">' + qtyText(r) + "</span>"
       + '<span class="to"><span class="arrow">&rarr;</span><span class="no">'
       + r.newBox + "</span></span></button>";
