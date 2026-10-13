@@ -1,0 +1,421 @@
+<title>Herindeling container 1</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column of "old box" cards you work through top to bottom, under a
+   sticky progress bar; two reference tabs behind it. Palette from the parts
+   themselves: soldermask green, silkscreen off-white, tinned-copper gold. */
+:root{
+  --bg:#f2f5f1; --panel:#fff; --panel-2:#e9eee8; --line:#d5ded2;
+  --fg:#141d17; --muted:#5a6a5f;
+  --accent:#0d6b45; --accent-ink:#fff; --accent-soft:#e0eee6;
+  --gold:#8a6410; --gold-soft:#f6edd8;
+  --font-display:"Saira Condensed","Arial Narrow",sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1310; --panel:#131c17; --panel-2:#1a251e; --line:#273329;
+  --fg:#e6eee8; --muted:#8fa296;
+  --accent:#49c78b; --accent-ink:#06130c; --accent-soft:#16291f;
+  --gold:#d6a948; --gold-soft:#2a2316; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1310; --panel:#131c17; --panel-2:#1a251e; --line:#273329;
+  --fg:#e6eee8; --muted:#8fa296;
+  --accent:#49c78b; --accent-ink:#06130c; --accent-soft:#16291f;
+  --gold:#d6a948; --gold-soft:#2a2316; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);
+  font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+.wrap{max-width:730px;margin:0 auto;padding-inline:16px;padding-block:0 56px}
+
+/* ---- sticky top ---- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;
+  background:var(--bg);border-bottom:1px solid var(--line);
+  padding-block:14px 0;margin-bottom:18px}
+.eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-top:2px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px);
+  line-height:1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.range{font-family:var(--font-mono);font-size:13px;color:var(--muted)}
+.meter{display:flex;align-items:center;gap:12px;margin-top:12px}
+.meter-count{font-family:var(--font-display);font-weight:600;font-size:22px;
+  line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.meter-count b{color:var(--accent)}
+.meter-count span{color:var(--muted);font-size:15px}
+.bar{flex:1;min-width:0;height:8px;border-radius:99px;background:var(--panel-2);
+  overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent);
+  transition:width .25s ease}
+.tabs{display:flex;gap:2px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{appearance:none;border:0;background:none;color:var(--muted);cursor:pointer;
+  font-family:var(--font-body);font-size:14px;font-weight:500;white-space:nowrap;
+  padding:9px 13px;border-bottom:2px solid transparent;border-radius:6px 6px 0 0}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent);
+  background:var(--accent-soft)}
+.tab .n{font-family:var(--font-mono);font-size:12px;opacity:.75;margin-left:5px}
+
+/* ---- intro + controls ---- */
+.lead{color:var(--muted);max-width:62ch;margin:0 0 16px}
+.lead b{color:var(--fg);font-weight:600}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;
+  margin-bottom:18px}
+.switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;
+  font-size:14px;user-select:none}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch i{width:38px;height:22px;border-radius:99px;background:var(--panel-2);
+  border:1px solid var(--line);position:relative;transition:background .15s}
+.switch i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;
+  border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch input:checked + i{background:var(--accent);border-color:var(--accent)}
+.switch input:checked + i::after{transform:translateX(16px);background:var(--accent-ink)}
+.switch input:focus-visible + i{outline:2px solid var(--accent);outline-offset:2px}
+.sync{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);
+  display:inline-flex;align-items:center;gap:6px}
+.sync::before{content:"";width:7px;height:7px;border-radius:50%;
+  background:var(--muted);flex:none}
+.sync[data-s="ok"]::before{background:var(--accent)}
+.sync[data-s="err"]::before{background:var(--gold)}
+
+/* ---- old-box cards ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  margin-bottom:12px;overflow:hidden}
+.card.all-done{background:var(--panel-2)}
+.card-h{display:flex;align-items:center;gap:14px;padding:12px 14px;
+  border-bottom:1px solid var(--line);background:var(--panel-2)}
+.card.all-done .card-h{border-bottom-color:transparent}
+.from{text-align:center;flex:none;min-width:58px}
+.from .lbl{font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block}
+.from .no{font-family:var(--font-display);font-weight:700;font-size:30px;
+  line-height:1.05;font-variant-numeric:tabular-nums}
+.card-h .what{flex:1;min-width:0;font-size:13.5px;color:var(--muted)}
+.card-h .what b{display:block;color:var(--fg);font-size:15px;font-weight:600}
+.stamp{flex:none;font-family:var(--font-mono);font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+  border:1px solid var(--accent);border-radius:99px;padding:3px 9px;visibility:hidden}
+.card.all-done .stamp{visibility:visible}
+
+.row{display:flex;align-items:center;gap:13px;width:100%;min-height:56px;
+  padding:9px 14px;border:0;border-top:1px solid var(--line);background:none;
+  color:inherit;font:inherit;text-align:left;cursor:pointer}
+.card-h + .row{border-top:0}
+.row:hover{background:var(--accent-soft)}
+.row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.box{flex:none;width:28px;height:28px;border:2px solid var(--muted);border-radius:7px;
+  position:relative;transition:background .12s,border-color .12s}
+.box::after{content:"";position:absolute;left:7px;top:3px;width:10px;height:16px;
+  border-right:3px solid var(--accent-ink);border-bottom:3px solid var(--accent-ink);
+  transform:rotate(40deg) scale(.5);opacity:0;transition:transform .15s,opacity .15s}
+.row.is-done .box{background:var(--accent);border-color:var(--accent)}
+.row.is-done .box::after{opacity:1;transform:rotate(40deg) scale(1)}
+.name{flex:1;min-width:0;font-size:14.5px;line-height:1.3}
+.row.is-done .name{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:var(--line)}
+.tag{display:inline-block;margin-left:7px;font-family:var(--font-mono);font-size:10px;
+  font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);
+  background:var(--gold-soft);border-radius:4px;padding:1px 5px;vertical-align:1px;
+  white-space:nowrap}
+.qty{flex:none;font-family:var(--font-mono);font-size:13px;font-weight:600;
+  color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.to{flex:none;display:flex;align-items:center;gap:5px;min-width:62px;
+  justify-content:flex-end}
+.to .arrow{color:var(--muted);font-size:15px}
+.to .no{font-family:var(--font-display);font-weight:700;font-size:26px;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+.hide-done .row.is-done{display:none}
+.hide-done .card.all-done .row{display:none}
+
+/* ---- reference tabs ---- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:4px 0;margin-bottom:12px}
+.nb{display:flex;align-items:flex-start;gap:14px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.nb:last-child{border-bottom:0}
+.nb .to-no{flex:none;min-width:58px;text-align:center}
+.nb .to-no .no{font-family:var(--font-display);font-weight:700;font-size:28px;
+  line-height:1.05;color:var(--accent);font-variant-numeric:tabular-nums}
+.nb .to-no .lbl{font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block}
+.nb .body{flex:1;min-width:0}
+.cat{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.nb ul{margin:3px 0 0;padding-left:17px}
+.nb li{font-size:14px;line-height:1.4}
+.nb li.done{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:var(--line)}
+.nb li .src{font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.nb .cnt{flex:none;font-family:var(--font-mono);font-size:12px;color:var(--muted);
+  font-variant-numeric:tabular-nums;padding-top:3px}
+.nb .cnt.full{color:var(--accent);font-weight:600}
+.hold{display:flex;align-items:flex-start;gap:14px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.hold:last-child{border-bottom:0}
+.hold .swap{flex:none;min-width:92px;font-family:var(--font-mono);font-size:13px;
+  font-variant-numeric:tabular-nums;padding-top:2px}
+.hold .swap b{font-family:var(--font-display);font-size:19px;color:var(--gold)}
+.hold ul{margin:0;padding-left:17px;flex:1;min-width:0}
+.hold li{font-size:14px;line-height:1.4}
+.note{border-left:3px solid var(--gold);background:var(--gold-soft);
+  border-radius:0 8px 8px 0;padding:12px 14px;margin:0 0 16px;font-size:14px}
+.note b{font-weight:600}
+.foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:14px}
+.foot b{color:var(--fg);font-weight:600}
+@media (max-width:430px){
+  .qty{min-width:0}
+  .to{min-width:52px}
+  .from{min-width:48px}
+  .nb .to-no{min-width:46px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Herindeling</span>
+    <div class="head">
+      <h1 id="t-title">Container</h1>
+      <span class="range" id="t-range"></span>
+    </div>
+    <div class="meter">
+      <span class="meter-count"><b id="m-done">0</b><span id="m-total"></span></span>
+      <span class="bar"><i id="m-bar"></i></span>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-pane="pull">Haallijst<span class="n" id="n-pull"></span></button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="new">Nieuwe dozen<span class="n" id="n-new"></span></button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="hold">Blijft staan<span class="n" id="n-hold"></span></button>
+    </div>
+  </header>
+
+  <section id="pane-pull" role="tabpanel">
+    <p class="lead">Pak <b>&eacute;&eacute;n oude doos</b>, leg de genoemde onderdelen in de nieuwe
+      genummerde doos, en tik elke regel aan. De lijst staat op de volgorde van de
+      oude dozen, dus je hoeft elke doos maar &eacute;&eacute;n keer te pakken.</p>
+    <div class="controls">
+      <label class="switch"><input type="checkbox" id="f-hide"><i></i><span>verberg wat klaar is</span></label>
+      <span class="sync" id="sync" data-s="wait">verbinden&hellip;</span>
+    </div>
+    <div id="cards"></div>
+    <p class="foot">Klaar? <b>Zeg het in de chat</b>, dan werk ik de sheet bij &mdash;
+      eerst het aantal in de nieuwe doos, daarna de oude op 0. Je vinkjes worden
+      bewaard, dus je kunt tussendoor stoppen.</p>
+  </section>
+
+  <section id="pane-new" role="tabpanel" hidden>
+    <p class="lead">Controlelijst: zo hoort elke nieuwe doos eruit te zien als je
+      klaar bent. Het getal rechts loopt mee met je vinkjes.</p>
+    <div class="panel" id="newboxes"></div>
+  </section>
+
+  <section id="pane-hold" role="tabpanel" hidden>
+    <p class="lead">Deze onderdelen horen bij een categorie die later komt. Ze
+      blijven in de oude, met de hand beschreven dozen staan.</p>
+    <p class="note"><b>Let op de nummers.</b> Die oude dozen hebben een nummer dat nu
+      ook op een nieuw label staat. In de app krijgen ze er daarom voorlopig 300 bij:
+      <b>oude doos 12 wordt 312</b>. Zodra hun eigen container aan de beurt is,
+      verdwijnt dat nummer weer.</p>
+    <div class="panel" id="holds"></div>
+  </section>
+</div>
+
+<script>
+const DATA = {"container": 1, "lo": 1, "hi": 30, "generated": "2026-10-14", "pull": [{"k": "c1-b5-ina219-current-voltage-sensor", "oldBox": 5, "newBox": 10, "name": "INA219 current/voltage sensor", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b6-mq-gas-sensors-mq-7-mq-3-mq-135", "oldBox": 6, "newBox": 5, "name": "MQ gas sensors (MQ-7/MQ-3/MQ-135)", "qty": null, "countType": "bulk", "sameNumber": false}, {"k": "c1-b7-heart-rate-bo-sensor-module", "oldBox": 7, "newBox": 7, "name": "Heart-rate/BO sensor module", "qty": null, "countType": "bulk", "sameNumber": true}, {"k": "c1-b7-guva-s12sd-uv-sensor-module", "oldBox": 7, "newBox": 12, "name": "GUVA-S12SD UV sensor module", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b7-u-blox-neo-6m-gps-module-patch-antenna", "oldBox": 7, "newBox": 16, "name": "u-blox NEO-6M GPS module + patch antenna", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b8-two-wire-voltage-sensor-modules-7-seg-display", "oldBox": 8, "newBox": 6, "name": "Two-wire voltage sensor modules + 7-seg display", "qty": null, "countType": "bulk", "sameNumber": false}, {"k": "c1-b10-usb-c-breakout-boards", "oldBox": 10, "newBox": 20, "name": "USB-C breakout boards", "qty": 8, "countType": "exact", "sameNumber": false}, {"k": "c1-b10-usb-c-usb-to-ttl-serial-adapter-module", "oldBox": 10, "newBox": 21, "name": "USB-C USB-to-TTL serial adapter module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-capacitive-touch-sensor-module", "oldBox": 11, "newBox": 11, "name": "Capacitive touch sensor module", "qty": 1, "countType": "exact", "sameNumber": true}, {"k": "c1-b11-audio-wave-sensor", "oldBox": 11, "newBox": 11, "name": "audio-wave sensor", "qty": 1, "countType": "exact", "sameNumber": true}, {"k": "c1-b11-ens160-aht2x-air-quality-sensor-module", "oldBox": 11, "newBox": 12, "name": "ENS160 + AHT2x air-quality sensor module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-hc-sr04", "oldBox": 11, "newBox": 13, "name": "HC-SR04", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-gyro-accelerometer-unknown", "oldBox": 11, "newBox": 13, "name": "gyro+accelerometer (unknown)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-lm393-comparator-module-ao-do-trimpot", "oldBox": 11, "newBox": 14, "name": "LM393 comparator module (AO/DO, trimpot)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-mpu6050", "oldBox": 11, "newBox": 14, "name": "MPU6050", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-tof200c-vl53l0x", "oldBox": 11, "newBox": 15, "name": "TOF200C-VL53L0X", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-tilt-sensor", "oldBox": 11, "newBox": 15, "name": "tilt sensor", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-veml7700", "oldBox": 11, "newBox": 16, "name": "VEML7700", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-5-way-navigation-tactile-switch-breakout-up-down-left-right-", "oldBox": 11, "newBox": 20, "name": "5-way navigation tactile switch breakout (UP/DOWN/LEFT/RIGHT/center)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b11-i2c-rotary-encoder-module-white-breakout", "oldBox": 11, "newBox": 20, "name": "I2C rotary encoder module (white breakout)", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-pressure-sensitive-strip", "oldBox": 12, "newBox": 9, "name": "Pressure-sensitive strip", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-rd-03d", "oldBox": 12, "newBox": 14, "name": "RD-03D", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-ads1115-16-bit-i2c-adc-module-bi-sided-purple-breakout", "oldBox": 12, "newBox": 19, "name": "ADS1115 16-bit I2C ADC module (bi-sided, purple breakout)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-ads1115-16-bit-i2c-adc-module-linear-red-breakout", "oldBox": 12, "newBox": 19, "name": "ADS1115 16-bit I2C ADC module (linear, red breakout)", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-hx711-load-cell-amplifier-module", "oldBox": 12, "newBox": 21, "name": "HX711 load-cell amplifier module", "qty": 5, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-sku7810", "oldBox": 12, "newBox": 22, "name": "SKU7810", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b12-uln2003", "oldBox": 12, "newBox": 30, "name": "ULN2003", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b13-tmc2209-stepper-driver", "oldBox": 13, "newBox": 29, "name": "TMC2209 stepper driver", "qty": 6, "countType": "exact", "sameNumber": false}, {"k": "c1-b14-esp32-c3-oled-module", "oldBox": 14, "newBox": 1, "name": "ESP32-C3 OLED module", "qty": 4, "countType": "exact", "sameNumber": false}, {"k": "c1-b14-esp8266mod", "oldBox": 14, "newBox": 1, "name": "ESP8266MOD", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b14-xiao-esp32-c6-microcontroller-board", "oldBox": 14, "newBox": 1, "name": "XIAO ESP32-C6 microcontroller board", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b15-bits-from-bytes-stepper-driver", "oldBox": 15, "newBox": 29, "name": "Bits from Bytes stepper driver", "qty": 2, "countType": "exact", "sameNumber": false}, {"k": "c1-b22-xy-mos-mosfet-module", "oldBox": 22, "newBox": 27, "name": "XY-MOS MOSFET module", "qty": 6, "countType": "exact", "sameNumber": false}, {"k": "c1-b23-lr7843-mosfet-power-switch-module", "oldBox": 23, "newBox": 27, "name": "LR7843 MOSFET power switch module", "qty": 6, "countType": "exact", "sameNumber": false}, {"k": "c1-b23-xy-mos-mosfet-module", "oldBox": 23, "newBox": 27, "name": "XY-MOS MOSFET module", "qty": 7, "countType": "exact", "sameNumber": false}, {"k": "c1-b23-solid-state-relay-ssr-module", "oldBox": 23, "newBox": 29, "name": "Solid state relay (SSR) module", "qty": 3, "countType": "exact", "sameNumber": false}, {"k": "c1-b29-hw-070-pwm-controller-black", "oldBox": 29, "newBox": 25, "name": "HW-070 PWM controller (black)", "qty": null, "countType": "bulk", "sameNumber": false}, {"k": "c1-b29-red-dc-motor-speed-controller", "oldBox": 29, "newBox": 26, "name": "Red DC motor speed controller", "qty": null, "countType": "bulk", "sameNumber": false}, {"k": "c1-b39-vibration-switch-module", "oldBox": 39, "newBox": 10, "name": "Vibration switch module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b39-hall-sensor-module", "oldBox": 39, "newBox": 13, "name": "Hall sensor module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b39-hw-477-modules", "oldBox": 39, "newBox": 21, "name": "HW-477 modules", "qty": 5, "countType": "exact", "sameNumber": false}, {"k": "c1-b43-ir-receiver-module", "oldBox": 43, "newBox": 9, "name": "IR receiver module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b43-magnetic-switch", "oldBox": 43, "newBox": 10, "name": "Magnetic switch", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b43-reed-sensor", "oldBox": 43, "newBox": 15, "name": "Reed sensor", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b45-tc1508a-dual-dc-motor-driver-module-2-channel-h-bridge", "oldBox": 45, "newBox": 28, "name": "TC1508A dual DC motor driver module (2-channel H-bridge)", "qty": 6, "countType": "exact", "sameNumber": false}, {"k": "c1-b71-coil-type-vibration-sensors-spring-vibration-switch-modules", "oldBox": 71, "newBox": 4, "name": "Coil-type vibration sensors (spring vibration switch modules)", "qty": null, "countType": "bulk", "sameNumber": false}, {"k": "c1-b71-12v-relay-module", "oldBox": 71, "newBox": 28, "name": "12V relay module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b71-5v-relay-module", "oldBox": 71, "newBox": 28, "name": "5V relay module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b84-laser-sensor-receiver-module", "oldBox": 84, "newBox": 9, "name": "Laser sensor receiver module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b100-bme280-environmental-sensor", "oldBox": 100, "newBox": 11, "name": "BME280 Environmental Sensor", "qty": 3, "countType": "exact", "sameNumber": false}, {"k": "c1-b110-electronic-candle-light-module", "oldBox": 110, "newBox": 12, "name": "Electronic candle light module", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b114-bar-load-cell-0-5-kg", "oldBox": 114, "newBox": 8, "name": "Bar load cell (0.5 kg)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b114-bar-load-cell-100-g", "oldBox": 114, "newBox": 8, "name": "Bar load cell (100 g)", "qty": 1, "countType": "exact", "sameNumber": false}, {"k": "c1-b116-mps20n0040d-pressure-sensor-module", "oldBox": 116, "newBox": 8, "name": "MPS20N0040D pressure sensor module", "qty": 3, "countType": "exact", "sameNumber": false}, {"k": "c1-b122-pcm1808-i2s-stereo-adc-module", "oldBox": 122, "newBox": 19, "name": "PCM1808 I2S stereo ADC module", "qty": 1, "countType": "exact", "sameNumber": false}], "oldBoxes": [5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 22, 23, 29, 39, 43, 45, 71, 84, 100, 110, 114, 116, 122], "newBoxes": [{"box": 1, "category": "mcu", "categoryLabel": "MCU / boards", "parts": [{"k": "c1-b14-esp32-c3-oled-module", "name": "ESP32-C3 OLED module", "qty": 4, "countType": "exact", "oldBox": 14}, {"k": "c1-b14-xiao-esp32-c6-microcontroller-board", "name": "XIAO ESP32-C6 microcontroller board", "qty": 1, "countType": "exact", "oldBox": 14}, {"k": "c1-b14-esp8266mod", "name": "ESP8266MOD", "qty": 1, "countType": "exact", "oldBox": 14}]}, {"box": 4, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b71-coil-type-vibration-sensors-spring-vibration-switch-modules", "name": "Coil-type vibration sensors (spring vibration switch modules)", "qty": null, "countType": "bulk", "oldBox": 71}]}, {"box": 5, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b6-mq-gas-sensors-mq-7-mq-3-mq-135", "name": "MQ gas sensors (MQ-7/MQ-3/MQ-135)", "qty": null, "countType": "bulk", "oldBox": 6}]}, {"box": 6, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b8-two-wire-voltage-sensor-modules-7-seg-display", "name": "Two-wire voltage sensor modules + 7-seg display", "qty": null, "countType": "bulk", "oldBox": 8}]}, {"box": 7, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b7-heart-rate-bo-sensor-module", "name": "Heart-rate/BO sensor module", "qty": null, "countType": "bulk", "oldBox": 7}]}, {"box": 8, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b114-bar-load-cell-0-5-kg", "name": "Bar load cell (0.5 kg)", "qty": 1, "countType": "exact", "oldBox": 114}, {"k": "c1-b114-bar-load-cell-100-g", "name": "Bar load cell (100 g)", "qty": 1, "countType": "exact", "oldBox": 114}, {"k": "c1-b116-mps20n0040d-pressure-sensor-module", "name": "MPS20N0040D pressure sensor module", "qty": 3, "countType": "exact", "oldBox": 116}]}, {"box": 9, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b12-pressure-sensitive-strip", "name": "Pressure-sensitive strip", "qty": 1, "countType": "exact", "oldBox": 12}, {"k": "c1-b43-ir-receiver-module", "name": "IR receiver module", "qty": 1, "countType": "exact", "oldBox": 43}, {"k": "c1-b84-laser-sensor-receiver-module", "name": "Laser sensor receiver module", "qty": 1, "countType": "exact", "oldBox": 84}]}, {"box": 10, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b43-magnetic-switch", "name": "Magnetic switch", "qty": 1, "countType": "exact", "oldBox": 43}, {"k": "c1-b39-vibration-switch-module", "name": "Vibration switch module", "qty": 1, "countType": "exact", "oldBox": 39}, {"k": "c1-b5-ina219-current-voltage-sensor", "name": "INA219 current/voltage sensor", "qty": 2, "countType": "exact", "oldBox": 5}]}, {"box": 11, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b11-audio-wave-sensor", "name": "audio-wave sensor", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b100-bme280-environmental-sensor", "name": "BME280 Environmental Sensor", "qty": 3, "countType": "exact", "oldBox": 100}, {"k": "c1-b11-capacitive-touch-sensor-module", "name": "Capacitive touch sensor module", "qty": 1, "countType": "exact", "oldBox": 11}]}, {"box": 12, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b110-electronic-candle-light-module", "name": "Electronic candle light module", "qty": 1, "countType": "exact", "oldBox": 110}, {"k": "c1-b11-ens160-aht2x-air-quality-sensor-module", "name": "ENS160 + AHT2x air-quality sensor module", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b7-guva-s12sd-uv-sensor-module", "name": "GUVA-S12SD UV sensor module", "qty": 2, "countType": "exact", "oldBox": 7}]}, {"box": 13, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b11-gyro-accelerometer-unknown", "name": "gyro+accelerometer (unknown)", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b39-hall-sensor-module", "name": "Hall sensor module", "qty": 1, "countType": "exact", "oldBox": 39}, {"k": "c1-b11-hc-sr04", "name": "HC-SR04", "qty": 1, "countType": "exact", "oldBox": 11}]}, {"box": 14, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b11-lm393-comparator-module-ao-do-trimpot", "name": "LM393 comparator module (AO/DO, trimpot)", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b11-mpu6050", "name": "MPU6050", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b12-rd-03d", "name": "RD-03D", "qty": 1, "countType": "exact", "oldBox": 12}]}, {"box": 15, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b43-reed-sensor", "name": "Reed sensor", "qty": 1, "countType": "exact", "oldBox": 43}, {"k": "c1-b11-tilt-sensor", "name": "tilt sensor", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b11-tof200c-vl53l0x", "name": "TOF200C-VL53L0X", "qty": 2, "countType": "exact", "oldBox": 11}]}, {"box": 16, "category": "sensor", "categoryLabel": "Sensors", "parts": [{"k": "c1-b7-u-blox-neo-6m-gps-module-patch-antenna", "name": "u-blox NEO-6M GPS module + patch antenna", "qty": 1, "countType": "exact", "oldBox": 7}, {"k": "c1-b11-veml7700", "name": "VEML7700", "qty": 1, "countType": "exact", "oldBox": 11}]}, {"box": 19, "category": "interface", "categoryLabel": "ADC / interface", "parts": [{"k": "c1-b122-pcm1808-i2s-stereo-adc-module", "name": "PCM1808 I2S stereo ADC module", "qty": 1, "countType": "exact", "oldBox": 122}, {"k": "c1-b12-ads1115-16-bit-i2c-adc-module-bi-sided-purple-breakout", "name": "ADS1115 16-bit I2C ADC module (bi-sided, purple breakout)", "qty": 1, "countType": "exact", "oldBox": 12}, {"k": "c1-b12-ads1115-16-bit-i2c-adc-module-linear-red-breakout", "name": "ADS1115 16-bit I2C ADC module (linear, red breakout)", "qty": 2, "countType": "exact", "oldBox": 12}]}, {"box": 20, "category": "interface", "categoryLabel": "ADC / interface", "parts": [{"k": "c1-b11-5-way-navigation-tactile-switch-breakout-up-down-left-right-", "name": "5-way navigation tactile switch breakout (UP/DOWN/LEFT/RIGHT/center)", "qty": 1, "countType": "exact", "oldBox": 11}, {"k": "c1-b11-i2c-rotary-encoder-module-white-breakout", "name": "I2C rotary encoder module (white breakout)", "qty": 2, "countType": "exact", "oldBox": 11}, {"k": "c1-b10-usb-c-breakout-boards", "name": "USB-C breakout boards", "qty": 8, "countType": "exact", "oldBox": 10}]}, {"box": 21, "category": "interface", "categoryLabel": "ADC / interface", "parts": [{"k": "c1-b10-usb-c-usb-to-ttl-serial-adapter-module", "name": "USB-C USB-to-TTL serial adapter module", "qty": 1, "countType": "exact", "oldBox": 10}, {"k": "c1-b39-hw-477-modules", "name": "HW-477 modules", "qty": 5, "countType": "exact", "oldBox": 39}, {"k": "c1-b12-hx711-load-cell-amplifier-module", "name": "HX711 load-cell amplifier module", "qty": 5, "countType": "exact", "oldBox": 12}]}, {"box": 22, "category": "interface", "categoryLabel": "ADC / interface", "parts": [{"k": "c1-b12-sku7810", "name": "SKU7810", "qty": 1, "countType": "exact", "oldBox": 12}]}, {"box": 25, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b29-hw-070-pwm-controller-black", "name": "HW-070 PWM controller (black)", "qty": null, "countType": "bulk", "oldBox": 29}]}, {"box": 26, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b29-red-dc-motor-speed-controller", "name": "Red DC motor speed controller", "qty": null, "countType": "bulk", "oldBox": 29}]}, {"box": 27, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b22-xy-mos-mosfet-module", "name": "XY-MOS MOSFET module", "qty": 6, "countType": "exact", "oldBox": 22}, {"k": "c1-b23-xy-mos-mosfet-module", "name": "XY-MOS MOSFET module", "qty": 7, "countType": "exact", "oldBox": 23}, {"k": "c1-b23-lr7843-mosfet-power-switch-module", "name": "LR7843 MOSFET power switch module", "qty": 6, "countType": "exact", "oldBox": 23}]}, {"box": 28, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b45-tc1508a-dual-dc-motor-driver-module-2-channel-h-bridge", "name": "TC1508A dual DC motor driver module (2-channel H-bridge)", "qty": 6, "countType": "exact", "oldBox": 45}, {"k": "c1-b71-12v-relay-module", "name": "12V relay module", "qty": 1, "countType": "exact", "oldBox": 71}, {"k": "c1-b71-5v-relay-module", "name": "5V relay module", "qty": 1, "countType": "exact", "oldBox": 71}]}, {"box": 29, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b23-solid-state-relay-ssr-module", "name": "Solid state relay (SSR) module", "qty": 3, "countType": "exact", "oldBox": 23}, {"k": "c1-b15-bits-from-bytes-stepper-driver", "name": "Bits from Bytes stepper driver", "qty": 2, "countType": "exact", "oldBox": 15}, {"k": "c1-b13-tmc2209-stepper-driver", "name": "TMC2209 stepper driver", "qty": 6, "countType": "exact", "oldBox": 13}]}, {"box": 30, "category": "driver", "categoryLabel": "Drivers / switching", "parts": [{"k": "c1-b12-uln2003", "name": "ULN2003", "qty": 1, "countType": "exact", "oldBox": 12}]}], "hold": [{"oldBox": 1, "newBox": 301, "names": ["Countersink bit (HSS 6, hex shank)", "Tap bits (6-piece set)", "Tap bits (M2 + M2.5)"]}, {"oldBox": 2, "newBox": 302, "names": ["Drill-bit stoppers + flanges"]}, {"oldBox": 3, "newBox": 303, "names": ["Pillow-block bearing units (8mm bore)"]}, {"oldBox": 4, "newBox": 304, "names": ["Alligator clips"]}, {"oldBox": 5, "newBox": 305, "names": ["Vibration motor module"]}, {"oldBox": 7, "newBox": 307, "names": ["18650 Li-ion charger module", "IR transmitter module", "UART Wi-Fi module"]}, {"oldBox": 8, "newBox": 308, "names": ["V meter with 7-seg display"]}, {"oldBox": 9, "newBox": 309, "names": ["Step-down converter", "Step-up converter"]}, {"oldBox": 10, "newBox": 310, "names": ["18650 charger module", "Header pins (straight + 90°)", "Micro USB-C PD trigger module", "USB-A power module (screw terminal + DIP)", "USB-C power meter module (OLED, purple)", "USB-C solder coupling"]}, {"oldBox": 16, "newBox": 316, "names": ["18650 modular holder", "4-pin LED strip connector"]}, {"oldBox": 17, "newBox": 317, "names": ["D2 push-in wire connectors set 1"]}, {"oldBox": 18, "newBox": 318, "names": ["D2 push-in wire connectors set 2"]}, {"oldBox": 19, "newBox": 319, "names": ["Rectangular LEDs (R/G/Y/B)"]}, {"oldBox": 20, "newBox": 320, "names": ["Small tools bit set"]}, {"oldBox": 21, "newBox": 321, "names": ["Limit switch (SIWIG microswitch, no lever)", "Limit switches (roller-lever microswitches)"]}, {"oldBox": 23, "newBox": 323, "names": ["Solar charge module (outdoor lights)"]}, {"oldBox": 24, "newBox": 324, "names": ["XT60 connector (male/female mixed)"]}, {"oldBox": 25, "newBox": 325, "names": ["Terminal blocks (kroonsteentjes)"]}, {"oldBox": 26, "newBox": 326, "names": ["Loose bolts (unidentified)", "Small bolts (<=M5) + few M6"]}, {"oldBox": 27, "newBox": 327, "names": ["Screws <20 mm length"]}, {"oldBox": 28, "newBox": 328, "names": ["M6 bolts + M6 nuts"]}, {"oldBox": 30, "newBox": 330, "names": ["Assorted mechanical parts (mixed, uncounted; includes brackets, rails, misc hardware)"]}]};
+const KEY = "reorg-ticks-c" + DATA.container;
+const byKey = {};
+DATA.pull.forEach(function (r) { byKey[r.k] = r; });
+
+var done = new Set();
+try {
+  var raw = localStorage.getItem(KEY);
+  if (raw) JSON.parse(raw).forEach(function (k) { if (byKey[k]) done.add(k); });
+} catch (e) { /* private window or blocked storage: the ticks live in the db instead */ }
+
+var dbRef = null, firstSnap = true;
+function el(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function qtyText(r) { return r.countType === "exact" ? r.qty + "x" : "hoop"; }
+
+/* ---------- build the page once, then only restyle on every tick ---------- */
+el("t-title").textContent = "Container " + DATA.container;
+el("t-range").textContent = "dozen " + DATA.lo + " – " + DATA.hi;
+el("m-total").textContent = " / " + DATA.pull.length;
+el("n-pull").textContent = DATA.pull.length;
+el("n-new").textContent = DATA.newBoxes.length;
+el("n-hold").textContent = DATA.hold.reduce(function (n, h) { return n + h.names.length; }, 0);
+if (!DATA.hold.length) document.querySelector('[data-pane="hold"]').hidden = true;
+
+el("cards").innerHTML = DATA.oldBoxes.map(function (ob) {
+  var rows = DATA.pull.filter(function (r) { return r.oldBox === ob; });
+  var targets = new Set(rows.map(function (r) { return r.newBox; })).size;
+  var html = '<article class="card">'
+    + '<div class="card-h"><span class="from"><span class="lbl">Oude doos</span>'
+    + '<span class="no">' + ob + '</span></span>'
+    + '<span class="what"><b>' + rows.length
+    + (rows.length === 1 ? " onderdeel" : " onderdelen") + "</b>naar " + targets
+    + " nieuwe doos" + (targets === 1 ? "" : "zen") + "</span>"
+    + '<span class="stamp">klaar</span></div>';
+  rows.forEach(function (r) {
+    html += '<button type="button" class="row" data-k="' + r.k + '" aria-pressed="false">'
+      + '<span class="box"></span>'
+      + '<span class="name">' + esc(r.name)
+      + (r.sameNumber ? '<span class="tag">zelfde nummer</span>' : "") + "</span>"
+      + '<span class="qty">' + qtyText(r) + "</span>"
+      + '<span class="to"><span class="arrow">&rarr;</span><span class="no">'
+      + r.newBox + "</span></span></button>";
+  });
+  return html + "</article>";
+}).join("");
+
+el("newboxes").innerHTML = DATA.newBoxes.map(function (b) {
+  return '<div class="nb">'
+    + '<span class="to-no"><span class="lbl">Doos</span><span class="no">' + b.box
+    + "</span></span>"
+    + '<span class="body"><span class="cat">' + esc(b.categoryLabel) + "</span><ul>"
+    + b.parts.map(function (p) {
+      return '<li data-k="' + p.k + '">' + esc(p.name) + ' <span class="src">'
+        + qtyText(p) + ", uit " + p.oldBox + "</span></li>";
+    }).join("")
+    + '</ul></span><span class="cnt">0/' + b.parts.length + "</span></div>";
+}).join("");
+
+el("holds").innerHTML = DATA.hold.map(function (h) {
+  return '<div class="hold"><span class="swap">' + h.oldBox + " &rarr; <b>" + h.newBox
+    + "</b></span><ul>"
+    + h.names.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("")
+    + "</ul></div>";
+}).join("");
+
+function sync() {
+  document.querySelectorAll(".row").forEach(function (row) {
+    var d = done.has(row.dataset.k);
+    row.classList.toggle("is-done", d);
+    row.setAttribute("aria-pressed", d ? "true" : "false");
+  });
+  document.querySelectorAll(".card").forEach(function (card) {
+    var rows = card.querySelectorAll(".row"), n = 0;
+    rows.forEach(function (r) { if (r.classList.contains("is-done")) n++; });
+    card.classList.toggle("all-done", n === rows.length);
+  });
+  document.querySelectorAll(".nb").forEach(function (nb) {
+    var lis = nb.querySelectorAll("li"), n = 0;
+    lis.forEach(function (li) {
+      var d = done.has(li.dataset.k);
+      li.classList.toggle("done", d);
+      if (d) n++;
+    });
+    var cnt = nb.querySelector(".cnt");
+    cnt.textContent = n + "/" + lis.length;
+    cnt.classList.toggle("full", n === lis.length);
+  });
+  var n = 0;
+  DATA.pull.forEach(function (r) { if (done.has(r.k)) n++; });
+  el("m-done").textContent = n;
+  el("m-bar").style.width = (DATA.pull.length ? 100 * n / DATA.pull.length : 0) + "%";
+}
+
+function saveLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify(Array.from(done))); } catch (e) { }
+}
+function setSync(s, text) {
+  var n = el("sync");
+  n.dataset.s = s;
+  n.textContent = text;
+}
+
+el("cards").addEventListener("click", function (ev) {
+  var row = ev.target.closest(".row");
+  if (!row) return;
+  var k = row.dataset.k, nowDone = !done.has(k);
+  if (nowDone) done.add(k); else done.delete(k);
+  saveLocal();
+  sync();
+  write(k, nowDone);
+});
+
+el("f-hide").addEventListener("change", function (ev) {
+  el("cards").classList.toggle("hide-done", ev.target.checked);
+  try { localStorage.setItem(KEY + "-hide", ev.target.checked ? "1" : ""); } catch (e) { }
+});
+try {
+  if (localStorage.getItem(KEY + "-hide")) {
+    el("f-hide").checked = true;
+    el("cards").classList.add("hide-done");
+  }
+} catch (e) { }
+
+document.querySelectorAll(".tab").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.setAttribute("aria-selected", String(t === tab));
+    });
+    ["pull", "new", "hold"].forEach(function (p) {
+      el("pane-" + p).hidden = p !== tab.dataset.pane;
+    });
+    try { localStorage.setItem(KEY + "-tab", tab.dataset.pane); } catch (e) { }
+  });
+});
+try {
+  var savedTab = localStorage.getItem(KEY + "-tab");
+  if (savedTab && savedTab !== "pull") {
+    document.querySelector('[data-pane="' + savedTab + '"]').click();
+  }
+} catch (e) { }
+
+sync();
+
+/* ---------- the artifact's own store keeps the ticks ---------- */
+async function write(k, nowDone) {
+  if (!dbRef) return;
+  var r = byKey[k];
+  try {
+    var ref = dbRef.collection("ticks").doc(k);
+    if (nowDone) {
+      await ref.set({
+        done: true, container: DATA.container, oldBox: r.oldBox, newBox: r.newBox,
+        name: r.name, qty: qtyText(r), at: new Date().toISOString()
+      });
+    } else {
+      await ref.delete();
+    }
+    setSync("ok", "vinkjes bewaard");
+  } catch (e) {
+    setSync("err", "niet bewaard — tik nog eens");
+  }
+}
+
+if (window.claude && window.claude.use) {
+  window.claude.use("db").then(function (db) {
+    if (!db) { setSync("local", "alleen op dit apparaat"); return; }
+    dbRef = db;
+    db.collection("ticks").onSnapshot(function (snap) {
+      var remote = new Set();
+      snap.docs.forEach(function (d) {
+        var v = d.data();
+        if (v && v.done && v.container === DATA.container && byKey[d.id]) remote.add(d.id);
+      });
+      if (firstSnap) {
+        firstSnap = false;
+        // ticks made before the store answered (or while offline) go up now; after
+        // this one merge the store is the truth, so an untick elsewhere also lands
+        Array.from(done).forEach(function (k) {
+          if (!remote.has(k)) { remote.add(k); write(k, true); }
+        });
+      }
+      done = remote;
+      saveLocal();
+      sync();
+      setSync("ok", "vinkjes bewaard");
+    }, function () { setSync("err", "niet verbonden"); });
+  });
+} else {
+  setSync("local", "alleen op dit apparaat");
+}
+</script>

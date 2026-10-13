@@ -1,0 +1,421 @@
+<title>Container Haallijst</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column of "old box" cards you work through top to bottom, under a
+   sticky progress bar; two reference tabs behind it. Palette from the parts
+   themselves: soldermask green, silkscreen off-white, tinned-copper gold. */
+:root{
+  --bg:#f2f5f1; --panel:#fff; --panel-2:#e9eee8; --line:#d5ded2;
+  --fg:#141d17; --muted:#5a6a5f;
+  --accent:#0d6b45; --accent-ink:#fff; --accent-soft:#e0eee6;
+  --gold:#8a6410; --gold-soft:#f6edd8;
+  --font-display:"Saira Condensed","Arial Narrow",sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1310; --panel:#131c17; --panel-2:#1a251e; --line:#273329;
+  --fg:#e6eee8; --muted:#8fa296;
+  --accent:#49c78b; --accent-ink:#06130c; --accent-soft:#16291f;
+  --gold:#d6a948; --gold-soft:#2a2316; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1310; --panel:#131c17; --panel-2:#1a251e; --line:#273329;
+  --fg:#e6eee8; --muted:#8fa296;
+  --accent:#49c78b; --accent-ink:#06130c; --accent-soft:#16291f;
+  --gold:#d6a948; --gold-soft:#2a2316; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);
+  font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
+.wrap{max-width:730px;margin:0 auto;padding-inline:16px;padding-block:0 56px}
+
+/* ---- sticky top ---- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;
+  background:var(--bg);border-bottom:1px solid var(--line);
+  padding-block:14px 0;margin-bottom:18px}
+.eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-top:2px}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,8vw,38px);
+  line-height:1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.range{font-family:var(--font-mono);font-size:13px;color:var(--muted)}
+.meter{display:flex;align-items:center;gap:12px;margin-top:12px}
+.meter-count{font-family:var(--font-display);font-weight:600;font-size:22px;
+  line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.meter-count b{color:var(--accent)}
+.meter-count span{color:var(--muted);font-size:15px}
+.bar{flex:1;min-width:0;height:8px;border-radius:99px;background:var(--panel-2);
+  overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent);
+  transition:width .25s ease}
+.tabs{display:flex;gap:2px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{appearance:none;border:0;background:none;color:var(--muted);cursor:pointer;
+  font-family:var(--font-body);font-size:14px;font-weight:500;white-space:nowrap;
+  padding:9px 13px;border-bottom:2px solid transparent;border-radius:6px 6px 0 0}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent);
+  background:var(--accent-soft)}
+.tab .n{font-family:var(--font-mono);font-size:12px;opacity:.75;margin-left:5px}
+
+/* ---- intro + controls ---- */
+.lead{color:var(--muted);max-width:62ch;margin:0 0 16px}
+.lead b{color:var(--fg);font-weight:600}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;
+  margin-bottom:18px}
+.switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;
+  font-size:14px;user-select:none}
+.switch input{position:absolute;opacity:0;width:0;height:0}
+.switch i{width:38px;height:22px;border-radius:99px;background:var(--panel-2);
+  border:1px solid var(--line);position:relative;transition:background .15s}
+.switch i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;
+  border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch input:checked + i{background:var(--accent);border-color:var(--accent)}
+.switch input:checked + i::after{transform:translateX(16px);background:var(--accent-ink)}
+.switch input:focus-visible + i{outline:2px solid var(--accent);outline-offset:2px}
+.sync{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);
+  display:inline-flex;align-items:center;gap:6px}
+.sync::before{content:"";width:7px;height:7px;border-radius:50%;
+  background:var(--muted);flex:none}
+.sync[data-s="ok"]::before{background:var(--accent)}
+.sync[data-s="err"]::before{background:var(--gold)}
+
+/* ---- old-box cards ---- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  margin-bottom:12px;overflow:hidden}
+.card.all-done{background:var(--panel-2)}
+.card-h{display:flex;align-items:center;gap:14px;padding:12px 14px;
+  border-bottom:1px solid var(--line);background:var(--panel-2)}
+.card.all-done .card-h{border-bottom-color:transparent}
+.from{text-align:center;flex:none;min-width:58px}
+.from .lbl{font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block}
+.from .no{font-family:var(--font-display);font-weight:700;font-size:30px;
+  line-height:1.05;font-variant-numeric:tabular-nums}
+.card-h .what{flex:1;min-width:0;font-size:13.5px;color:var(--muted)}
+.card-h .what b{display:block;color:var(--fg);font-size:15px;font-weight:600}
+.stamp{flex:none;font-family:var(--font-mono);font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
+  border:1px solid var(--accent);border-radius:99px;padding:3px 9px;visibility:hidden}
+.card.all-done .stamp{visibility:visible}
+
+.row{display:flex;align-items:center;gap:13px;width:100%;min-height:56px;
+  padding:9px 14px;border:0;border-top:1px solid var(--line);background:none;
+  color:inherit;font:inherit;text-align:left;cursor:pointer}
+.card-h + .row{border-top:0}
+.row:hover{background:var(--accent-soft)}
+.row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.box{flex:none;width:28px;height:28px;border:2px solid var(--muted);border-radius:7px;
+  position:relative;transition:background .12s,border-color .12s}
+.box::after{content:"";position:absolute;left:7px;top:3px;width:10px;height:16px;
+  border-right:3px solid var(--accent-ink);border-bottom:3px solid var(--accent-ink);
+  transform:rotate(40deg) scale(.5);opacity:0;transition:transform .15s,opacity .15s}
+.row.is-done .box{background:var(--accent);border-color:var(--accent)}
+.row.is-done .box::after{opacity:1;transform:rotate(40deg) scale(1)}
+.name{flex:1;min-width:0;font-size:14.5px;line-height:1.3}
+.row.is-done .name{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:var(--line)}
+.tag{display:inline-block;margin-left:7px;font-family:var(--font-mono);font-size:10px;
+  font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);
+  background:var(--gold-soft);border-radius:4px;padding:1px 5px;vertical-align:1px;
+  white-space:nowrap}
+.qty{flex:none;font-family:var(--font-mono);font-size:13px;font-weight:600;
+  color:var(--muted);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.to{flex:none;display:flex;align-items:center;gap:5px;min-width:62px;
+  justify-content:flex-end}
+.to .arrow{color:var(--muted);font-size:15px}
+.to .no{font-family:var(--font-display);font-weight:700;font-size:26px;line-height:1;
+  color:var(--accent);font-variant-numeric:tabular-nums}
+.hide-done .row.is-done{display:none}
+.hide-done .card.all-done .row{display:none}
+
+/* ---- reference tabs ---- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:4px 0;margin-bottom:12px}
+.nb{display:flex;align-items:flex-start;gap:14px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.nb:last-child{border-bottom:0}
+.nb .to-no{flex:none;min-width:58px;text-align:center}
+.nb .to-no .no{font-family:var(--font-display);font-weight:700;font-size:28px;
+  line-height:1.05;color:var(--accent);font-variant-numeric:tabular-nums}
+.nb .to-no .lbl{font-family:var(--font-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block}
+.nb .body{flex:1;min-width:0}
+.cat{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.nb ul{margin:3px 0 0;padding-left:17px}
+.nb li{font-size:14px;line-height:1.4}
+.nb li.done{color:var(--muted);text-decoration:line-through;
+  text-decoration-color:var(--line)}
+.nb li .src{font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.nb .cnt{flex:none;font-family:var(--font-mono);font-size:12px;color:var(--muted);
+  font-variant-numeric:tabular-nums;padding-top:3px}
+.nb .cnt.full{color:var(--accent);font-weight:600}
+.hold{display:flex;align-items:flex-start;gap:14px;padding:11px 14px;
+  border-bottom:1px solid var(--line)}
+.hold:last-child{border-bottom:0}
+.hold .swap{flex:none;min-width:92px;font-family:var(--font-mono);font-size:13px;
+  font-variant-numeric:tabular-nums;padding-top:2px}
+.hold .swap b{font-family:var(--font-display);font-size:19px;color:var(--gold)}
+.hold ul{margin:0;padding-left:17px;flex:1;min-width:0}
+.hold li{font-size:14px;line-height:1.4}
+.note{border-left:3px solid var(--gold);background:var(--gold-soft);
+  border-radius:0 8px 8px 0;padding:12px 14px;margin:0 0 16px;font-size:14px}
+.note b{font-weight:600}
+.foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:14px}
+.foot b{color:var(--fg);font-weight:600}
+@media (max-width:430px){
+  .qty{min-width:0}
+  .to{min-width:52px}
+  .from{min-width:48px}
+  .nb .to-no{min-width:46px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">Herindeling</span>
+    <div class="head">
+      <h1 id="t-title">Container</h1>
+      <span class="range" id="t-range"></span>
+    </div>
+    <div class="meter">
+      <span class="meter-count"><b id="m-done">0</b><span id="m-total"></span></span>
+      <span class="bar"><i id="m-bar"></i></span>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-pane="pull">Haallijst<span class="n" id="n-pull"></span></button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="new">Nieuwe dozen<span class="n" id="n-new"></span></button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="hold">Blijft staan<span class="n" id="n-hold"></span></button>
+    </div>
+  </header>
+
+  <section id="pane-pull" role="tabpanel">
+    <p class="lead">Pak <b>&eacute;&eacute;n oude doos</b>, leg de genoemde onderdelen in de nieuwe
+      genummerde doos, en tik elke regel aan. De lijst staat op de volgorde van de
+      oude dozen, dus je hoeft elke doos maar &eacute;&eacute;n keer te pakken.</p>
+    <div class="controls">
+      <label class="switch"><input type="checkbox" id="f-hide"><i></i><span>verberg wat klaar is</span></label>
+      <span class="sync" id="sync" data-s="wait">verbinden&hellip;</span>
+    </div>
+    <div id="cards"></div>
+    <p class="foot">Klaar? <b>Zeg het in de chat</b>, dan werk ik de sheet bij &mdash;
+      eerst het aantal in de nieuwe doos, daarna de oude op 0. Je vinkjes worden
+      bewaard, dus je kunt tussendoor stoppen.</p>
+  </section>
+
+  <section id="pane-new" role="tabpanel" hidden>
+    <p class="lead">Controlelijst: zo hoort elke nieuwe doos eruit te zien als je
+      klaar bent. Het getal rechts loopt mee met je vinkjes.</p>
+    <div class="panel" id="newboxes"></div>
+  </section>
+
+  <section id="pane-hold" role="tabpanel" hidden>
+    <p class="lead">Deze onderdelen horen bij een categorie die later komt. Ze
+      blijven in de oude, met de hand beschreven dozen staan.</p>
+    <p class="note"><b>Let op de nummers.</b> Die oude dozen hebben een nummer dat nu
+      ook op een nieuw label staat. In de app krijgen ze er daarom voorlopig 300 bij:
+      <b>oude doos 12 wordt 312</b>. Zodra hun eigen container aan de beurt is,
+      verdwijnt dat nummer weer.</p>
+    <div class="panel" id="holds"></div>
+  </section>
+</div>
+
+<script>
+const DATA = "__DATA__";
+const KEY = "reorg-ticks-c" + DATA.container;
+const byKey = {};
+DATA.pull.forEach(function (r) { byKey[r.k] = r; });
+
+var done = new Set();
+try {
+  var raw = localStorage.getItem(KEY);
+  if (raw) JSON.parse(raw).forEach(function (k) { if (byKey[k]) done.add(k); });
+} catch (e) { /* private window or blocked storage: the ticks live in the db instead */ }
+
+var dbRef = null, firstSnap = true;
+function el(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function qtyText(r) { return r.countType === "exact" ? r.qty + "x" : "hoop"; }
+
+/* ---------- build the page once, then only restyle on every tick ---------- */
+el("t-title").textContent = "Container " + DATA.container;
+el("t-range").textContent = "dozen " + DATA.lo + " – " + DATA.hi;
+el("m-total").textContent = " / " + DATA.pull.length;
+el("n-pull").textContent = DATA.pull.length;
+el("n-new").textContent = DATA.newBoxes.length;
+el("n-hold").textContent = DATA.hold.reduce(function (n, h) { return n + h.names.length; }, 0);
+if (!DATA.hold.length) document.querySelector('[data-pane="hold"]').hidden = true;
+
+el("cards").innerHTML = DATA.oldBoxes.map(function (ob) {
+  var rows = DATA.pull.filter(function (r) { return r.oldBox === ob; });
+  var targets = new Set(rows.map(function (r) { return r.newBox; })).size;
+  var html = '<article class="card">'
+    + '<div class="card-h"><span class="from"><span class="lbl">Oude doos</span>'
+    + '<span class="no">' + ob + '</span></span>'
+    + '<span class="what"><b>' + rows.length
+    + (rows.length === 1 ? " onderdeel" : " onderdelen") + "</b>naar " + targets
+    + " nieuwe doos" + (targets === 1 ? "" : "zen") + "</span>"
+    + '<span class="stamp">klaar</span></div>';
+  rows.forEach(function (r) {
+    html += '<button type="button" class="row" data-k="' + r.k + '" aria-pressed="false">'
+      + '<span class="box"></span>'
+      + '<span class="name">' + esc(r.name)
+      + (r.sameNumber ? '<span class="tag">zelfde nummer</span>' : "") + "</span>"
+      + '<span class="qty">' + qtyText(r) + "</span>"
+      + '<span class="to"><span class="arrow">&rarr;</span><span class="no">'
+      + r.newBox + "</span></span></button>";
+  });
+  return html + "</article>";
+}).join("");
+
+el("newboxes").innerHTML = DATA.newBoxes.map(function (b) {
+  return '<div class="nb">'
+    + '<span class="to-no"><span class="lbl">Doos</span><span class="no">' + b.box
+    + "</span></span>"
+    + '<span class="body"><span class="cat">' + esc(b.categoryLabel) + "</span><ul>"
+    + b.parts.map(function (p) {
+      return '<li data-k="' + p.k + '">' + esc(p.name) + ' <span class="src">'
+        + qtyText(p) + ", uit " + p.oldBox + "</span></li>";
+    }).join("")
+    + '</ul></span><span class="cnt">0/' + b.parts.length + "</span></div>";
+}).join("");
+
+el("holds").innerHTML = DATA.hold.map(function (h) {
+  return '<div class="hold"><span class="swap">' + h.oldBox + " &rarr; <b>" + h.newBox
+    + "</b></span><ul>"
+    + h.names.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("")
+    + "</ul></div>";
+}).join("");
+
+function sync() {
+  document.querySelectorAll(".row").forEach(function (row) {
+    var d = done.has(row.dataset.k);
+    row.classList.toggle("is-done", d);
+    row.setAttribute("aria-pressed", d ? "true" : "false");
+  });
+  document.querySelectorAll(".card").forEach(function (card) {
+    var rows = card.querySelectorAll(".row"), n = 0;
+    rows.forEach(function (r) { if (r.classList.contains("is-done")) n++; });
+    card.classList.toggle("all-done", n === rows.length);
+  });
+  document.querySelectorAll(".nb").forEach(function (nb) {
+    var lis = nb.querySelectorAll("li"), n = 0;
+    lis.forEach(function (li) {
+      var d = done.has(li.dataset.k);
+      li.classList.toggle("done", d);
+      if (d) n++;
+    });
+    var cnt = nb.querySelector(".cnt");
+    cnt.textContent = n + "/" + lis.length;
+    cnt.classList.toggle("full", n === lis.length);
+  });
+  var n = 0;
+  DATA.pull.forEach(function (r) { if (done.has(r.k)) n++; });
+  el("m-done").textContent = n;
+  el("m-bar").style.width = (DATA.pull.length ? 100 * n / DATA.pull.length : 0) + "%";
+}
+
+function saveLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify(Array.from(done))); } catch (e) { }
+}
+function setSync(s, text) {
+  var n = el("sync");
+  n.dataset.s = s;
+  n.textContent = text;
+}
+
+el("cards").addEventListener("click", function (ev) {
+  var row = ev.target.closest(".row");
+  if (!row) return;
+  var k = row.dataset.k, nowDone = !done.has(k);
+  if (nowDone) done.add(k); else done.delete(k);
+  saveLocal();
+  sync();
+  write(k, nowDone);
+});
+
+el("f-hide").addEventListener("change", function (ev) {
+  el("cards").classList.toggle("hide-done", ev.target.checked);
+  try { localStorage.setItem(KEY + "-hide", ev.target.checked ? "1" : ""); } catch (e) { }
+});
+try {
+  if (localStorage.getItem(KEY + "-hide")) {
+    el("f-hide").checked = true;
+    el("cards").classList.add("hide-done");
+  }
+} catch (e) { }
+
+document.querySelectorAll(".tab").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.setAttribute("aria-selected", String(t === tab));
+    });
+    ["pull", "new", "hold"].forEach(function (p) {
+      el("pane-" + p).hidden = p !== tab.dataset.pane;
+    });
+    try { localStorage.setItem(KEY + "-tab", tab.dataset.pane); } catch (e) { }
+  });
+});
+try {
+  var savedTab = localStorage.getItem(KEY + "-tab");
+  if (savedTab && savedTab !== "pull") {
+    document.querySelector('[data-pane="' + savedTab + '"]').click();
+  }
+} catch (e) { }
+
+sync();
+
+/* ---------- the artifact's own store keeps the ticks ---------- */
+async function write(k, nowDone) {
+  if (!dbRef) return;
+  var r = byKey[k];
+  try {
+    var ref = dbRef.collection("ticks").doc(k);
+    if (nowDone) {
+      await ref.set({
+        done: true, container: DATA.container, oldBox: r.oldBox, newBox: r.newBox,
+        name: r.name, qty: qtyText(r), at: new Date().toISOString()
+      });
+    } else {
+      await ref.delete();
+    }
+    setSync("ok", "vinkjes bewaard");
+  } catch (e) {
+    setSync("err", "niet bewaard — tik nog eens");
+  }
+}
+
+if (window.claude && window.claude.use) {
+  window.claude.use("db").then(function (db) {
+    if (!db) { setSync("local", "alleen op dit apparaat"); return; }
+    dbRef = db;
+    db.collection("ticks").onSnapshot(function (snap) {
+      var remote = new Set();
+      snap.docs.forEach(function (d) {
+        var v = d.data();
+        if (v && v.done && v.container === DATA.container && byKey[d.id]) remote.add(d.id);
+      });
+      if (firstSnap) {
+        firstSnap = false;
+        // ticks made before the store answered (or while offline) go up now; after
+        // this one merge the store is the truth, so an untick elsewhere also lands
+        Array.from(done).forEach(function (k) {
+          if (!remote.has(k)) { remote.add(k); write(k, true); }
+        });
+      }
+      done = remote;
+      saveLocal();
+      sync();
+      setSync("ok", "vinkjes bewaard");
+    }, function () { setSync("err", "niet verbonden"); });
+  });
+} else {
+  setSync("local", "alleen op dit apparaat");
+}
+</script>
