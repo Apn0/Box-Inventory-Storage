@@ -21,8 +21,9 @@ import json
 import pathlib
 import sys
 import time
+import asyncio
+import aiohttp
 import urllib.parse
-import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -41,15 +42,14 @@ def qty_text(item) -> str:
     return "many" if item["countType"] == "bulk" else "?"
 
 
-def post(box: int, name: str, qty: str, note: str) -> bool:
-    data = urllib.parse.urlencode({
+async def post(session, box: int, name: str, qty: str, note: str) -> bool:
+    data = {
         CONFIG["form_entries"]["box"]: str(box),
         CONFIG["form_entries"]["name"]: name,
         CONFIG["form_entries"]["qty"]: qty,
         CONFIG["form_entries"]["note"]: note,
-    }).encode("utf-8")
-    req = urllib.request.Request(CONFIG["form_url"], data=data)
-    with urllib.request.urlopen(req, timeout=30) as r:
+    }
+    async with session.post(CONFIG["form_url"], data=data, timeout=30) as r:
         return 200 <= r.status < 300
 
 
@@ -115,7 +115,7 @@ def main() -> int:
     for o in missing:
         print(f"  ?? niet in de inventaris: {o['name'][:60]} (zou naar {o['newBox']})")
     print(f"\n{2 * (len(moves) + len(holds))} rijen te posten "
-          f"(~{2 * (len(moves) + len(holds)) * PAUSE / 60:.0f} min)")
+          f"(~{2 * (len(moves) + len(holds)) * PAUSE / 60 / 5:.1f} min max)")
     if args.dry_run:
         return 0
 
@@ -123,32 +123,46 @@ def main() -> int:
     journal = {"container": args.container, "at": datetime.datetime.now().isoformat(),
                "ops": ops, "posted": []}
     jpath = ROOT / "data" / f"reorg_applied_container_{args.container}.json"
-    try:
-        for n, o in enumerate(moves + holds, 1):
-            # eerst de nieuwe plek vullen, dan pas de oude leegmaken: als het
-            # halverwege misgaat staat het onderdeel nergens op 0 zonder dat het
-            # ergens anders staat
-            post(o["newBox"], o["name"], o["qty"], o["note"])
-            journal["posted"].append({"box": o["newBox"], "name": o["name"], "qty": o["qty"]})
-            time.sleep(PAUSE)
-            post(o["oldBox"], o["name"], "0",
-                 f"verplaatst naar doos {o['newBox']} (reorg {today})")
-            journal["posted"].append({"box": o["oldBox"], "name": o["name"], "qty": "0"})
-            time.sleep(PAUSE)
-            print(f"  [{n}/{len(moves) + len(holds)}] {o['oldBox']} -> {o['newBox']}  {o['name'][:50]}")
-    finally:
-        jpath.write_text(json.dumps(journal, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"journaal: {jpath}")
 
-    # controle: lees de sheet opnieuw en kijk of het er echt staat
-    time.sleep(5)
-    after = {(i["name"], i["box"]) for i in live_items()}
-    bad = [o for o in moves + holds if (o["name"], o["newBox"]) not in after]
-    print(f"\ncontrole: {len(moves) + len(holds) - len(bad)} van "
-          f"{len(moves) + len(holds)} staan op hun nieuwe plek")
-    for o in bad:
-        print(f"  MIST: {o['name'][:60]} in doos {o['newBox']}")
-    return 1 if bad else 0
+    async def run_moves(moves_and_holds, journal, today, jpath):
+        async def process_move(session, o, journal, today, n, total, sem):
+            async with sem:
+                # eerst de nieuwe plek vullen, dan pas de oude leegmaken: als het
+                # halverwege misgaat staat het onderdeel nergens op 0 zonder dat het
+                # ergens anders staat
+                await post(session, o["newBox"], o["name"], o["qty"], o["note"])
+                journal["posted"].append({"box": o["newBox"], "name": o["name"], "qty": o["qty"]})
+                await asyncio.sleep(PAUSE)
+                await post(session, o["oldBox"], o["name"], "0",
+                           f"verplaatst naar doos {o['newBox']} (reorg {today})")
+                journal["posted"].append({"box": o["oldBox"], "name": o["name"], "qty": "0"})
+                await asyncio.sleep(PAUSE)
+                print(f"  [{n}/{total}] {o['oldBox']} -> {o['newBox']}  {o['name'][:50]}")
+
+        try:
+            sem = asyncio.Semaphore(5)
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                total = len(moves_and_holds)
+                for n, o in enumerate(moves_and_holds, 1):
+                    tasks.append(asyncio.create_task(process_move(session, o, journal, today, n, total, sem)))
+                if tasks:
+                    await asyncio.gather(*tasks)
+        finally:
+            jpath.write_text(json.dumps(journal, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"journaal: {jpath}")
+
+        # controle: lees de sheet opnieuw en kijk of het er echt staat
+        time.sleep(5)
+        after = {(i["name"], i["box"]) for i in live_items()}
+        bad = [o for o in moves_and_holds if (o["name"], o["newBox"]) not in after]
+        print(f"\ncontrole: {len(moves_and_holds) - len(bad)} van "
+              f"{len(moves_and_holds)} staan op hun nieuwe plek")
+        for o in bad:
+            print(f"  MIST: {o['name'][:60]} in doos {o['newBox']}")
+        return 1 if bad else 0
+
+    return asyncio.run(run_moves(moves + holds, journal, today, jpath))
 
 
 if __name__ == "__main__":
