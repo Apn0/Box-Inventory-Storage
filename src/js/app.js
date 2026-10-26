@@ -1559,17 +1559,8 @@ function showConfirm(){
 }
 
 /** The count sheet, for a photo (q.id set) or a typed entry (no id). */
-function askCount(q){
-  document.getElementById("sheetwrap")?.remove();
-
-  const recorded = q.recorded;
-  const known = recorded !== null && recorded !== undefined && recorded !== "many";
-  const start = known ? Number(recorded) : Math.max(1, Number(q.seen) || 1);
-
-  const wrap = document.createElement("div");
-  wrap.id = "sheetwrap"; wrap.dataset.id = q.id || "__count__";
-  if(q.id) wrap.dataset.src = "photo";
-  wrap.innerHTML = `
+function askCountHTML(q, known, recorded, start) {
+  return `
     <div id="sheet">
       <div class="grab"></div>
       ${q.photo ? `<img class="shot" src="${serverBase()}/data/review/${
@@ -1603,6 +1594,19 @@ function askCount(q){
       <div class="queued">${confirmQueue.length > 1
         ? `${confirmQueue.length - 1} more waiting` : ""}</div>
     </div>`;
+}
+
+function askCount(q){
+  document.getElementById("sheetwrap")?.remove();
+
+  const recorded = q.recorded;
+  const known = recorded !== null && recorded !== undefined && recorded !== "many";
+  const start = known ? Number(recorded) : Math.max(1, Number(q.seen) || 1);
+
+  const wrap = document.createElement("div");
+  wrap.id = "sheetwrap"; wrap.dataset.id = q.id || "__count__";
+  if(q.id) wrap.dataset.src = "photo";
+  wrap.innerHTML = askCountHTML(q, known, recorded, start);
   document.body.appendChild(wrap);
 
   const qty = wrap.querySelector("#cqty");
