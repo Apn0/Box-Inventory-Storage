@@ -349,6 +349,98 @@ function issues(){
    Three effort levels. Each returns concrete part-moves you can apply.
    Bulk piles are never merged into a shared box — a pile of 99 screws fills
    its own box physically, whatever the data says. */
+function _planMovesLevel1(ctx) {
+  // level 1 — the same part sitting in two boxes
+  const byName = new Map();
+  for(const r of ctx.list){
+    const k = r.it.name.toLowerCase().trim();
+    if(!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(r);
+  }
+  for(const [,rows] of byName){
+    if(new Set(rows.map(r => r.box)).size < 2) continue;
+    // keep it where the larger amount already is; ties go to the lower box
+    // number — but only a box with room can take the rest
+    const open = rows.filter(r => !ctx.full.has(r.box));
+    if(!open.length){ ctx.blocked.push({name: rows[0].it.name, boxes: [...new Set(rows.map(r => r.box))]}); continue; }
+    const home = open.slice().sort((a,b) =>
+      (Number(b.it.qty)||0) - (Number(a.it.qty)||0) || a.box - b.box)[0].box;
+    for(const r of rows) ctx.move(r, home, "same part was in two boxes");
+  }
+}
+
+function _planMovesLevel2(ctx) {
+  // level 2 — merge one-item boxes of the same category inside one container.
+  // Repeat until stable: each pass empties boxes, which can leave new singles.
+  const containerSize = SEED?.meta?.containerSize || 30;
+
+  const containerCache = [];
+
+  for(let pass = 0; pass < 8; pass++){
+    const before = ctx.moves.length;
+    const byCC = new Map();
+    for(const r of ctx.list){
+      let c = containerCache[r.box];
+      if (c === undefined) {
+         c = containerOf(r.box, containerSize);
+         containerCache[r.box] = c;
+      }
+
+      const k = c + "|" + r.it.category;
+
+      let arr = byCC.get(k);
+      if(arr === undefined){ arr = []; byCC.set(k, arr); }
+      arr.push(r);
+    }
+    const l = ctx.load();                       // recomputed per pass
+    for(const [,rows] of byCC){
+      const singles = rows.filter(r => ctx.mergeable(r) && (l.get(r.box)||[]).length === 1);
+      if(singles.length < 2) continue;
+      const home = Math.min(...singles.map(r => r.box));
+      let n = (l.get(home)||[]).length;
+      for(const r of singles.sort((a,b)=>a.box-b.box)){
+        if(r.box === home || n >= ctx.cap) continue;
+        ctx.move(r, home, "one-item boxes of the same type, same container"); n++;
+      }
+    }
+    if(ctx.moves.length === before) break;
+  }
+}
+
+function _planMovesLevel3(ctx) {
+  // level 3 — give each category one home container and pack it there
+  const cats = new Map();
+  for(const r of ctx.list){
+    if(!cats.has(r.it.category)) cats.set(r.it.category, []);
+    cats.get(r.it.category).push(r);
+  }
+  const l = ctx.load();
+  for(const [cat, rows] of cats){
+    const elec = rows.filter(r => r.box < 400);
+    if(elec.length < 3) continue;                 // not worth moving crates for
+    const tally = {};
+    for(const r of elec) tally[containerOf(r.box, SEED?.meta?.containerSize || 30)] = (tally[containerOf(r.box, SEED?.meta?.containerSize || 30)]||0) + 1;
+    const home = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
+    const inHome = elec.filter(r => containerOf(r.box, SEED?.meta?.containerSize || 30) === home).map(r => r.box);
+    if(!inHome.length) continue;
+    const targets = [...new Set(inHome)].filter(b => !ctx.full.has(b)).sort((a,b)=>a-b);
+    const l = ctx.load();
+    const movedCounts = {};
+    for(const m of ctx.moves) movedCounts[m.to] = (movedCounts[m.to] || 0) + 1;
+    let ti = 0;
+    for(const r of elec.sort((a,b)=>a.box-b.box)){
+      if(containerOf(r.box, SEED?.meta?.containerSize || 30) === home) continue;
+      if(!ctx.mergeable(r)) continue;                 // piles stay where they are
+      while(ti < targets.length &&
+            (l.get(targets[ti])||[]).length + (movedCounts[targets[ti]] || 0) >= ctx.cap) ti++;
+      if(ti >= targets.length) break;
+      ctx.move(r, targets[ti], `${esc(CAT[cat]||cat)} belongs in container ${home}`);
+      movedCounts[targets[ti]] = (movedCounts[targets[ti]] || 0) + 1;
+    }
+  }
+  _planMovesLevel2(ctx);   // regrouping leaves new one-item boxes behind; sweep them up
+}
+
 function planMoves(level, cap){
   const list = active().map(i => ({it:i, box:i.box}));
   const moves = [];
@@ -365,96 +457,11 @@ function planMoves(level, cap){
     return m;
   };
 
-  // level 1 — the same part sitting in two boxes
-  const byName = new Map();
-  for(const r of list){
-    const k = r.it.name.toLowerCase().trim();
-    if(!byName.has(k)) byName.set(k, []);
-    byName.get(k).push(r);
-  }
-  for(const [,rows] of byName){
-    if(new Set(rows.map(r => r.box)).size < 2) continue;
-    // keep it where the larger amount already is; ties go to the lower box
-    // number — but only a box with room can take the rest
-    const open = rows.filter(r => !full.has(r.box));
-    if(!open.length){ blocked.push({name: rows[0].it.name, boxes: [...new Set(rows.map(r => r.box))]}); continue; }
-    const home = open.slice().sort((a,b) =>
-      (Number(b.it.qty)||0) - (Number(a.it.qty)||0) || a.box - b.box)[0].box;
-    for(const r of rows) move(r, home, "same part was in two boxes");
-  }
+  const ctx = { list, moves, full, blocked, cap, mergeable, move, load };
 
-  // level 2 — merge one-item boxes of the same category inside one container.
-  // Repeat until stable: each pass empties boxes, which can leave new singles.
-  const consolidate = () => {
-    const containerSize = SEED?.meta?.containerSize || 30;
-
-    const containerCache = [];
-
-    for(let pass = 0; pass < 8; pass++){
-      const before = moves.length;
-      const byCC = new Map();
-      for(const r of list){
-        let c = containerCache[r.box];
-        if (c === undefined) {
-           c = containerOf(r.box, containerSize);
-           containerCache[r.box] = c;
-        }
-
-        const k = c + "|" + r.it.category;
-
-        let arr = byCC.get(k);
-        if(arr === undefined){ arr = []; byCC.set(k, arr); }
-        arr.push(r);
-      }
-      const l = load();                       // recomputed per pass
-      for(const [,rows] of byCC){
-        const singles = rows.filter(r => mergeable(r) && (l.get(r.box)||[]).length === 1);
-        if(singles.length < 2) continue;
-        const home = Math.min(...singles.map(r => r.box));
-        let n = (l.get(home)||[]).length;
-        for(const r of singles.sort((a,b)=>a.box-b.box)){
-          if(r.box === home || n >= cap) continue;
-          move(r, home, "one-item boxes of the same type, same container"); n++;
-        }
-      }
-      if(moves.length === before) break;
-    }
-  };
-  if(level >= 2) consolidate();
-
-  // level 3 — give each category one home container and pack it there
-  if(level >= 3){
-    const cats = new Map();
-    for(const r of list){
-      if(!cats.has(r.it.category)) cats.set(r.it.category, []);
-      cats.get(r.it.category).push(r);
-    }
-    const l = load();
-    for(const [cat, rows] of cats){
-      const elec = rows.filter(r => r.box < 400);
-      if(elec.length < 3) continue;                 // not worth moving crates for
-      const tally = {};
-      for(const r of elec) tally[containerOf(r.box, SEED?.meta?.containerSize || 30)] = (tally[containerOf(r.box, SEED?.meta?.containerSize || 30)]||0) + 1;
-      const home = Object.entries(tally).sort((a,b)=>b[1]-a[1])[0][0];
-      const inHome = elec.filter(r => containerOf(r.box, SEED?.meta?.containerSize || 30) === home).map(r => r.box);
-      if(!inHome.length) continue;
-      const targets = [...new Set(inHome)].filter(b => !full.has(b)).sort((a,b)=>a-b);
-      const l = load();
-      const movedCounts = {};
-      for(const m of moves) movedCounts[m.to] = (movedCounts[m.to] || 0) + 1;
-      let ti = 0;
-      for(const r of elec.sort((a,b)=>a.box-b.box)){
-        if(containerOf(r.box, SEED?.meta?.containerSize || 30) === home) continue;
-        if(!mergeable(r)) continue;                 // piles stay where they are
-        while(ti < targets.length &&
-              (l.get(targets[ti])||[]).length + (movedCounts[targets[ti]] || 0) >= cap) ti++;
-        if(ti >= targets.length) break;
-        move(r, targets[ti], `${esc(CAT[cat]||cat)} belongs in container ${home}`);
-        movedCounts[targets[ti]] = (movedCounts[targets[ti]] || 0) + 1;
-      }
-    }
-    consolidate();   // regrouping leaves new one-item boxes behind; sweep them up
-  }
+  _planMovesLevel1(ctx);
+  if(level >= 2) _planMovesLevel2(ctx);
+  if(level >= 3) _planMovesLevel3(ctx);
 
   const boxesBefore = new Set(active().map(i => i.box));
   const boxesAfter  = new Set(list.map(r => r.box));
