@@ -1014,12 +1014,7 @@ function download(name, text, mime){
   a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 4000);
   toast("Saved " + name);
 }
-
-
-/* ------------------------------------------------------------------ wiring */
-function wire(){
-  const v = document.getElementById("view");
-
+function wireNavigation(v) {
   v.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { ui.tab = b.dataset.tab; render(); });
   v.querySelectorAll("[data-zone]").forEach(b => b.onclick = () => { ui.zone = b.dataset.zone; render(); });
   v.querySelectorAll("[data-flag]").forEach(b => b.onclick = () => {
@@ -1041,7 +1036,9 @@ function wire(){
   v.querySelectorAll("[data-onlybox]").forEach(b => b.onclick = () => {
     ui.box = Number(b.dataset.onlybox); ui.open = null; ui.tab = "find"; render(); });
   v.querySelectorAll("[data-add]").forEach(b => b.onclick = () => showAdd());
+}
 
+function wireEditor(v) {
   const ed = v.querySelector(".editor");
   if(ed){
     const id = ed.closest(".item").dataset.id;
@@ -1084,7 +1081,9 @@ function wire(){
       }
     };
   }
+}
 
+function wireTally(v) {
   // One tap = one part in or out. This is the commonest thing you do at the
   // bench and it used to cost four taps through the editor.
   v.querySelectorAll("[data-tally]").forEach(b => b.onclick = async ev => {
@@ -1109,7 +1108,9 @@ function wire(){
     if(go.level != null) ui.level = go.level;
     render();
   });
+}
 
+function wirePlanAndBOM(v) {
   const on2 = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
   v.querySelectorAll("[data-level]").forEach(b => b.onclick = () => {
     ui.level = Number(b.dataset.level); render(); });
@@ -1134,7 +1135,9 @@ function wire(){
     document.getElementById("clearbom").onclick = () => { ui.bom = ""; render(); };
     bt.onkeydown = e => { if(e.key === "Enter" && (e.ctrlKey||e.metaKey)){ ui.bom = bt.value; render(); } };
   }
+}
 
+function wireIO(v) {
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
   on("exp-csv",  () => download("box_inventory.csv", toCSV(), "text/csv;charset=utf-8"));
   on("exp-json", () => download("box_inventory_backup.json",
@@ -1161,6 +1164,16 @@ function wire(){
     };
     r.readAsText(f);
   };
+}
+
+/* ------------------------------------------------------------------ wiring */
+function wire(){
+  const v = document.getElementById("view");
+  wireNavigation(v);
+  wireEditor(v);
+  wireTally(v);
+  wirePlanAndBOM(v);
+  wireIO(v);
 }
 
 /* ------------------------------------------------------------------ camera
