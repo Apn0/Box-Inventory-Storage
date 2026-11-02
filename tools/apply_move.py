@@ -9,9 +9,11 @@ verhuizen = twee rijen: 0 in de oude doos (die wordt daarmee leeg) en het aantal
 in de nieuwe doos. Er wordt nooit iets verwijderd; terugdraaien kan door de oude
 waarden opnieuw te posten (het journaal hieronder bewaart ze).
 
-Oude dozen met een nummer dat nu door een nieuw label gebruikt wordt, krijgen
-tijdelijk 300+nummer zolang er nog spullen in staan — anders zouden twee
-verschillende fysieke dozen hetzelfde nummer hebben.
+Onderdelen die niet in deze container thuishoren blijven staan waar ze staan.
+Ze krijgen GEEN tijdelijk nummer: die 3xx-dozen bestaan niet (Arno, 2026-10-14).
+Per onderdeel verhuizen gaat sneller via Walk the shelf in de app zelf, die per
+tik dezelfde twee rijen post; dit script is de bulkvariant voor een container
+die in één keer al fysiek verhuisd is.
 """
 from __future__ import annotations
 
@@ -32,7 +34,6 @@ from inventory_core.resolver import CONTAINER_SIZE  # noqa: E402
 
 PLAN = ROOT / "data" / "reorg_plan.json"
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-HOLD_BASE = 300
 PAUSE = 1.0          # seconden tussen posts, om Google niet te bestoken
 
 
@@ -81,14 +82,15 @@ def build_ops(container: int, items: list[dict]) -> list[dict]:
                         "newBox": new_box, "qty": qty_text(item),
                         "note": item["note"] or ""})
 
-    # alles wat nog in de oude dozen lo..hi staat en nú niet verhuist
+    # Alles wat nog in de oude dozen lo..hi staat en nú niet verhuist: dat blijft
+    # liggen waar het ligt. Niets posten — een onderdeel een verzonnen nummer
+    # geven zou de sheet laten zeggen dat het verhuisd is terwijl het dat niet is.
     moved = {(o["oldBox"], o["name"]) for o in ops if o["kind"] == "move"}
     for item in items:
         if lo <= item["box"] <= hi and (item["box"], item["name"]) not in moved \
                 and item["name"] not in target:
-            ops.append({"kind": "hold", "name": item["name"], "oldBox": item["box"],
-                        "newBox": HOLD_BASE + item["box"], "qty": qty_text(item),
-                        "note": item["note"] or ""})
+            ops.append({"kind": "stay", "name": item["name"], "oldBox": item["box"],
+                        "qty": qty_text(item), "note": item["note"] or ""})
     return ops
 
 
@@ -105,17 +107,19 @@ def main() -> int:
     items = live_items()
     ops = build_ops(args.container, items)
     moves = [o for o in ops if o["kind"] == "move"]
-    holds = [o for o in ops if o["kind"] == "hold"]
+    stays = [o for o in ops if o["kind"] == "stay"]
     missing = [o for o in ops if o["kind"] == "missing"]
 
     print(f"container {args.container}: {len(moves)} verhuizingen, "
-          f"{len(holds)} tijdelijke nummers, {len(missing)} niet gevonden")
-    for o in moves + holds:
+          f"{len(stays)} blijven staan, {len(missing)} niet gevonden")
+    for o in moves:
         print(f"  {o['oldBox']:>4} -> {o['newBox']:<4} {o['qty']:>5}  {o['name'][:60]}")
+    for o in stays:
+        print(f"  {o['oldBox']:>4}    blijft   {o['qty']:>5}  {o['name'][:60]}")
     for o in missing:
         print(f"  ?? niet in de inventaris: {o['name'][:60]} (zou naar {o['newBox']})")
-    print(f"\n{2 * (len(moves) + len(holds))} rijen te posten "
-          f"(~{2 * (len(moves) + len(holds)) * PAUSE / 60 / 5:.1f} min max)")
+    print(f"\n{2 * len(moves)} rijen te posten "
+          f"(~{2 * len(moves) * PAUSE / 60 / 5:.1f} min max)")
     if args.dry_run:
         return 0
 
@@ -124,7 +128,7 @@ def main() -> int:
                "ops": ops, "posted": []}
     jpath = ROOT / "data" / f"reorg_applied_container_{args.container}.json"
 
-    async def run_moves(moves_and_holds, journal, today, jpath):
+    async def run_moves(to_post, journal, today, jpath):
         async def process_move(session, o, journal, today, n, total, sem):
             async with sem:
                 # eerst de nieuwe plek vullen, dan pas de oude leegmaken: als het
@@ -143,8 +147,8 @@ def main() -> int:
             sem = asyncio.Semaphore(5)
             async with aiohttp.ClientSession() as session:
                 tasks = []
-                total = len(moves_and_holds)
-                for n, o in enumerate(moves_and_holds, 1):
+                total = len(to_post)
+                for n, o in enumerate(to_post, 1):
                     tasks.append(asyncio.create_task(process_move(session, o, journal, today, n, total, sem)))
                 if tasks:
                     await asyncio.gather(*tasks)
@@ -155,14 +159,14 @@ def main() -> int:
         # controle: lees de sheet opnieuw en kijk of het er echt staat
         time.sleep(5)
         after = {(i["name"], i["box"]) for i in live_items()}
-        bad = [o for o in moves_and_holds if (o["name"], o["newBox"]) not in after]
-        print(f"\ncontrole: {len(moves_and_holds) - len(bad)} van "
-              f"{len(moves_and_holds)} staan op hun nieuwe plek")
+        bad = [o for o in to_post if (o["name"], o["newBox"]) not in after]
+        print(f"\ncontrole: {len(to_post) - len(bad)} van "
+              f"{len(to_post)} staan op hun nieuwe plek")
         for o in bad:
             print(f"  MIST: {o['name'][:60]} in doos {o['newBox']}")
         return 1 if bad else 0
 
-    return asyncio.run(run_moves(moves + holds, journal, today, jpath))
+    return asyncio.run(run_moves(moves, journal, today, jpath))
 
 
 if __name__ == "__main__":

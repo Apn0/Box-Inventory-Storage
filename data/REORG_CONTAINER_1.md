@@ -1,6 +1,6 @@
 # Container 1 — werkblad (dozen 1–30)
 
-Gemaakt 2026-10-11. 24 dozen vullen, 55 onderdelen, uit 23 oude dozen.
+Gemaakt 2026-11-03. 24 dozen vullen, 55 onderdelen, uit 23 oude dozen.
 
 Werk de haallijst af: pak een oude doos, leg de genoemde onderdelen in de nieuwe genummerde doos. Zeg het als je klaar bent, dan werk ik de sheet bij.
 
@@ -95,42 +95,45 @@ Werk de haallijst af: pak een oude doos, leg de genoemde onderdelen in de nieuwe
 
 ## Blijft voorlopig in de oude dozen 1–30
 
-Deze 35 onderdelen horen bij een latere categorie. Ze staan nog in de oude, met de hand beschreven dozen — en die nummers botsen nu met de nieuwe labels. Bij het bijwerken van de sheet krijgen ze tijdelijk 300+nummer: oude doos 12 wordt 312. Zodra hun eigen container aan de beurt is, verdwijnt dat nummer vanzelf.
+Deze 38 onderdelen horen bij een latere categorie. Ze blijven staan waar ze staan en krijgen geen nieuw nummer; er is geen tussenbak. Zodra hun eigen container aan de beurt is gaan ze in één keer naar hun eigen doos.
 
-| Oude doos (met de hand) | In de app straks | Onderdeel |
-|---|---|---|
-| 1 | 301 | Countersink bit (HSS 6, hex shank) |
-| 1 | 301 | Tap bits (6-piece set) |
-| 1 | 301 | Tap bits (M2 + M2.5) |
-| 2 | 302 | Drill-bit stoppers + flanges |
-| 3 | 303 | Pillow-block bearing units (8mm bore) |
-| 4 | 304 | Alligator clips |
-| 5 | 305 | Vibration motor module |
-| 7 | 307 | 18650 Li-ion charger module |
-| 7 | 307 | IR transmitter module |
-| 7 | 307 | UART Wi-Fi module |
-| 8 | 308 | V meter with 7-seg display |
-| 9 | 309 | Step-down converter |
-| 9 | 309 | Step-up converter |
-| 10 | 310 | 18650 charger module |
-| 10 | 310 | Header pins (straight + 90°) |
-| 10 | 310 | Micro USB-C PD trigger module |
-| 10 | 310 | USB-A power module (screw terminal + DIP) |
-| 10 | 310 | USB-C power meter module (OLED, purple) |
-| 10 | 310 | USB-C solder coupling |
-| 16 | 316 | 18650 modular holder |
-| 16 | 316 | 4-pin LED strip connector |
-| 17 | 317 | D2 push-in wire connectors set 1 |
-| 18 | 318 | D2 push-in wire connectors set 2 |
-| 19 | 319 | Rectangular LEDs (R/G/Y/B) |
-| 20 | 320 | Small tools bit set |
-| 21 | 321 | Limit switch (SIWIG microswitch, no lever) |
-| 21 | 321 | Limit switches (roller-lever microswitches) |
-| 23 | 323 | Solar charge module (outdoor lights) |
-| 24 | 324 | XT60 connector (male/female mixed) |
-| 25 | 325 | Terminal blocks (kroonsteentjes) |
-| 26 | 326 | Loose bolts (unidentified) |
-| 26 | 326 | Small bolts (<=M5) + few M6 |
-| 27 | 327 | Screws <20 mm length |
-| 28 | 328 | M6 bolts + M6 nuts |
-| 30 | 330 | Assorted mechanical parts (mixed, uncounted; includes brackets, rails, misc hardware) |
+| Oude doos | Onderdeel |
+|---|---|
+| 1 | Countersink bit (HSS 6, hex shank) |
+| 1 | Tap bits (6-piece set) |
+| 1 | Tap bits (M2 + M2.5) |
+| 2 | Drill-bit stoppers + flanges |
+| 3 | Pillow-block bearing units (8mm bore) |
+| 4 | Alligator clips |
+| 5 | MQ gas sensors (MQ-7/MQ-3/MQ-135) |
+| 5 | Vibration motor module |
+| 7 | 18650 Li-ion charger module |
+| 7 | IR transmitter module |
+| 7 | UART Wi-Fi module |
+| 8 | V meter with 7-seg display |
+| 9 | Step-down converter |
+| 9 | Step-up converter |
+| 10 | 18650 charger module |
+| 10 | Header pins (straight + 90°) |
+| 10 | INA219 current/voltage sensor |
+| 10 | Micro USB-C PD trigger module |
+| 10 | USB-A power module (screw terminal + DIP) |
+| 10 | USB-C power meter module (OLED, purple) |
+| 10 | USB-C solder coupling |
+| 12 | GUVA-S12SD UV sensor module |
+| 16 | 18650 modular holder |
+| 16 | 4-pin LED strip connector |
+| 17 | D2 push-in wire connectors set 1 |
+| 18 | D2 push-in wire connectors set 2 |
+| 19 | Rectangular LEDs (R/G/Y/B) |
+| 20 | Small tools bit set |
+| 21 | Limit switch (SIWIG microswitch, no lever) |
+| 21 | Limit switches (roller-lever microswitches) |
+| 23 | Solar charge module (outdoor lights) |
+| 24 | XT60 connector (male/female mixed) |
+| 25 | Terminal blocks (kroonsteentjes) |
+| 26 | Loose bolts (unidentified) |
+| 26 | Small bolts (<=M5) + few M6 |
+| 27 | Screws <20 mm length |
+| 28 | M6 bolts + M6 nuts |
+| 30 | Assorted mechanical parts (mixed, uncounted; includes brackets, rails, misc hardware) |

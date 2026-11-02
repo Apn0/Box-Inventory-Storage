@@ -4,8 +4,11 @@
     python tools/container_sheet.py 1    ->  data/REORG_CONTAINER_1.md
 
 Toont per nieuwe doos wat erin komt, daarna een haallijst per oude doos, en
-tenslotte wat er na deze ronde nog in de oude dozen met hetzelfde nummer staat
-(die krijgen tijdelijk 300+nummer in de sheet, zie tools/apply_move.py).
+tenslotte wat er na deze ronde nog in de oude dozen staat: dat blijft liggen
+waar het ligt, zonder nieuw nummer.
+
+Dit is de print-versie. Tikken terwijl je loopt gaat via Walk the shelf in de
+app, die de verhuizing meteen in de sheet zet.
 """
 from __future__ import annotations
 
@@ -20,7 +23,6 @@ sys.path.insert(0, str(ROOT))
 from inventory_core.resolver import CATEGORY_LABELS, CONTAINER_SIZE  # noqa: E402
 
 PLAN = ROOT / "data" / "reorg_plan.json"
-HOLD_BASE = 300
 
 
 def live_items():
@@ -73,16 +75,15 @@ def main(container: int) -> int:
     if left:
         A(f"## Blijft voorlopig in de oude dozen {lo}–{hi}")
         A("")
-        A(f"Deze {len(left)} onderdelen horen bij een latere categorie. Ze staan nog in "
-          f"de oude, met de hand beschreven dozen — en die nummers botsen nu met de "
-          f"nieuwe labels. Bij het bijwerken van de sheet krijgen ze tijdelijk "
-          f"{HOLD_BASE}+nummer: oude doos 12 wordt {HOLD_BASE + 12}. Zodra hun eigen "
-          f"container aan de beurt is, verdwijnt dat nummer vanzelf.")
+        A(f"Deze {len(left)} onderdelen horen bij een latere categorie. Ze blijven "
+          f"staan waar ze staan en krijgen geen nieuw nummer; er is geen tussenbak. "
+          f"Zodra hun eigen container aan de beurt is gaan ze in één keer naar hun "
+          f"eigen doos.")
         A("")
-        A("| Oude doos (met de hand) | In de app straks | Onderdeel |")
-        A("|---|---|---|")
+        A("| Oude doos | Onderdeel |")
+        A("|---|---|")
         for i in sorted(left, key=lambda i: (i["box"], i["name"])):
-            A(f"| {i['box']} | {HOLD_BASE + i['box']} | {i['name']} |")
+            A(f"| {i['box']} | {i['name']} |")
 
     path = ROOT / "data" / f"REORG_CONTAINER_{container}.md"
     path.write_text("\n".join(out), encoding="utf-8")
