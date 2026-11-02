@@ -7,6 +7,11 @@ const SERVED = typeof location !== "undefined" && (location.protocol === "http:"
 let SEED = snapshot;
 let SHEET = null;
 let IDENTIFY_URL = null;
+/* data/reorg_plan.json: the committed re-organisation — which box every part
+   ends up in. Shelf mode below walks it one old box at a time. SHELF holds the
+   rows on screen so a tick knows which part it is without re-deriving them. */
+let REORG = null;
+let SHELF = [];
 
 // `let`, not `const`: the baked-in data is only the instant first paint — the
 // live truth is the Google Sheet, fetched right after boot and after every save.
@@ -136,6 +141,41 @@ async function appendRow({name, box, qty, note, prev}){
   return false;
 }
 
+/** The two rows one physical move writes, in the order they must go out: fill
+    the new box, then zero the old one. That order matters — the log resolves
+    newest-row-wins per (box, name), so a reader that saw only the zero would
+    think the part was gone. */
+export function moveRows({name, from, to, qty}){
+  const qtyOut = (qty === "many" || qty === null || qty === undefined) ? "many" : String(qty);
+  return [{box: to,   name, qty: qtyOut, note: "reorg"},
+          {box: from, name, qty: "0",    note: "reorg"}];
+}
+
+/** Record one part as physically moved. Both rows go out before the single
+    refetch that confirms them. */
+async function appendMove({name, from, to, qty}){
+  if(!SHEET){ toast("No sheet connection yet — try again in a moment"); return false; }
+  const before = SEED.meta.rawRows || 0;
+  for(const row of moveRows({name, from, to, qty})) await sheetAppend(row);
+  for(const delay of [1200, 2500, 5000]){
+    await new Promise(r => setTimeout(r, delay));
+    if(await refreshSeed() && (SEED.meta.rawRows || 0) > before){
+      showUndo(`${name}: box ${from} → ${to}`,
+               [{name, box: from, qty}, {name, box: to, qty: 0}]);
+      return true;
+    }
+  }
+  toast("Could not confirm the move — check the connection");
+  return false;
+}
+
+async function loadReorgPlan(){
+  try{
+    REORG = await (await fetch("./data/reorg_plan.json", {cache:"no-store"})).json();
+    if(ui.tab === "reorg") render();
+  }catch(e){ /* offline and never cached — Shelf mode says so instead */ }
+}
+
 
 
 const STORE_KEY = "boxinv.v1";
@@ -144,6 +184,9 @@ const CAT = SEED.meta.categoryLabels;
 const STALE_DAYS = 150;
 // At or below this, a part is worth reordering before a build stalls on it.
 const LOW_STOCK = 2;
+// Arno has written labels up to 90; the plan runs to 130. A part whose new box
+// is above this has nowhere to go yet, so Shelf mode shows it and leaves it.
+const LABELS_UPTO = 90;
 
 /** Low means "you had more and now you don't", not "you own one of these".
     Owning a single GPS module is not a shortage; going from five TMC2209s to
@@ -159,7 +202,7 @@ export function isRunningLow(i){
 let overlay = load();
 let items = [];            // live merged list
 let ui = { tab:"find", q:"", cats:new Set(), zone:"all", flag:null, open:null, box:null,
-           bom:"", level:2, cap:6, openCard:null };
+           bom:"", level:2, cap:6, openCard:null, reorgMode:"shelf", shelf:1 };
 
 function load(){
   try{
@@ -254,7 +297,10 @@ function showUndo(what, revert){
     toast("Undoing…");
     try{
       if(revert){
-        await appendRow({name: revert.name, box: revert.box, qty: revert.qty, note: "(undo)"});
+        // A move is two rows, so undoing one is two rows as well: fill the old
+        // box again first, then empty the new one — never the other way round.
+        for(const r of (Array.isArray(revert) ? revert : [revert]))
+          await appendRow({name: r.name, box: r.box, qty: r.qty, note: "(undo)"});
         toast("Undone");
       }
     }catch(err){ toast("Undo failed: " + err.message); }
@@ -873,7 +919,100 @@ function viewBuild(){
   </div>${results}`;
 }
 
+/* ------------------------------------------------------------------- shelf
+   One pass empties one old box: every part still in it, with the box it goes
+   to. Nothing here is a tick we store — "done" is the sheet saying the part
+   now sits in its new box. So the list reads the same on the phone and the
+   desktop, survives a reload, and can never drift from the inventory. */
+export function shelfRows(container, plan, list, labelsUpto, size){
+  const span = size || SEED?.meta?.containerSize || 30;
+  const lo = (container - 1) * span + 1, hi = container * span;
+  const at = new Map();
+  for(const i of list) at.set(i.name + "|" + i.box, i);
+  const rows = [];
+  for(const [nb, b] of Object.entries((plan && plan.boxes) || {})){
+    const to = Number(nb);
+    for(const p of b.parts){
+      if(p.oldBox < lo || p.oldBox > hi) continue;
+      const here = at.get(p.name + "|" + p.oldBox), there = at.get(p.name + "|" + to);
+      const stays = to === p.oldBox;         // already home: here and there are one
+      const found = here || there;
+      rows.push({
+        name: p.name, from: p.oldBox, to, category: b.category,
+        qty: found ? found.qty : p.qty,
+        countType: found ? found.countType : p.countType,
+        done:    stays || Boolean(there && !here),
+        split:   !stays && Boolean(there && here),  // half moved, half still behind
+        missing: !found,                            // not on the shelf at all
+        waits:   to > labelsUpto,                   // no label for that box yet
+      });
+    }
+  }
+  rows.sort((a, b) => a.from - b.from || a.to - b.to || a.name.localeCompare(b.name));
+  rows.forEach((r, i) => { r.idx = i; });
+  return rows;
+}
+
+function shelfRowHTML(r){
+  const tag = r.waits   ? '<span class="tag flag">no label yet</span>'
+            : r.missing ? `<span class="tag err">not in box ${r.from}</span>`
+            : r.split   ? `<span class="tag flag">also still in ${r.from}</span>` : "";
+  const qty = r.countType === "bulk" ? "many" : r.qty;
+  const blocked = r.done || r.waits || r.missing;
+  return `<div class="shelfrow${r.done ? " done" : ""}${r.waits ? " waits" : ""}">
+    <button class="tick" data-move="${r.idx}"${blocked ? " disabled" : ""}
+      aria-label="${r.done ? "Already in" : "Mark as moved to"} box ${r.to}">${r.done ? "✓" : ""}</button>
+    <div class="bomhit">${esc(r.name)}
+      <span class="alt">${esc(String(qty))} · from box ${r.from}</span> ${tag}</div>
+    <div class="to">${r.to}</div>
+  </div>`;
+}
+
+function viewShelf(){
+  if(!REORG || !REORG.boxes) return `<div class="panel"><h2>Walk the shelf</h2>
+    <p class="sub">The re-organisation plan has not loaded yet — it needs one
+      online visit before it is cached for offline use.</p></div>`;
+  const span = SEED?.meta?.containerSize || 30;
+  const act = active();
+  const containers = [...new Set(Object.values(REORG.boxes).flatMap(b =>
+    b.parts.map(p => Math.floor((p.oldBox - 1) / span) + 1)))].sort((a, b) => a - b);
+  const c = containers.includes(ui.shelf) ? ui.shelf : containers[0];
+  const open = new Map(containers.map(n =>
+    [n, shelfRows(n, REORG, act, LABELS_UPTO).filter(r => !r.done && !r.waits && !r.missing).length]));
+  const rows = shelfRows(c, REORG, act, LABELS_UPTO);
+  SHELF = rows;
+  const byOld = new Map();
+  for(const r of rows){ if(!byOld.has(r.from)) byOld.set(r.from, []); byOld.get(r.from).push(r); }
+  const pct = rows.length ? Math.round(100 * rows.filter(r => r.done).length / rows.length) : 0;
+  const waits = rows.filter(r => r.waits).length, gone = rows.filter(r => r.missing).length;
+  return `<div class="panel noprint">
+      <h2>Walk the shelf</h2>
+      <p class="sub">Take one old box, carry its parts to the boxes named on the right, and
+        tap each part as it lands. The tap writes the move to the sheet itself — new box
+        filled, old box to zero — so you never have to report back for it to count.</p>
+      <div class="chips">${containers.map(n =>
+        `<button class="chip" data-shelf="${n}" aria-pressed="${n === c}">Container ${n}<span class="n">${open.get(n)}</span></button>`).join("")}</div>
+      <div class="bar" role="img" aria-label="${pct}% of container ${c} done"><i style="width:${pct}%"></i></div>
+      <p class="sub"><b>${open.get(c)}</b> parts to carry out of container ${c}${
+        waits ? ` · <b>${waits}</b> waiting for a label past ${LABELS_UPTO}` : ""}${
+        gone ? ` · <b>${gone}</b> not on the shelf` : ""}</p>
+    </div>
+    ${[...byOld.entries()].map(([from, rs]) => {
+      const todo = rs.filter(r => !r.done).length;
+      return `<div class="panel">
+        <h2>Old box ${from} <span class="count">${todo ? todo + " to go" : "clear"}</span></h2>
+        ${rs.map(shelfRowHTML).join("")}</div>`;
+    }).join("")}`;
+}
+
 function viewReorg(){
+  const modes = [["shelf", "Walk the shelf"], ["suggest", "Suggest moves"]];
+  return `<div class="chips noprint">${modes.map(([k, t]) =>
+      `<button class="chip" data-rmode="${k}" aria-pressed="${ui.reorgMode === k}">${esc(t)}</button>`).join("")}</div>`
+    + (ui.reorgMode === "suggest" ? viewSuggest() : viewShelf());
+}
+
+function viewSuggest(){
   const cap = ui.cap, lvl = ui.level;
   const p = planMoves(lvl, cap);
   const levels = [
@@ -1119,6 +1258,18 @@ function wireTally(v) {
 
 function wirePlanAndBOM(v) {
   const on2 = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
+  v.querySelectorAll("[data-rmode]").forEach(b => b.onclick = () => {
+    ui.reorgMode = b.dataset.rmode; render(); });
+  v.querySelectorAll("[data-shelf]").forEach(b => b.onclick = () => {
+    ui.shelf = Number(b.dataset.shelf); render(); });
+  v.querySelectorAll("[data-move]").forEach(b => b.onclick = async () => {
+    const r = SHELF[Number(b.dataset.move)];
+    if(!r || r.done) return;
+    b.disabled = true; b.textContent = "…";
+    const ok = await appendMove({name: r.name, from: r.from, to: r.to,
+                                 qty: r.countType === "bulk" ? null : r.qty});
+    if(ok) render(); else { b.disabled = false; b.textContent = ""; }
+  });
   v.querySelectorAll("[data-level]").forEach(b => b.onclick = () => {
     ui.level = Number(b.dataset.level); render(); });
   v.querySelectorAll("[data-cap]").forEach(b => b.onclick = () => {
@@ -1880,5 +2031,6 @@ document.addEventListener("keydown", e => {
     console.warn("Using offline defaults:", err);
   }
   refreshSeed();
+  loadReorgPlan();
   setupCamera();
 })();

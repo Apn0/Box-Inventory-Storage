@@ -1,4 +1,4 @@
-const CACHE_NAME = 'box-inventory-v1';
+const CACHE_NAME = 'box-inventory-v2';
 
 const ASSETS = [
   './',
@@ -9,7 +9,8 @@ const ASSETS = [
   './src/js/app.js',
   './src/js/config.js',
   './src/js/resolve.js',
-  './data/snapshot.js'
+  './data/snapshot.js',
+  './data/reorg_plan.json'
 ];
 
 self.addEventListener('install', event => {
