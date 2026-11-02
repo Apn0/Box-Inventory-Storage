@@ -202,7 +202,7 @@ export function isRunningLow(i){
 let overlay = load();
 let items = [];            // live merged list
 let ui = { tab:"find", q:"", cats:new Set(), zone:"all", flag:null, open:null, box:null,
-           bom:"", level:2, cap:6, openCard:null, reorgMode:"shelf", shelf:1 };
+           bom:"", level:2, cap:6, openCard:null, reorgMode:"shelf", shelf:1, labelFilter:"all" };
 
 function load(){
   try{
@@ -1066,26 +1066,55 @@ function viewSuggest(){
     </div>`).join("")}`;
 }
 
-function viewLabels(){
-  const byBox = new Map();
-  for(const i of active()){
-    if(!byBox.has(i.box)) byBox.set(i.box, []);
-    byBox.get(i.box).push(i);
+/* The sheet only knows boxes that already hold something, so the boxes the
+   re-organisation still has to create had no label to print — and those are
+   exactly the ones Arno is missing. A box that holds something is labelled
+   with what is in it; an empty one in the plan with what the plan puts there. */
+export function labelBoxes(list, plan){
+  const out = new Map();
+  for(const i of list){
+    if(!out.has(i.box)) out.set(i.box, {box: i.box, planned: false, lines: []});
+    out.get(i.box).lines.push({name: i.name, n: i.countType === "exact" ? i.qty : null});
   }
-  const boxes = [...byBox.keys()].sort((a,b)=>a-b);
+  for(const [nb, b] of Object.entries((plan && plan.boxes) || {})){
+    const n = Number(nb);
+    if(out.has(n)) continue;
+    out.set(n, {box: n, planned: true,
+                lines: b.parts.map(p => ({name: p.name,
+                                          n: p.countType === "exact" ? p.qty : null}))});
+  }
+  return [...out.values()].sort((a, b) => a.box - b.box);
+}
+
+/** The labels he still has to write: the electronics series past the ones he
+    has. Never the household 4xx boxes — those are hangers and kitchen things,
+    they have their own labels and nothing in this plan goes near them. */
+export function labelsToWrite(labels, upto){
+  return labels.filter(l => l.box > upto && l.box < 400);
+}
+
+function viewLabels(){
+  const span = SEED?.meta?.containerSize || 30;
+  const all = labelBoxes(active(), REORG);
+  const todo = labelsToWrite(all, LABELS_UPTO);
+  const show = ui.labelFilter === "todo" ? todo : all;
   return `<div class="panel noprint">
       <h2>Printable box labels</h2>
-      <p class="sub">One label per non-empty box, in box order. Print, cut, stick.</p>
-      <button class="btn" onclick="window.print()">Print</button>
+      <p class="sub">One label per box, in box order. Print, cut, stick. A dashed label is a
+        box the plan fills that is still empty today.${todo.length ? ` <b>${todo.length}</b>
+        boxes past ${LABELS_UPTO} have no written label yet — until they do, nothing in the
+        plan can move into them.` : ""}</p>
+      <div class="chips">
+        <button class="chip" data-labels="all" aria-pressed="${ui.labelFilter !== "todo"}">All boxes<span class="n">${all.length}</span></button>
+        <button class="chip" data-labels="todo" aria-pressed="${ui.labelFilter === "todo"}">Still to write<span class="n">${todo.length}</span></button>
+      </div>
+      <button class="btn" onclick="window.print()">Print ${show.length} labels</button>
     </div>
-    <div class="labelsheet">${boxes.map(b => {
-      const c = byBox.get(b);
-      return `<div class="label"><b>${b}</b>
-        <span class="c">container ${containerOf(b, SEED?.meta?.containerSize || 30)}</span>
-        <ul>${c.slice(0,4).map(i => `<li>${esc(i.name.slice(0,42))}${
-          i.countType==="exact"?" ("+i.qty+")":""}</li>`).join("")}
-        ${c.length>4?`<li>+${c.length-4} more</li>`:""}</ul></div>`;
-    }).join("")}</div>`;
+    <div class="labelsheet">${show.map(l => `<div class="label${l.planned ? " planned" : ""}"><b>${l.box}</b>
+      <span class="c">container ${containerOf(l.box, span)}</span>
+      <ul>${l.lines.slice(0,4).map(x => `<li>${esc(x.name.slice(0,42))}${
+        x.n != null ? " (" + x.n + ")" : ""}</li>`).join("")}
+      ${l.lines.length > 4 ? `<li>+${l.lines.length - 4} more</li>` : ""}</ul></div>`).join("")}</div>`;
 }
 
 function viewData(){
@@ -1262,6 +1291,8 @@ function wirePlanAndBOM(v) {
     ui.reorgMode = b.dataset.rmode; render(); });
   v.querySelectorAll("[data-shelf]").forEach(b => b.onclick = () => {
     ui.shelf = Number(b.dataset.shelf); render(); });
+  v.querySelectorAll("[data-labels]").forEach(b => b.onclick = () => {
+    ui.labelFilter = b.dataset.labels; render(); });
   v.querySelectorAll("[data-move]").forEach(b => b.onclick = async () => {
     const r = SHELF[Number(b.dataset.move)];
     if(!r || r.done) return;
