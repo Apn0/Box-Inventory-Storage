@@ -19,8 +19,21 @@ Base branch: `main`
 - **Containers**: Boxes group in sets of 30.
 
 
+## Phone: the web app on GitHub Pages
+- Arno's choice 2026-11-03: the phone runs the app from `https://apn0.github.io/Box-Inventory-Storage/`
+  (home-screen shortcut). Pages builds `main` (root) on every push without Actions minutes, so a
+  push to `main` is the release.
+- `sw.js` serves its ASSETS cache-first: bump `CACHE_NAME` whenever a cached file changes, or the
+  phone keeps running the old app.
+- Reorganize -> Walk the shelf writes two rows to the LIVE sheet on every tap. Never tap a part
+  while testing in a browser; drive the view and read it.
+- How far the box labels go is a per-phone setting on the Labels tab (localStorage
+  `boxinv.labelsUpto`, default 90). Walk the shelf locks any part whose new box is past it.
+
 ## Phone app (APK)
-- The Android project is **not optional scaffolding**: it is how the app reaches Arno's phone.
+- The Android project is **not optional scaffolding**: it is the other way onto the phone. The
+  last build (v42, 2026-10-11) predates Walk the shelf, and `tools/bundle_single_file.py` does not
+  inline `data/reorg_plan.json`, so a rebuilt APK cannot load the plan until the bundler does.
   GitHub Actions cannot build it (account out of minutes, cannot be paid), so build locally:
   `bash tools/build_apk_local.sh` -> signs with `android/app/debug.keystore` (same key as every
   earlier build, so it installs as an update) and publishes to the `latest` release.
