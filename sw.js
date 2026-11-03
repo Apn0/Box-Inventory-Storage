@@ -1,4 +1,4 @@
-const CACHE_NAME = 'box-inventory-v2';
+const CACHE_NAME = 'box-inventory-v3';
 
 const ASSETS = [
   './',

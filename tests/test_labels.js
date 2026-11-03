@@ -1,7 +1,7 @@
 /* The Labels tab has to print the boxes that do not exist yet.
  *
  * It used to list only boxes that already held something, which is precisely
- * backwards: a box with parts in it already has a label stuck on it. The 34
+ * backwards: a box with parts in it already has a label stuck on it. The
  * boxes the re-organisation still has to create — every number past the labels
  * Arno has written — are the ones he needs to print, and they are empty, so
  * they were the ones left out.
@@ -10,7 +10,7 @@ import './mock_globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { labelBoxes, labelsToWrite } from '../src/js/app.js';
+import { labelBoxes, labelsToWrite, parseLabelsUpto, shelfRows } from '../src/js/app.js';
 
 const plan = {
   boxes: {
@@ -68,4 +68,34 @@ test('the household boxes are not labels he has to write', () => {
 
 test('nothing is left to write when every box is within the labels he has', () => {
   assert.deepEqual(labelsToWrite([{box: 12}, {box: 90}, {box: 401}], 90), []);
+});
+
+/* How far his labels go is a setting he raises himself once they are stuck on.
+ * If a typo could move it, one slip would either let him tick parts into boxes
+ * that are not on the shelf yet, or lock every box past 1. */
+test('the label cutoff is the box number he typed', () => {
+  assert.equal(parseLabelsUpto("130"), 130);
+  assert.equal(parseLabelsUpto(" 110 "), 110);
+  assert.equal(parseLabelsUpto("95", 90), 95);
+});
+
+test('never set, the cutoff is where his labels stopped: 90', () => {
+  assert.equal(parseLabelsUpto(null), 90);
+});
+
+test('nothing he can mistype unlocks the plan or locks all of it', () => {
+  for(const raw of [null, undefined, "", "abc", "12.5", "0", "-5", "401", "1000"])
+    assert.equal(parseLabelsUpto(raw, 100), 100, `${JSON.stringify(raw)} moved the cutoff`);
+});
+
+test('raising the cutoff opens the boxes up to it, and no further', () => {
+  const plan = {boxes: {
+    "95":  {category: "fastener", parts: [{name: "Countersink", oldBox: 1, qty: 1, countType: "exact"}]},
+    "111": {category: "fastener", parts: [{name: "Tap bits", oldBox: 1, qty: 5, countType: "exact"}]},
+  }};
+  const list = [item(1, "Countersink"), item(1, "Tap bits", 5)];
+  const waiting = upto => shelfRows(1, plan, list, upto, 30).filter(r => r.waits).map(r => r.to);
+  assert.deepEqual(waiting(90), [95, 111]);
+  assert.deepEqual(waiting(100), [111]);
+  assert.deepEqual(waiting(130), []);
 });

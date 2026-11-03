@@ -184,9 +184,24 @@ const CAT = SEED.meta.categoryLabels;
 const STALE_DAYS = 150;
 // At or below this, a part is worth reordering before a build stalls on it.
 const LOW_STOCK = 2;
-// Arno has written labels up to 90; the plan runs to 130. A part whose new box
-// is above this has nowhere to go yet, so Shelf mode shows it and leaves it.
-const LABELS_UPTO = 90;
+// The highest box with a label stuck on it. A part whose new box is above this has
+// nowhere to go yet, so Shelf mode shows it and leaves it. It is a fact about the
+// shelf, not the code, so Arno raises it himself on the Labels tab; 90 is where his
+// labels stopped when the plan (which runs to 130) was made.
+const LABELS_KEY = "boxinv.labelsUpto";
+const LABELS_DEFAULT = 90;
+
+/** A box number he typed, or the fallback. Only a whole electronics box number
+    (1-399) counts, so a slip of the thumb cannot unlock the plan or lock all of it. */
+export function parseLabelsUpto(raw, fallback = LABELS_DEFAULT){
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n < 400 ? n : fallback;
+}
+
+function labelsUpto(){
+  try{ return parseLabelsUpto(localStorage.getItem(LABELS_KEY)); }
+  catch(e){ return LABELS_DEFAULT; }
+}
 
 /** Low means "you had more and now you don't", not "you own one of these".
     Owning a single GPS module is not a shortage; going from five TMC2209s to
@@ -973,13 +988,13 @@ function viewShelf(){
     <p class="sub">The re-organisation plan has not loaded yet — it needs one
       online visit before it is cached for offline use.</p></div>`;
   const span = SEED?.meta?.containerSize || 30;
-  const act = active();
+  const act = active(), upto = labelsUpto();
   const containers = [...new Set(Object.values(REORG.boxes).flatMap(b =>
     b.parts.map(p => Math.floor((p.oldBox - 1) / span) + 1)))].sort((a, b) => a - b);
   const c = containers.includes(ui.shelf) ? ui.shelf : containers[0];
   const open = new Map(containers.map(n =>
-    [n, shelfRows(n, REORG, act, LABELS_UPTO).filter(r => !r.done && !r.waits && !r.missing).length]));
-  const rows = shelfRows(c, REORG, act, LABELS_UPTO);
+    [n, shelfRows(n, REORG, act, upto).filter(r => !r.done && !r.waits && !r.missing).length]));
+  const rows = shelfRows(c, REORG, act, upto);
   SHELF = rows;
   const byOld = new Map();
   for(const r of rows){ if(!byOld.has(r.from)) byOld.set(r.from, []); byOld.get(r.from).push(r); }
@@ -994,7 +1009,7 @@ function viewShelf(){
         `<button class="chip" data-shelf="${n}" aria-pressed="${n === c}">Container ${n}<span class="n">${open.get(n)}</span></button>`).join("")}</div>
       <div class="bar" role="img" aria-label="${pct}% of container ${c} done"><i style="width:${pct}%"></i></div>
       <p class="sub"><b>${open.get(c)}</b> parts to carry out of container ${c}${
-        waits ? ` · <b>${waits}</b> waiting for a label past ${LABELS_UPTO}` : ""}${
+        waits ? ` · <b>${waits}</b> waiting for a label past ${upto} (Labels tab)` : ""}${
         gone ? ` · <b>${gone}</b> not on the shelf` : ""}</p>
     </div>
     ${[...byOld.entries()].map(([from, rs]) => {
@@ -1096,19 +1111,27 @@ export function labelsToWrite(labels, upto){
 function viewLabels(){
   const span = SEED?.meta?.containerSize || 30;
   const all = labelBoxes(active(), REORG);
-  const todo = labelsToWrite(all, LABELS_UPTO);
+  const upto = labelsUpto();
+  const todo = labelsToWrite(all, upto);
   const show = ui.labelFilter === "todo" ? todo : all;
   return `<div class="panel noprint">
       <h2>Printable box labels</h2>
       <p class="sub">One label per box, in box order. Print, cut, stick. A dashed label is a
         box the plan fills that is still empty today.${todo.length ? ` <b>${todo.length}</b>
-        boxes past ${LABELS_UPTO} have no written label yet — until they do, nothing in the
+        boxes past ${upto} have no written label yet — until they do, nothing in the
         plan can move into them.` : ""}</p>
       <div class="chips">
         <button class="chip" data-labels="all" aria-pressed="${ui.labelFilter !== "todo"}">All boxes<span class="n">${all.length}</span></button>
         <button class="chip" data-labels="todo" aria-pressed="${ui.labelFilter === "todo"}">Still to write<span class="n">${todo.length}</span></button>
       </div>
       <button class="btn" onclick="window.print()">Print ${show.length} labels</button>
+      <div class="uptorow">
+        <label for="labels-upto">Labels stuck on, up to box</label>
+        <input id="labels-upto" type="number" inputmode="numeric" min="1" max="399" value="${upto}">
+        <button class="btn" data-upto-save>Save</button>
+      </div>
+      <p class="sub">Raise this once more labels are on the boxes: Walk the shelf only lets
+        you tick a part into a box that has one. It is saved on this phone.</p>
     </div>
     <div class="labelsheet">${show.map(l => `<div class="label${l.planned ? " planned" : ""}"><b>${l.box}</b>
       <span class="c">container ${containerOf(l.box, span)}</span>
@@ -1293,6 +1316,18 @@ function wirePlanAndBOM(v) {
     ui.shelf = Number(b.dataset.shelf); render(); });
   v.querySelectorAll("[data-labels]").forEach(b => b.onclick = () => {
     ui.labelFilter = b.dataset.labels; render(); });
+  const uptoInput = v.querySelector("#labels-upto"), uptoSave = v.querySelector("[data-upto-save]");
+  if(uptoInput && uptoSave){
+    uptoSave.onclick = () => {
+      const before = labelsUpto(), n = parseLabelsUpto(uptoInput.value, null);
+      if(n === null){ toast("That is not a box number. Use 1 to 399."); uptoInput.value = before; return; }
+      try{ localStorage.setItem(LABELS_KEY, String(n)); }
+      catch(e){ toast("This phone would not save it: its storage is blocked"); return; }
+      toast(n > before ? `Boxes ${before + 1} to ${n} can take parts now` : `Labels up to box ${n}`);
+      render();
+    };
+    uptoInput.onkeydown = e => { if(e.key === "Enter") uptoSave.click(); };
+  }
   v.querySelectorAll("[data-move]").forEach(b => b.onclick = async () => {
     const r = SHELF[Number(b.dataset.move)];
     if(!r || r.done) return;
