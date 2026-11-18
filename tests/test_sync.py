@@ -77,7 +77,7 @@ def test_sync_main_offline_unmerged_preservation(mocker, capsys, tmp_path):
             mock_resp.read.return_value = b"Timestamp,Col2\nVal1,Val2"
             return MagicMock(__enter__=MagicMock(return_value=mock_resp))
 
-    mocker.patch("urllib.request.urlopen", side_effect=mock_urlopen)
+    mocker.patch("sync.urlopen", side_effect=mock_urlopen)
     mocker.patch("subprocess.call", return_value=0)
 
     result = sync.main()
@@ -104,7 +104,7 @@ def test_sync_main_success(mocker, capsys, tmp_path):
             mock_resp.read.return_value = b"Timestamp,Col2\nVal1,Val2"
             return MagicMock(__enter__=MagicMock(return_value=mock_resp))
 
-    mocker.patch("urllib.request.urlopen", side_effect=mock_urlopen)
+    mocker.patch("sync.urlopen", side_effect=mock_urlopen)
     mocker.patch("subprocess.call", return_value=0)
 
     result = sync.main()
