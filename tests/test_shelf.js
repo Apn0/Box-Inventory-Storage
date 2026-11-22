@@ -10,7 +10,7 @@ import './mock_globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { moveRows, shelfRows } from '../src/js/app.js';
+import { carryCounts, moveRows, shelfRows } from '../src/js/app.js';
 
 const plan = {
   boxes: {
@@ -124,4 +124,62 @@ test('a bulk pile posts as "many", never as an empty or null count', () => {
 
 test('a count of zero is still written as a count, not as "many"', () => {
   assert.equal(moveRows({name: "x", from: 1, to: 2, qty: 0})[0].qty, "0");
+});
+
+/* One name sent to one new box from two old boxes (XY-MOS 22 + 23 -> 27 in the
+ * live plan). The tap writes the new box's TOTAL, because the log keeps the
+ * newest row per (box, name): writing only the carried count would replace the
+ * six already moved with the seven being carried. */
+const twoSources = {
+  boxes: {"27": {category: "driver", parts: [
+    {name: "XY-MOS", oldBox: 22, qty: 6, countType: "exact"},
+    {name: "XY-MOS", oldBox: 23, qty: 7, countType: "exact"}]}},
+};
+const xy = (list, from) => shelfRows(1, twoSources, list, 90, 30).find(r => r.from === from);
+
+test('the first of two batches carries its own count into an empty box', () => {
+  const r = xy([item(22, "XY-MOS", 6), item(23, "XY-MOS", 7)], 22);
+  assert.equal(r.carry, 6);
+  assert.equal(r.undoFrom, 6);
+  assert.equal(r.undoTo, 0);
+});
+
+test('the second batch ADDS to the first instead of overwriting it', () => {
+  const r = xy([item(27, "XY-MOS", 6), item(23, "XY-MOS", 7)], 23);
+  assert.equal(r.split, true);
+  assert.equal(r.carry, 13, 'writing 7 here would lose the six already moved');
+  const [fill, empty] = moveRows({name: r.name, from: r.from, to: r.to, qty: r.carry});
+  assert.equal(fill.qty, "13");
+  assert.equal(empty.qty, "0");
+});
+
+test('undo of the second batch puts both boxes back as they were', () => {
+  const r = xy([item(27, "XY-MOS", 6), item(23, "XY-MOS", 7)], 23);
+  assert.equal(r.undoFrom, 7);
+  assert.equal(r.undoTo, 6, 'undo must not zero the six that were already there');
+});
+
+test('the first batch is done once it is in, even while the second waits', () => {
+  assert.equal(xy([item(27, "XY-MOS", 6), item(23, "XY-MOS", 7)], 22).done, true);
+});
+
+test('a half-done move adds the rest to what already arrived', () => {
+  const r = row([item(5, "INA219", 1), item(10, "INA219", 2)], "INA219");
+  assert.equal(r.carry, 3);
+  assert.equal(r.undoTo, 2);
+});
+
+test('a pile on either side keeps the total a pile', () => {
+  const pile = {countType: "bulk", qty: null}, three = {countType: "exact", qty: 3};
+  assert.equal(carryCounts(pile, three, true).carry, null);
+  assert.equal(carryCounts(three, pile, true).carry, null);
+  assert.equal(carryCounts(three, pile, true).undoTo, null, 'undo restores the pile as "many"');
+  assert.equal(moveRows({name: "x", from: 1, to: 2, qty: null})[0].qty, "many");
+});
+
+test('a plain move is unchanged: carry is the old box count, undo zeroes the new box', () => {
+  const r = row([item(5, "INA219", 3)], "INA219");
+  assert.deepEqual([r.carry, r.undoFrom, r.undoTo], [3, 3, 0]);
+  const bulk = shelfRows(1, plan, [item(4, "Clips", null, "bulk")], 90, 30).find(x => x.name === "Clips");
+  assert.equal(bulk.carry, null);
 });
