@@ -18,7 +18,7 @@ No npm, no bundler, no linter config. Python 3 + Node >= 22 (built-in `node:test
 
 ```bash
 pip install -r requirements.txt pytest pytest-mock   # pytest/pytest-mock are NOT in requirements.txt
-python -m pytest -q                                   # 163 tests. Bare `pytest` fails: repo root not on sys.path
+python -m pytest -q                                   # 185 tests. Bare `pytest` fails: repo root not on sys.path
 python -m pytest tests/test_build.py::test_parse_date_happy_paths
 node --test 'tests/*.js'                              # 44 tests. Quote the glob; `node --test tests/` fails
 node --test tests/test_shelf.js
@@ -62,6 +62,7 @@ python tools/bundle_single_file.py                    # -> dist/index.html (sing
 
 **`tools/` (docstrings in Dutch):**
 - `apply_move.py N --dry-run|--yes` and `post_rows.py rows.json --dry-run|--yes` POST to the LIVE sheet. Always `--dry-run` first; `--yes` only on Arno's instruction.
+- `place.py "<part name>" [--qty N|many] [--category C] [--household]`: read-only answer to "where does this part go" (photo sessions). Existing part -> the box its siblings are in NOW, with the new TOTAL; new part -> first box of its category block in `reorg_plan.json` with room at the END state (`rules.perBox`, piles own a box, `[BOX FULL]` skipped), then the growth boxes. `--find Q` searches, `--status` shows room per block and plan progress. Prints the row for `post_rows.py`; never posts.
 - `container_sheet.py N` / `container_page.py N` generate `data/REORG_CONTAINER_N.md` / `.html` worksheets from `reorg_plan.json` + the live sheet.
 
 ## Data Contract Quirks
