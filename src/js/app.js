@@ -153,15 +153,17 @@ export function moveRows({name, from, to, qty}){
 
 /** Record one part as physically moved. Both rows go out before the single
     refetch that confirms them. */
-async function appendMove({name, from, to, qty}){
+async function appendMove({name, from, to, qty, undoFrom = qty, undoTo = 0}){
   if(!SHEET){ toast("No sheet connection yet — try again in a moment"); return false; }
   const before = SEED.meta.rawRows || 0;
   for(const row of moveRows({name, from, to, qty})) await sheetAppend(row);
   for(const delay of [1200, 2500, 5000]){
     await new Promise(r => setTimeout(r, delay));
     if(await refreshSeed() && (SEED.meta.rawRows || 0) > before){
+      // Undo puts back exactly what each box held before the tap: the old box
+      // its own count, the new box whatever was already in it (0 if nothing).
       showUndo(`${name}: box ${from} → ${to}`,
-               [{name, box: from, qty}, {name, box: to, qty: 0}]);
+               [{name, box: from, qty: undoFrom}, {name, box: to, qty: undoTo}]);
       return true;
     }
   }
@@ -939,6 +941,27 @@ function viewBuild(){
    to. Nothing here is a tick we store — "done" is the sheet saying the part
    now sits in its new box. So the list reads the same on the phone and the
    desktop, survives a reload, and can never drift from the inventory. */
+/** What one tap writes, and what its undo puts back.
+
+    The log keeps the newest row per (box, name), so the row for the new box is
+    its TOTAL, not the amount carried. When that box already holds the part —
+    the plan sends one name there from two old boxes (XY-MOS 22+23 -> 27), or a
+    move was half done — the carried count must be added to what is there, or
+    the second tap silently replaces the first: 6 + 7 would end as 7.
+    A pile on either side keeps the total a pile ("many", posted as null). */
+export function carryCounts(here, there, both){
+  const src = here || there;
+  const exact = x => x && x.countType === "exact" && Number.isFinite(Number(x.qty));
+  const asPosted = x => exact(x) ? Number(x.qty) : null;      // null posts as "many"
+  if(!src) return {carry: null, undoFrom: null, undoTo: 0};
+  if(!both) return {carry: asPosted(src), undoFrom: asPosted(src), undoTo: 0};
+  return {
+    carry: exact(here) && exact(there) ? Number(here.qty) + Number(there.qty) : null,
+    undoFrom: asPosted(here),
+    undoTo: asPosted(there),
+  };
+}
+
 export function shelfRows(container, plan, list, labelsUpto, size){
   const span = size || SEED?.meta?.containerSize || 30;
   const lo = (container - 1) * span + 1, hi = container * span;
@@ -952,10 +975,12 @@ export function shelfRows(container, plan, list, labelsUpto, size){
       const here = at.get(p.name + "|" + p.oldBox), there = at.get(p.name + "|" + to);
       const stays = to === p.oldBox;         // already home: here and there are one
       const found = here || there;
+      const both = !stays && Boolean(there && here);
       rows.push({
         name: p.name, from: p.oldBox, to, category: b.category,
         qty: found ? found.qty : p.qty,
         countType: found ? found.countType : p.countType,
+        ...carryCounts(here, there, both),
         done:    stays || Boolean(there && !here),
         split:   !stays && Boolean(there && here),  // half moved, half still behind
         missing: !found,                            // not on the shelf at all
@@ -1333,7 +1358,7 @@ function wirePlanAndBOM(v) {
     if(!r || r.done) return;
     b.disabled = true; b.textContent = "…";
     const ok = await appendMove({name: r.name, from: r.from, to: r.to,
-                                 qty: r.countType === "bulk" ? null : r.qty});
+                                 qty: r.carry, undoFrom: r.undoFrom, undoTo: r.undoTo});
     if(ok) render(); else { b.disabled = false; b.textContent = ""; }
   });
   v.querySelectorAll("[data-level]").forEach(b => b.onclick = () => {

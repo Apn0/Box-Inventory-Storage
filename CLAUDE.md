@@ -20,7 +20,7 @@ No npm, no bundler, no linter config. Python 3 + Node >= 22 (built-in `node:test
 pip install -r requirements.txt pytest pytest-mock   # pytest/pytest-mock are NOT in requirements.txt
 python -m pytest -q                                   # 163 tests. Bare `pytest` fails: repo root not on sys.path
 python -m pytest tests/test_build.py::test_parse_date_happy_paths
-node --test 'tests/*.js'                              # 37 tests. Quote the glob; `node --test tests/` fails
+node --test 'tests/*.js'                              # 44 tests. Quote the glob; `node --test tests/` fails
 node --test tests/test_shelf.js
 node --test --test-name-pattern='label' 'tests/*.js'
 
@@ -52,7 +52,7 @@ python tools/bundle_single_file.py                    # -> dist/index.html (sing
 - `data/reorg_plan.json` (`generated`, `rules`, `boxes`) is fetched at runtime and drives Reorganize / Walk the shelf / Labels.
 - localStorage: `boxinv.v1` (overlay), `boxinv.labelsUpto`, `boxinv.server`.
 - Testable logic lives in exported pure functions in `app.js` (`isRunningLow`, `moveRows`, `shelfRows`, `labelBoxes`, `labelsToWrite`, `parseLabelsUpto`); Node tests stub the DOM with `tests/mock_globals.js`. New logic you want tested: export it pure, import `./mock_globals.js` first.
-- Adding a module/asset: add it to `ASSETS` in `sw.js` AND to `MODULES` (dependency order) in `tools/bundle_single_file.py`, and bump `CACHE_NAME` (currently `box-inventory-v3`).
+- Adding a module/asset: add it to `ASSETS` in `sw.js` AND to `MODULES` (dependency order) in `tools/bundle_single_file.py`, and bump `CACHE_NAME` (currently `box-inventory-v4`).
 - `sw.js` strategy: `inventory.json`/`config.json` network-first; everything else cache-first with background refresh; `docs.google.com`, `run.app` and the `server.py` endpoints bypass the cache.
 
 **Optional backends** (photo identification only):
